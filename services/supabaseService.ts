@@ -4,7 +4,8 @@ import type {
     Product, ProductBatch, SaleInvoice, PurchaseInvoice, InTransitInvoice, Supplier, Customer, 
     Employee, Expense, Role, User, StoreSettings, ActivityLog, 
     CustomerTransaction, SupplierTransaction, PayrollTransaction, AppState, Service,
-    DepositHolder, DepositTransaction, Company, Partner, ManagedCompany, CompanyLedgerEntry, OwnerTransaction, OwnerExpenseCategory
+    DepositHolder, DepositTransaction, Company, Partner, ManagedCompany, CompanyLedgerEntry, 
+    ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerExpenseCategory
 } from '../types';
 
 export interface AdminProfile {
@@ -290,6 +291,18 @@ export const api = {
     addManagedCompanyLedgerEntry: async (entry: CompanyLedgerEntry) => db.putItem(db.STORES.MANAGED_COMPANY_LEDGER, entry),
     updateManagedCompanyLedgerEntry: async (entry: CompanyLedgerEntry) => db.putItem(db.STORES.MANAGED_COMPANY_LEDGER, entry),
     deleteManagedCompanyLedgerEntry: async (id: string) => db.deleteItem(db.STORES.MANAGED_COMPANY_LEDGER, id),
+
+    // --- Managed Company Customers ---
+    getManagedCompanyCustomers: async () => db.getAll<ManagedCompanyCustomer>(db.STORES.MANAGED_COMPANY_CUSTOMERS),
+    addManagedCompanyCustomer: async (customer: ManagedCompanyCustomer) => db.putItem(db.STORES.MANAGED_COMPANY_CUSTOMERS, customer),
+    updateManagedCompanyCustomer: async (customer: ManagedCompanyCustomer) => db.putItem(db.STORES.MANAGED_COMPANY_CUSTOMERS, customer),
+    deleteManagedCompanyCustomer: async (id: string) => db.deleteItem(db.STORES.MANAGED_COMPANY_CUSTOMERS, id),
+
+    // --- Customer Billing Records ---
+    getCustomerBillingRecords: async () => db.getAll<CustomerBillingRecord>(db.STORES.CUSTOMER_BILLING_RECORDS),
+    addCustomerBillingRecord: async (record: CustomerBillingRecord) => db.putItem(db.STORES.CUSTOMER_BILLING_RECORDS, record),
+    updateCustomerBillingRecord: async (record: CustomerBillingRecord) => db.putItem(db.STORES.CUSTOMER_BILLING_RECORDS, record),
+    deleteCustomerBillingRecord: async (id: string) => db.deleteItem(db.STORES.CUSTOMER_BILLING_RECORDS, id),
 
     // --- Owner Transactions ---
     getOwnerTransactions: async () => db.getAll<OwnerTransaction>(db.STORES.OWNER_TRANSACTIONS),
@@ -631,6 +644,8 @@ export const api = {
         if (data.companies) for (const c of data.companies) await db.putItem(db.STORES.COMPANIES, c);
         if (data.managedCompanies) for (const c of data.managedCompanies) await db.putItem(db.STORES.MANAGED_COMPANIES, c);
         if (data.managedCompanyLedger) for (const e of data.managedCompanyLedger) await db.putItem(db.STORES.MANAGED_COMPANY_LEDGER, e);
+        if (data.managedCompanyCustomers) for (const c of data.managedCompanyCustomers) await db.putItem(db.STORES.MANAGED_COMPANY_CUSTOMERS, c);
+        if (data.customerBillingRecords) for (const r of data.customerBillingRecords) await db.putItem(db.STORES.CUSTOMER_BILLING_RECORDS, r);
         if (data.ownerTransactions) for (const t of data.ownerTransactions) await db.putItem(db.STORES.OWNER_TRANSACTIONS, t);
         if (data.ownerExpenseCategories) for (const c of data.ownerExpenseCategories) await db.putItem(db.STORES.OWNER_EXPENSE_CATEGORIES, c);
         if (data.partners) for (const p of data.partners) await db.putItem(db.STORES.PARTNERS, p);

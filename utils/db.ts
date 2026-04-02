@@ -1,7 +1,7 @@
 import type { SalesMemoImage, Product, SaleInvoice, PurchaseInvoice, InTransitInvoice, Customer, Supplier, Employee, Expense, Service, StoreSettings, CustomerTransaction, SupplierTransaction, PayrollTransaction, ActivityLog, User, Role, DepositHolder, DepositTransaction } from '../types';
 
 const DB_NAME = 'KetabestanLocalDB';
-const DB_VERSION = 12; // Increment for owner expense categories
+const DB_VERSION = 13; // Increment for managed company customers and billing
 
 const STORES = {
   SALES_MEMOS: 'salesMemos',
@@ -25,6 +25,8 @@ const STORES = {
   COMPANIES: 'companies',
   MANAGED_COMPANIES: 'managed_companies',
   MANAGED_COMPANY_LEDGER: 'managed_company_ledger',
+  MANAGED_COMPANY_CUSTOMERS: 'managed_company_customers',
+  CUSTOMER_BILLING_RECORDS: 'customer_billing_records',
   OWNER_TRANSACTIONS: 'owner_transactions',
   OWNER_EXPENSE_CATEGORIES: 'owner_expense_categories',
   PARTNERS: 'partners',

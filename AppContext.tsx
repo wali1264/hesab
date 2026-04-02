@@ -7,6 +7,7 @@ import type {
     User, Role, Permission, AppState, DepositHolder, DepositTransaction,
     Order, OrderStatus, OrderPayment,
     ManagedCompany, CompanyLedgerEntry, LedgerEntryType,
+    ManagedCompanyCustomer, CustomerBillingRecord,
     OwnerTransaction, OwnerTransactionType, OwnerExpenseCategory
 } from './types';
 import { api } from './services/supabaseService';
@@ -142,6 +143,16 @@ interface AppContextType extends AppState {
     updateLedgerEntry: (entry: CompanyLedgerEntry) => Promise<{ success: boolean; message: string }>;
     deleteLedgerEntry: (id: string) => Promise<{ success: boolean; message: string }>;
 
+    // Managed Company Customers
+    addManagedCompanyCustomer: (customer: Omit<ManagedCompanyCustomer, 'id' | 'createdAt'>) => Promise<{ success: boolean; message: string }>;
+    updateManagedCompanyCustomer: (customer: ManagedCompanyCustomer) => Promise<{ success: boolean; message: string }>;
+    deleteManagedCompanyCustomer: (id: string) => Promise<{ success: boolean; message: string }>;
+
+    // Customer Billing Records
+    addCustomerBillingRecord: (record: Omit<CustomerBillingRecord, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateCustomerBillingRecord: (record: CustomerBillingRecord) => Promise<{ success: boolean; message: string }>;
+    deleteCustomerBillingRecord: (id: string) => Promise<{ success: boolean; message: string }>;
+
     // Owner Transactions
     addOwnerTransaction: (tx: Omit<OwnerTransaction, 'id'>) => Promise<{ success: boolean; message: string }>;
     updateOwnerTransaction: (tx: OwnerTransaction) => Promise<{ success: boolean; message: string }>;
@@ -151,6 +162,7 @@ interface AppContextType extends AppState {
     addOwnerExpenseCategory: (name: string) => Promise<{ success: boolean; message: string }>;
     updateOwnerExpenseCategory: (category: OwnerExpenseCategory) => Promise<{ success: boolean; message: string }>;
     deleteOwnerExpenseCategory: (id: string) => Promise<{ success: boolean; message: string }>;
+    logActivity: (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType'], companyId?: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -171,9 +183,6 @@ const getDefaultState = (): AppState => {
         products: [], saleInvoices: [], purchaseInvoices: [], inTransitInvoices: [], customers: [],
         suppliers: [], employees: [], expenses: [], services: [], depositHolders: [], depositTransactions: [],
         companies: [], partners: [],
-        managedCompanies: [], managedCompanyLedger: [],
-        ownerTransactions: [],
-        ownerExpenseCategories: [],
         storeSettings: {
         storeName: 'Vendura', address: '', phone: '', lowStockThreshold: 10,
             expiryThresholdMonths: 3, currencyName: 'افغانی', currencySymbol: 'AFN',
@@ -191,6 +200,12 @@ const getDefaultState = (): AppState => {
         cart: [], customerTransactions: [], supplierTransactions: [], payrollTransactions: [],
         activities: [], wastageRecords: [], orders: [], saleInvoiceCounter: 0, editingSaleInvoiceId: null, editingPurchaseInvoiceId: null,
         selectedCompanyId: null,
+        managedCompanies: [],
+        managedCompanyLedger: [],
+        managedCompanyCustomers: [],
+        customerBillingRecords: [],
+        ownerTransactions: [],
+        ownerExpenseCategories: [],
         isAuthenticated: false, currentUser: null,
         users: [],
         roles: [],
@@ -227,7 +242,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const fetchData = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const [settings, users, roles, products, services, entities, transactions, invoices, activity, wastageRecords, orders, managedCompanies, managedLedger, ownerTransactions, ownerExpenseCategories] = await Promise.all([
+            const [settings, users, roles, products, services, entities, transactions, invoices, activity, wastageRecords, orders, managedCompanies, managedLedger, managedCustomers, billingRecords, ownerTransactions, ownerExpenseCategories] = await Promise.all([
                 api.getSettings().catch(() => ({})),
                 api.getUsers().catch(() => []),
                 api.getRoles().catch(() => []),
@@ -241,6 +256,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 api.getOrders().catch(() => []),
                 api.getManagedCompanies().catch(() => []),
                 api.getManagedCompanyLedger().catch(() => []),
+                api.getManagedCompanyCustomers().catch(() => []),
+                api.getCustomerBillingRecords().catch(() => []),
                 api.getOwnerTransactions().catch(() => []),
                 api.getOwnerExpenseCategories().catch(() => [])
             ]);
@@ -381,6 +398,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     companies: entities.companies || [],
                     managedCompanies: managedCompanies,
                     managedCompanyLedger: managedLedger,
+                    managedCompanyCustomers: managedCustomers,
+                    customerBillingRecords: billingRecords,
                     ownerTransactions: ownerTransactions,
                     ownerExpenseCategories: ownerExpenseCategories,
                     partners: entities.partners || [],
@@ -465,10 +484,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return () => window.removeEventListener('online', handleOnline);
     }, [checkAuthorization]);
 
-    const logActivity = useCallback(async (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType']) => {
+    const logActivity = useCallback(async (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType'], companyId?: string) => {
         if (!state.currentUser) return;
         const displayName = state.currentUser.roleId === SYSTEM_SUPER_OWNER_ID ? 'صاحب فروشگاه' : state.currentUser.username;
-        const newActivity: ActivityLog = { id: crypto.randomUUID(), type, description, timestamp: new Date().toISOString(), user: displayName, refId, refType };
+        const newActivity: ActivityLog = { id: crypto.randomUUID(), type, description, timestamp: new Date().toISOString(), user: displayName, refId, refType, companyId };
         setState(prev => ({ ...prev, activities: [newActivity, ...prev.activities] }));
         try { await api.addActivity(newActivity); } catch (e) {}
     }, [state.currentUser]);
@@ -2611,6 +2630,64 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return { success: true, message: 'رکورد حذف شد.' };
     };
 
+    const addManagedCompanyCustomer = async (customerData: Omit<ManagedCompanyCustomer, 'id' | 'createdAt'>) => {
+        const newCustomer: ManagedCompanyCustomer = {
+            ...customerData,
+            id: crypto.randomUUID(),
+            createdAt: new Date().toISOString()
+        };
+        await api.addManagedCompanyCustomer(newCustomer);
+        setState(prev => ({ ...prev, managedCompanyCustomers: [...prev.managedCompanyCustomers, newCustomer] }));
+        return { success: true, message: 'مشتری با موفقیت ثبت شد.' };
+    };
+
+    const updateManagedCompanyCustomer = async (customer: ManagedCompanyCustomer) => {
+        await api.updateManagedCompanyCustomer(customer);
+        setState(prev => ({
+            ...prev,
+            managedCompanyCustomers: prev.managedCompanyCustomers.map(c => c.id === customer.id ? customer : c)
+        }));
+        return { success: true, message: 'اطلاعات مشتری بروزرسانی شد.' };
+    };
+
+    const deleteManagedCompanyCustomer = async (id: string) => {
+        await api.deleteManagedCompanyCustomer(id);
+        setState(prev => ({
+            ...prev,
+            managedCompanyCustomers: prev.managedCompanyCustomers.filter(c => c.id !== id),
+            customerBillingRecords: prev.customerBillingRecords.filter(r => r.customerId !== id)
+        }));
+        return { success: true, message: 'مشتری حذف شد.' };
+    };
+
+    const addCustomerBillingRecord = async (recordData: Omit<CustomerBillingRecord, 'id'>) => {
+        const newRecord: CustomerBillingRecord = {
+            ...recordData,
+            id: crypto.randomUUID()
+        };
+        await api.addCustomerBillingRecord(newRecord);
+        setState(prev => ({ ...prev, customerBillingRecords: [...prev.customerBillingRecords, newRecord] }));
+        return { success: true, message: 'قبض با موفقیت ثبت شد.' };
+    };
+
+    const updateCustomerBillingRecord = async (record: CustomerBillingRecord) => {
+        await api.updateCustomerBillingRecord(record);
+        setState(prev => ({
+            ...prev,
+            customerBillingRecords: prev.customerBillingRecords.map(r => r.id === record.id ? record : r)
+        }));
+        return { success: true, message: 'قبض بروزرسانی شد.' };
+    };
+
+    const deleteCustomerBillingRecord = async (id: string) => {
+        await api.deleteCustomerBillingRecord(id);
+        setState(prev => ({
+            ...prev,
+            customerBillingRecords: prev.customerBillingRecords.filter(r => r.id !== id)
+        }));
+        return { success: true, message: 'قبض حذف شد.' };
+    };
+
     const addOwnerTransaction = async (txData: Omit<OwnerTransaction, 'id'>) => {
         const newTx: OwnerTransaction = {
             ...txData,
@@ -2683,10 +2760,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addEmployee, updateEmployee, deleteEmployee, toggleEmployeeActive, addEmployeeAdvance, addEmployeeAdvanceToEmployee, processAndPaySalaries, addExpense, updateExpense, deleteExpense, setInvoiceTransientCustomer,
         addPartner, updatePartner, deletePartner, recordPartnerWithdrawal, updatePartnerWithdrawal, deletePartnerWithdrawal,
         addManagedCompany, updateManagedCompany, deleteManagedCompany, addLedgerEntry, updateLedgerEntry, deleteLedgerEntry,
+        addManagedCompanyCustomer, updateManagedCompanyCustomer, deleteManagedCompanyCustomer,
+        addCustomerBillingRecord, updateCustomerBillingRecord, deleteCustomerBillingRecord,
         addOwnerTransaction, updateOwnerTransaction, deleteOwnerTransaction,
         addOwnerExpenseCategory, updateOwnerExpenseCategory, deleteOwnerExpenseCategory,
         addDepositHolder, deleteDepositHolder, processDepositTransaction, updateDepositTransaction, deleteDepositTransaction,
-        setSelectedCompanyId
+        setSelectedCompanyId, logActivity
     }}>{children}</AppContext.Provider>;
 };
 

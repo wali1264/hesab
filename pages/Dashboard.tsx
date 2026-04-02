@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { Product, ActivityLog, InvoiceItem, StoreSettings } from '../types';
 import { useAppContext } from '../AppContext';
-import { POSIcon, InventoryIcon, PurchaseIcon, WarningIcon, BellIcon, UserGroupIcon, EyeIcon, XIcon, ChevronDownIcon, CheckIcon } from '../components/icons';
+import { POSIcon, InventoryIcon, PurchaseIcon, WarningIcon, BellIcon, UserGroupIcon, EyeIcon, XIcon, ChevronDownIcon, CheckIcon, BuildingIcon } from '../components/icons';
 import { formatCurrency, formatStockToPackagesAndUnits } from '../utils/formatters';
 import DateRangeFilter from '../components/DateRangeFilter';
 import ActivityDetailModal from '../components/ActivityDetailModal';
@@ -418,6 +418,7 @@ const Dashboard: React.FC = () => {
                       const isSale = activity.type === 'sale';
                       const isPurchase = activity.type === 'purchase';
                       const isInventory = activity.type === 'inventory';
+                      const isCompany = activity.type === 'company';
                       
                       return (
                           <div 
@@ -429,9 +430,10 @@ const Dashboard: React.FC = () => {
                                   <div className={`p-3 rounded-xl transition-colors ${
                                       isSale ? 'bg-green-100 text-green-600' : 
                                       isPurchase ? 'bg-blue-100 text-blue-600' : 
-                                      isInventory ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-600'
+                                      isInventory ? 'bg-orange-100 text-orange-600' : 
+                                      isCompany ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-600'
                                   }`}>
-                                      {isSale ? <POSIcon className="w-6 h-6" /> : isPurchase ? <PurchaseIcon className="w-6 h-6" /> : <InventoryIcon className="w-6 h-6" />}
+                                      {isSale ? <POSIcon className="w-6 h-6" /> : isPurchase ? <PurchaseIcon className="w-6 h-6" /> : isCompany ? <BuildingIcon className="w-6 h-6" /> : <InventoryIcon className="w-6 h-6" />}
                                   </div>
                                   <div className="text-right">
                                       <p className="font-bold text-slate-700 md:text-lg group-hover:text-blue-700 transition-colors">{activity.description}</p>

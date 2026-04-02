@@ -100,12 +100,13 @@ export interface InTransitInvoice extends Omit<PurchaseInvoice, 'type'> {
 
 export interface ActivityLog {
   id: string;
-  type: 'sale' | 'purchase' | 'inventory' | 'login' | 'payroll' | 'deposit' | 'wastage';
+  type: 'sale' | 'purchase' | 'inventory' | 'login' | 'payroll' | 'deposit' | 'wastage' | 'company';
   description: string;
   timestamp: string;
   user: string;
   refId?: string; // ID of the related entity (invoice, product, etc.)
-  refType?: 'saleInvoice' | 'purchaseInvoice' | 'product' | 'depositHolder' | 'wastageRecord'; // To know what to look for
+  refType?: 'saleInvoice' | 'purchaseInvoice' | 'product' | 'depositHolder' | 'wastageRecord' | 'company'; // To know what to look for
+  companyId?: string; // NEW: Link to company
 }
 
 export interface WastageRecord {
@@ -307,6 +308,35 @@ export interface ManagedCompany {
     phone: string;
     createdAt: string;
     establishmentCost?: number;
+    unitPrice?: number; // Price per unit of water
+}
+
+export interface ManagedCompanyCustomer {
+    id: string;
+    companyId: string;
+    name: string;
+    fatherName: string;
+    address: string; // House/Shop Number
+    meterNumber: string;
+    phone: string;
+    initialReading: number;
+    createdAt: string;
+}
+
+export interface CustomerBillingRecord {
+    id: string;
+    customerId: string;
+    companyId: string;
+    previousReading: number;
+    currentReading: number;
+    consumption: number;
+    amount: number;
+    date: string;
+    status: 'paid' | 'unpaid';
+    paymentDate?: string;
+    surveyorName: string;
+    collectorName: string;
+    previousBalance: number;
 }
 
 export type OwnerTransactionType = 'personal_expense' | 'receivable' | 'payable';
@@ -418,6 +448,8 @@ export interface AppState {
     companies: Company[];
     managedCompanies: ManagedCompany[];
     managedCompanyLedger: CompanyLedgerEntry[];
+    managedCompanyCustomers: ManagedCompanyCustomer[];
+    customerBillingRecords: CustomerBillingRecord[];
     ownerTransactions: OwnerTransaction[];
     ownerExpenseCategories: OwnerExpenseCategory[];
     partners: Partner[];

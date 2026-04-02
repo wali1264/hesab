@@ -10,6 +10,7 @@ export const ALL_PERMISSIONS = [
     { id: 'page:reports', name: 'مشاهده گزارشات', group: 'صفحات' },
     { id: 'page:settings', name: 'مشاهده تنظیمات', group: 'صفحات' },
     { id: 'page:orders', name: 'مشاهده سفارشات', group: 'صفحات' },
+    { id: 'page:company_management', name: 'مشاهده مدیریت شرکت‌ها', group: 'صفحات' },
 
     // Orders
     { id: 'orders:create', name: 'ثبت سفارش جدید', group: 'سفارشات' },
@@ -48,6 +49,21 @@ export const ALL_PERMISSIONS = [
     { id: 'settings:manage_backup', name: 'پشتیبان‌گیری و بازیابی', group: 'تنظیمات' },
     { id: 'settings:manage_services', name: 'مدیریت خدمات', group: 'تنظیمات' },
     { id: 'settings:manage_alerts', name: 'مدیریت هشدارها', group: 'تنظیمات' },
+
+    // Company Management
+    { id: 'company:create', name: 'ثبت شرکت جدید', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:edit', name: 'ویرایش شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:delete', name: 'حذف شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:view_stats', name: 'مشاهده آمار مالی شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:view_profit_loss', name: 'مشاهده سود و ضرر شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:view_ledger', name: 'مشاهده دفتر کل شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:view_customers', name: 'مشاهده لیست مشتریان شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:view_collections', name: 'مشاهده وصولی‌های شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company_customer:create', name: 'ثبت مشتری جدید شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company_customer:edit', name: 'ویرایش مشتری شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company_customer:delete', name: 'حذف مشتری شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company_billing:create', name: 'ثبت میترخوانی جدید', group: 'مدیریت شرکت‌ها' },
+    { id: 'company_billing:settle', name: 'وصول طلبات (تسویه)', group: 'مدیریت شرکت‌ها' },
 ];
 
 export const groupPermissions = (permissions: typeof ALL_PERMISSIONS) => {
