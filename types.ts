@@ -306,6 +306,7 @@ export interface ManagedCompany {
     managerName: string;
     phone: string;
     createdAt: string;
+    establishmentCost?: number;
 }
 
 export type OwnerTransactionType = 'personal_expense' | 'receivable' | 'payable';

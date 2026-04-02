@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../AppContext';
 import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, OwnerTransaction, OwnerTransactionType } from '../types';
 import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon } from '../components/icons';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, numberToPersianWords } from '../utils/formatters';
 import JalaliDateInput from '../components/JalaliDateInput';
 
 const Modal: React.FC<{ title: string, onClose: () => void, children: React.ReactNode }> = ({ title, onClose, children }) => (
@@ -46,6 +46,7 @@ const CompanyManagement: React.FC = () => {
     // Category Management States
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<{ id: string, name: string } | null>(null);
+    const [amountInWords, setAmountInWords] = useState('');
 
     const selectedCompany = useMemo(() => managedCompanies.find(c => c.id === selectedCompanyId), [managedCompanies, selectedCompanyId]);
     const companyEntries = useMemo(() => managedCompanyLedger.filter(e => e.companyId === selectedCompanyId), [managedCompanyLedger, selectedCompanyId]);
@@ -58,11 +59,13 @@ const CompanyManagement: React.FC = () => {
             const equipmentRevenue = entries.filter(e => e.type === 'equipment_revenue').reduce((sum, e) => sum + e.amount, 0);
             const totalIncome = waterRevenue + equipmentRevenue;
             const profit = totalIncome - expenses;
+            const investmentRecovery = totalIncome - (expenses + (company.establishmentCost || 0));
             return {
                 ...company,
                 expenses,
                 totalIncome,
-                profit
+                profit,
+                investmentRecovery
             };
         });
     }, [managedCompanies, managedCompanyLedger]);
@@ -74,6 +77,7 @@ const CompanyManagement: React.FC = () => {
             name: formData.get('name') as string,
             managerName: formData.get('managerName') as string,
             phone: formData.get('phone') as string,
+            establishmentCost: Number(formData.get('establishmentCost')) || 0,
         };
 
         if (editingCompany) {
@@ -179,11 +183,23 @@ const CompanyManagement: React.FC = () => {
                             <p className="text-slate-500 text-sm">مدیریت تراکنش‌های مالی شرکت</p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                        <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
+                            <span className="text-[10px] text-slate-400 uppercase font-bold">هزینه تاسیس</span>
+                            <span className="text-lg font-black text-orange-600">
+                                {formatCurrency(selectedCompany.establishmentCost || 0, useAppContext().storeSettings, 'AFN')}
+                            </span>
+                        </div>
                         <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                             <span className="text-[10px] text-slate-400 uppercase font-bold">سود/ضرر نهایی</span>
                             <span className={`text-lg font-black ${(totalWater + totalEquipment - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                                 {formatCurrency(totalWater + totalEquipment - totalExpenses, useAppContext().storeSettings, 'AFN')}
+                            </span>
+                        </div>
+                        <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
+                            <span className="text-[10px] text-slate-400 uppercase font-bold">وضعیت بازگشت سرمایه</span>
+                            <span className={`text-lg font-black ${(totalWater + totalEquipment - totalExpenses - (selectedCompany.establishmentCost || 0)) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                                {formatCurrency(totalWater + totalEquipment - totalExpenses - (selectedCompany.establishmentCost || 0), useAppContext().storeSettings, 'AFN')}
                             </span>
                         </div>
                     </div>
@@ -198,7 +214,7 @@ const CompanyManagement: React.FC = () => {
                                 هزینه‌ها
                             </h3>
                             <button 
-                                onClick={() => { setLedgerEntryType('expense'); setEditingLedgerEntry(null); setIsAddLedgerModalOpen(true); }}
+                                onClick={() => { setLedgerEntryType('expense'); setEditingLedgerEntry(null); setAmountInWords(''); setIsAddLedgerModalOpen(true); }}
                                 className="p-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20"
                             >
                                 <PlusIcon className="w-5 h-5" />
@@ -210,7 +226,7 @@ const CompanyManagement: React.FC = () => {
                                     <div className="flex justify-between items-start">
                                         <span className="font-bold text-slate-800">{formatCurrency(entry.amount, useAppContext().storeSettings, 'AFN')}</span>
                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('expense'); setLedgerDate(entry.date); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
+                                            <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('expense'); setLedgerDate(entry.date); setAmountInWords(numberToPersianWords(entry.amount)); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
                                             <button onClick={() => deleteLedgerEntry(entry.id)} className="p-1 text-red-600 hover:bg-red-50 rounded-md"><TrashIcon className="w-4 h-4" /></button>
                                         </div>
                                     </div>
@@ -235,7 +251,7 @@ const CompanyManagement: React.FC = () => {
                                 عواید فروش آب
                             </h3>
                             <button 
-                                onClick={() => { setLedgerEntryType('water_revenue'); setEditingLedgerEntry(null); setIsAddLedgerModalOpen(true); }}
+                                onClick={() => { setLedgerEntryType('water_revenue'); setEditingLedgerEntry(null); setAmountInWords(''); setIsAddLedgerModalOpen(true); }}
                                 className="p-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
                             >
                                 <PlusIcon className="w-5 h-5" />
@@ -247,7 +263,7 @@ const CompanyManagement: React.FC = () => {
                                     <div className="flex justify-between items-start">
                                         <span className="font-bold text-slate-800">{formatCurrency(entry.amount, useAppContext().storeSettings, 'AFN')}</span>
                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('water_revenue'); setLedgerDate(entry.date); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
+                                            <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('water_revenue'); setLedgerDate(entry.date); setAmountInWords(numberToPersianWords(entry.amount)); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
                                             <button onClick={() => deleteLedgerEntry(entry.id)} className="p-1 text-red-600 hover:bg-red-50 rounded-md"><TrashIcon className="w-4 h-4" /></button>
                                         </div>
                                     </div>
@@ -272,7 +288,7 @@ const CompanyManagement: React.FC = () => {
                                 عواید فروش تجهیزات
                             </h3>
                             <button 
-                                onClick={() => { setLedgerEntryType('equipment_revenue'); setEditingLedgerEntry(null); setIsAddLedgerModalOpen(true); }}
+                                onClick={() => { setLedgerEntryType('equipment_revenue'); setEditingLedgerEntry(null); setAmountInWords(''); setIsAddLedgerModalOpen(true); }}
                                 className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20"
                             >
                                 <PlusIcon className="w-5 h-5" />
@@ -284,7 +300,7 @@ const CompanyManagement: React.FC = () => {
                                     <div className="flex justify-between items-start">
                                         <span className="font-bold text-slate-800">{formatCurrency(entry.amount, useAppContext().storeSettings, 'AFN')}</span>
                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('equipment_revenue'); setLedgerDate(entry.date); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
+                                            <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('equipment_revenue'); setLedgerDate(entry.date); setAmountInWords(numberToPersianWords(entry.amount)); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
                                             <button onClick={() => deleteLedgerEntry(entry.id)} className="p-1 text-red-600 hover:bg-red-50 rounded-md"><TrashIcon className="w-4 h-4" /></button>
                                         </div>
                                     </div>
@@ -341,9 +357,11 @@ const CompanyManagement: React.FC = () => {
                                     type="number" 
                                     required 
                                     defaultValue={editingLedgerEntry?.amount}
+                                    onChange={(e) => setAmountInWords(numberToPersianWords(Number(e.target.value)))}
                                     className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
                                     placeholder="0"
                                 />
+                                {amountInWords && <p className="text-xs text-blue-600 mt-1 font-bold">{amountInWords} افغانی</p>}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ</label>
@@ -403,7 +421,7 @@ const CompanyManagement: React.FC = () => {
                 <>
                     <div className="flex justify-end">
                         <button 
-                            onClick={() => { setEditingCompany(null); setIsAddCompanyModalOpen(true); }}
+                            onClick={() => { setEditingCompany(null); setAmountInWords(''); setIsAddCompanyModalOpen(true); }}
                             className="flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 group"
                         >
                             <PlusIcon className="w-6 h-6 group-hover:rotate-90 transition-transform" />
@@ -420,7 +438,7 @@ const CompanyManagement: React.FC = () => {
                                             <BuildingIcon className="w-8 h-8" />
                                         </div>
                                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => { setEditingCompany(company); setIsAddCompanyModalOpen(true); }} className="p-2 bg-white rounded-xl border border-slate-100 text-blue-600 hover:bg-blue-50 transition-all shadow-sm"><EditIcon className="w-5 h-5" /></button>
+                                            <button onClick={() => { setEditingCompany(company); setAmountInWords(numberToPersianWords(company.establishmentCost || 0)); setIsAddCompanyModalOpen(true); }} className="p-2 bg-white rounded-xl border border-slate-100 text-blue-600 hover:bg-blue-50 transition-all shadow-sm"><EditIcon className="w-5 h-5" /></button>
                                             <button onClick={() => deleteManagedCompany(company.id)} className="p-2 bg-white rounded-xl border border-slate-100 text-red-600 hover:bg-red-50 transition-all shadow-sm"><TrashIcon className="w-5 h-5" /></button>
                                         </div>
                                     </div>
@@ -435,12 +453,16 @@ const CompanyManagement: React.FC = () => {
 
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">هزینه تاسیس</span>
+                                            <span className="text-sm font-bold text-orange-600">{formatCurrency(company.establishmentCost || 0, storeSettings, 'AFN')}</span>
+                                        </div>
+                                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
                                             <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">مجموع هزینه‌ها</span>
                                             <span className="text-sm font-bold text-red-600">{formatCurrency(company.expenses, storeSettings, 'AFN')}</span>
                                         </div>
-                                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 col-span-2">
                                             <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">مجموع عواید</span>
-                                            <span className="text-sm font-bold text-blue-600">{formatCurrency(company.totalIncome, storeSettings, 'AFN')}</span>
+                                            <span className="text-sm font-bold text-blue-600 text-center block">{formatCurrency(company.totalIncome, storeSettings, 'AFN')}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -530,7 +552,7 @@ const CompanyManagement: React.FC = () => {
                                     مصارف شخصی
                                 </h3>
                                 <button 
-                                    onClick={() => { setOwnerTxType('personal_expense'); setEditingOwnerTx(null); setIsOwnerTxModalOpen(true); }}
+                                    onClick={() => { setOwnerTxType('personal_expense'); setEditingOwnerTx(null); setAmountInWords(''); setIsOwnerTxModalOpen(true); }}
                                     className="p-2 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-all shadow-lg shadow-red-600/20"
                                 >
                                     <PlusIcon className="w-5 h-5" />
@@ -542,7 +564,7 @@ const CompanyManagement: React.FC = () => {
                                         <div className="flex justify-between items-start">
                                             <span className="font-black text-slate-800">{formatCurrency(tx.amount, storeSettings, 'AFN')}</span>
                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => { setEditingOwnerTx(tx); setOwnerTxType('personal_expense'); setOwnerTxDate(tx.date); setIsOwnerTxModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><EditIcon className="w-4 h-4" /></button>
+                                                <button onClick={() => { setEditingOwnerTx(tx); setOwnerTxType('personal_expense'); setOwnerTxDate(tx.date); setAmountInWords(numberToPersianWords(tx.amount)); setIsOwnerTxModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><EditIcon className="w-4 h-4" /></button>
                                                 <button onClick={() => deleteOwnerTransaction(tx.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><TrashIcon className="w-4 h-4" /></button>
                                             </div>
                                         </div>
@@ -566,7 +588,7 @@ const CompanyManagement: React.FC = () => {
                                     طلبات (طلبکار هستم)
                                 </h3>
                                 <button 
-                                    onClick={() => { setOwnerTxType('receivable'); setEditingOwnerTx(null); setIsOwnerTxModalOpen(true); }}
+                                    onClick={() => { setOwnerTxType('receivable'); setEditingOwnerTx(null); setAmountInWords(''); setIsOwnerTxModalOpen(true); }}
                                     className="p-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
                                 >
                                     <PlusIcon className="w-5 h-5" />
@@ -578,7 +600,7 @@ const CompanyManagement: React.FC = () => {
                                         <div className="flex justify-between items-start">
                                             <span className="font-black text-slate-800">{formatCurrency(tx.amount, storeSettings, 'AFN')}</span>
                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => { setEditingOwnerTx(tx); setOwnerTxType('receivable'); setOwnerTxDate(tx.date); setIsOwnerTxModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><EditIcon className="w-4 h-4" /></button>
+                                                <button onClick={() => { setEditingOwnerTx(tx); setOwnerTxType('receivable'); setOwnerTxDate(tx.date); setAmountInWords(numberToPersianWords(tx.amount)); setIsOwnerTxModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><EditIcon className="w-4 h-4" /></button>
                                                 <button onClick={() => deleteOwnerTransaction(tx.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><TrashIcon className="w-4 h-4" /></button>
                                             </div>
                                         </div>
@@ -602,7 +624,7 @@ const CompanyManagement: React.FC = () => {
                                     بدهی‌ها (بدهکار هستم)
                                 </h3>
                                 <button 
-                                    onClick={() => { setOwnerTxType('payable'); setEditingOwnerTx(null); setIsOwnerTxModalOpen(true); }}
+                                    onClick={() => { setOwnerTxType('payable'); setEditingOwnerTx(null); setAmountInWords(''); setIsOwnerTxModalOpen(true); }}
                                     className="p-2 rounded-xl bg-orange-600 text-white hover:bg-orange-700 transition-all shadow-lg shadow-orange-600/20"
                                 >
                                     <PlusIcon className="w-5 h-5" />
@@ -614,7 +636,7 @@ const CompanyManagement: React.FC = () => {
                                         <div className="flex justify-between items-start">
                                             <span className="font-black text-slate-800">{formatCurrency(tx.amount, storeSettings, 'AFN')}</span>
                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => { setEditingOwnerTx(tx); setOwnerTxType('payable'); setOwnerTxDate(tx.date); setIsOwnerTxModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><EditIcon className="w-4 h-4" /></button>
+                                                <button onClick={() => { setEditingOwnerTx(tx); setOwnerTxType('payable'); setOwnerTxDate(tx.date); setAmountInWords(numberToPersianWords(tx.amount)); setIsOwnerTxModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><EditIcon className="w-4 h-4" /></button>
                                                 <button onClick={() => deleteOwnerTransaction(tx.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><TrashIcon className="w-4 h-4" /></button>
                                             </div>
                                         </div>
@@ -730,9 +752,11 @@ const CompanyManagement: React.FC = () => {
                                 type="number" 
                                 required 
                                 defaultValue={editingOwnerTx?.amount}
+                                onChange={(e) => setAmountInWords(numberToPersianWords(Number(e.target.value)))}
                                 className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
                                 placeholder="0"
                             />
+                            {amountInWords && <p className="text-xs text-blue-600 mt-1 font-bold">{amountInWords} افغانی</p>}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">دسته بندی (اختیاری)</label>
@@ -807,6 +831,19 @@ const CompanyManagement: React.FC = () => {
                                 className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
                                 placeholder="07xx xxx xxx"
                             />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">هزینه تاسیس (افغانی)</label>
+                            <input 
+                                name="establishmentCost" 
+                                type="number"
+                                required 
+                                defaultValue={editingCompany?.establishmentCost}
+                                onChange={(e) => setAmountInWords(numberToPersianWords(Number(e.target.value)))}
+                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                placeholder="0"
+                            />
+                            {amountInWords && <p className="text-xs text-blue-600 mt-1 font-bold">{amountInWords} افغانی</p>}
                         </div>
                         <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20">
                             {editingCompany ? 'بروزرسانی اطلاعات' : 'ثبت شرکت'}
