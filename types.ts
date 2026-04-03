@@ -338,6 +338,7 @@ export interface CustomerBillingRecord {
     surveyorName: string;
     collectorName: string;
     previousBalance: number;
+    isMinimumFeeApplied?: boolean;
 }
 
 export type OwnerTransactionType = 'personal_expense' | 'receivable' | 'payable';
@@ -428,6 +429,7 @@ export interface SalaryPayment {
     recordId: string; // Link to SalaryMonthRecord
     employeeId: string;
     amount: number;
+    amountInWords?: string;
     currency: 'AFN' | 'USD' | 'IRT';
     date: string; // ISO string
     description: string;

@@ -22,6 +22,7 @@ import { CompanyEmployee, SalaryMonthRecord, SalaryPayment } from '../types';
 import JalaliDateInput from '../components/JalaliDateInput';
 import ConfirmModal from '../components/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
+import { numberToPersianWords } from '../utils/numberToWords';
 
 const SalaryManagement: React.FC = () => {
     const { 
@@ -46,6 +47,7 @@ const SalaryManagement: React.FC = () => {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [showConfirmDelete, setShowConfirmDelete] = useState<{ type: 'employee' | 'payment', id: string } | null>(null);
+    const [showConfirmSettle, setShowConfirmSettle] = useState<string | null>(null);
     
     // Payroll state
     const [currentYear, setCurrentYear] = useState(new Date().toLocaleDateString('fa-IR-u-nu-latn', { year: 'numeric' }));
@@ -141,7 +143,8 @@ const SalaryManagement: React.FC = () => {
             return;
         }
 
-        await addSalaryPayment(paymentFormData);
+        const amountInWords = numberToPersianWords(paymentFormData.amount);
+        await addSalaryPayment({ ...paymentFormData, amountInWords });
         setShowPaymentModal(false);
     };
 
@@ -371,7 +374,7 @@ const SalaryManagement: React.FC = () => {
                                                                     <PlusIcon className="w-5 h-5" />
                                                                 </button>
                                                                 <button 
-                                                                    onClick={() => handleSettle(record.id)}
+                                                                    onClick={() => setShowConfirmSettle(record.id)}
                                                                     disabled={record.status === 'settled'}
                                                                     className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-30"
                                                                     title="تصفیه نهایی"
@@ -626,11 +629,16 @@ const SalaryManagement: React.FC = () => {
                                     <input 
                                         type="number"
                                         value={paymentFormData.amount}
-                                        onChange={e => setPaymentFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) }))}
+                                        onChange={e => setPaymentFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
                                         className="w-full bg-slate-50 border-none rounded-2xl p-4 pr-12 focus:ring-2 focus:ring-blue-500 transition-all font-bold text-2xl"
                                     />
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">{paymentFormData.currency}</span>
                                 </div>
+                                {paymentFormData.amount > 0 && (
+                                    <p className="text-xs font-bold text-blue-600 mt-2 bg-blue-50 p-2 rounded-lg border border-blue-100">
+                                        {numberToPersianWords(paymentFormData.amount)} {paymentFormData.currency === 'AFN' ? 'افغانی' : paymentFormData.currency === 'USD' ? 'دلار' : 'تومان'}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -719,6 +727,7 @@ const SalaryManagement: React.FC = () => {
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-slate-800">{p.amount.toLocaleString()} {p.currency}</p>
+                                                    {p.amountInWords && <p className="text-[10px] font-bold text-blue-600">{p.amountInWords} {p.currency === 'AFN' ? 'افغانی' : p.currency === 'USD' ? 'دلار' : 'تومان'}</p>}
                                                     <p className="text-xs text-slate-500">{new Date(p.date).toLocaleDateString('fa-IR')} - {p.description || (p.type === 'advance' ? 'مساعده' : 'حقوق')}</p>
                                                 </div>
                                             </div>
@@ -750,7 +759,7 @@ const SalaryManagement: React.FC = () => {
             {showConfirmDelete && (
                 <ConfirmModal 
                     isOpen={true}
-                    onClose={() => setShowConfirmDelete(null)}
+                    onCancel={() => setShowConfirmDelete(null)}
                     onConfirm={async () => {
                         if (showConfirmDelete.type === 'employee') {
                             await deleteCompanyEmployee(showConfirmDelete.id);
@@ -761,6 +770,23 @@ const SalaryManagement: React.FC = () => {
                     }}
                     title="تأیید حذف"
                     message={showConfirmDelete.type === 'employee' ? "آیا از حذف این کارمند اطمینان دارید؟ تمام سوابق وی نیز حذف خواهد شد." : "آیا از حذف این رکورد پرداختی اطمینان دارید؟"}
+                />
+            )}
+
+            {/* Confirm Settle */}
+            {showConfirmSettle && (
+                <ConfirmModal 
+                    isOpen={true}
+                    onCancel={() => setShowConfirmSettle(null)}
+                    onConfirm={async () => {
+                        await handleSettle(showConfirmSettle);
+                        setShowConfirmSettle(null);
+                    }}
+                    title="تأیید تصفیه نهایی"
+                    message="آیا از تصفیه نهایی حقوق این کارمند اطمینان دارید؟ این عملیات وضعیت ماه را به «تصفیه شده» تغییر می‌دهد و غیرقابل بازگشت است."
+                    confirmText="بله، تصفیه شود"
+                    cancelText="انصراف"
+                    type="success"
                 />
             )}
         </div>

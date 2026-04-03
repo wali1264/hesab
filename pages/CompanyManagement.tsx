@@ -4,6 +4,7 @@ import { useAppContext } from '../AppContext';
 import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType } from '../types';
 import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon } from '../components/icons';
 import { formatCurrency, numberToPersianWords } from '../utils/formatters';
+import { formatJalaliDate } from '../utils/jalali';
 import JalaliDateInput from '../components/JalaliDateInput';
 
 const Modal: React.FC<{ title: string, onClose: () => void, children: React.ReactNode, headerActions?: React.ReactNode }> = ({ title, onClose, children, headerActions }) => (
@@ -39,7 +40,13 @@ const CompanyManagement: React.FC = () => {
     const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
     const selectedCompany = useMemo(() => managedCompanies.find(c => c.id === selectedCompanyId), [managedCompanies, selectedCompanyId]);
     const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+    const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
     const [historySearchQuery, setHistorySearchQuery] = useState('');
+    
+    // Pagination for financial columns
+    const [visibleExpensesCount, setVisibleExpensesCount] = useState(5);
+    const [visibleWaterRevenueCount, setVisibleWaterRevenueCount] = useState(5);
+    const [visibleEquipmentRevenueCount, setVisibleEquipmentRevenueCount] = useState(5);
     
     // Activity Filters
     const [activityCompanyFilter, setActivityCompanyFilter] = useState<string>('all');
@@ -179,7 +186,19 @@ const CompanyManagement: React.FC = () => {
         return filtered;
     }, [managedCompanyCustomers, selectedCompanyId, customerSearchQuery]);
 
-    const currentCompanyBillingRecords = useMemo(() => customerBillingRecords.filter(r => r.companyId === selectedCompanyId), [customerBillingRecords, selectedCompanyId]);
+    const currentCompanyBillingRecords = useMemo(() => {
+        let filtered = customerBillingRecords.filter(r => r.companyId === selectedCompanyId);
+        if (collectionSearchQuery) {
+            const query = collectionSearchQuery.toLowerCase();
+            filtered = filtered.filter(r => {
+                const customer = managedCompanyCustomers.find(c => c.id === r.customerId);
+                return customer?.name.toLowerCase().includes(query) || 
+                       customer?.meterNumber.includes(query) ||
+                       customer?.phone.includes(query);
+            });
+        }
+        return filtered;
+    }, [customerBillingRecords, selectedCompanyId, collectionSearchQuery, managedCompanyCustomers]);
 
     const companyStats = useMemo(() => {
         return managedCompanies
@@ -219,7 +238,7 @@ const CompanyManagement: React.FC = () => {
         });
         await logActivity(
             'company',
-            `وصول مبلغ ${formatCurrency(record.amount + (record.previousBalance || 0), storeSettings, 'AFN')} از مشتری ${managedCompanyCustomers.find(c => c.id === record.customerId)?.name || 'نامشخص'}`,
+            `وصول مبلغ ${formatCurrency(record.amount, storeSettings, 'AFN')} از مشتری ${managedCompanyCustomers.find(c => c.id === record.customerId)?.name || 'نامشخص'}`,
             record.id,
             'company',
             record.companyId
@@ -336,7 +355,7 @@ const CompanyManagement: React.FC = () => {
         const company = managedCompanies.find(c => c.id === record.companyId);
         if (!customer || !company) return;
 
-        const totalAmount = record.amount + (record.previousBalance || 0);
+        const totalAmount = record.amount;
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
 
@@ -365,6 +384,7 @@ const CompanyManagement: React.FC = () => {
                     .grand-total { font-size: 20px; font-weight: black; color: #1e40af; border-top: 2px solid #cbd5e1; pt-10; margin-top: 10px; }
                     .footer { margin-top: 50px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; text-align: center; font-size: 12px; }
                     .signature-box { border-top: 1px solid #ccc; padding-top: 10px; margin-top: 40px; }
+                    .min-fee-label { color: #dc2626; font-weight: bold; font-size: 12px; margin-top: 5px; }
                     @media print {
                         body { padding: 0; }
                         .invoice-box { border: none; }
@@ -380,7 +400,7 @@ const CompanyManagement: React.FC = () => {
                         </div>
                         <div style="text-align: left;">
                             <h2 style="margin: 0; color: #64748b;">بل مصرف آب</h2>
-                            <p>تاریخ: ${record.date}</p>
+                            <p>تاریخ: ${formatJalaliDate(record.date)}</p>
                         </div>
                     </div>
 
@@ -427,18 +447,15 @@ const CompanyManagement: React.FC = () => {
                     </table>
 
                     <div class="total-section">
-                        <div class="total-row">
-                            <span>مبلغ این دوره:</span>
-                            <span>${record.amount.toLocaleString()} افغانی</span>
-                        </div>
-                        <div class="total-row">
-                            <span>باقیداری قبلی (Arrears):</span>
-                            <span>${(record.previousBalance || 0).toLocaleString()} افغانی</span>
-                        </div>
                         <div class="total-row grand-total">
                             <span>قابل پرداخت:</span>
                             <span>${totalAmount.toLocaleString()} افغانی</span>
                         </div>
+                        ${record.isMinimumFeeApplied ? `
+                            <div class="min-fee-label">
+                                * حداقل هزینه خدمات (۱۰۰ افغانی) اعمال شده است.
+                            </div>
+                        ` : ''}
                         <div style="margin-top: 10px; font-size: 12px; color: #64748b;">
                             مبلغ به حروف: ${numberToPersianWords(totalAmount)} افغانی
                         </div>
@@ -479,11 +496,17 @@ const CompanyManagement: React.FC = () => {
         const currentReading = Number(formData.get('currentReading'));
         const previousReading = Number(formData.get('previousReading'));
         const consumption = currentReading - previousReading;
-        const amount = consumption * (selectedCompany?.unitPrice || 0);
         
-        // Calculate previous balance (sum of all unpaid records for this customer)
-        const unpaidRecords = currentCompanyBillingRecords.filter(r => r.customerId === selectedCustomerForBilling.id && r.status === 'unpaid');
-        const previousBalance = unpaidRecords.reduce((sum, r) => sum + r.amount, 0);
+        let amount = consumption * (selectedCompany?.unitPrice || 0);
+        let isMinimumFeeApplied = false;
+        
+        if (amount < 100) {
+            amount = 100;
+            isMinimumFeeApplied = true;
+        }
+        
+        // Invoices are now independent, previous balance is not carried over
+        const previousBalance = 0;
         
         const billingData = {
             companyId: selectedCompanyId,
@@ -493,6 +516,7 @@ const CompanyManagement: React.FC = () => {
             consumption,
             amount,
             previousBalance,
+            isMinimumFeeApplied,
             date: billingDate,
             isPaid: formData.get('isPaid') === 'on',
             status: formData.get('isPaid') === 'on' ? 'paid' : 'unpaid' as 'paid' | 'unpaid',
@@ -662,7 +686,7 @@ const CompanyManagement: React.FC = () => {
                                 )}
                             </div>
                             <div className="flex-grow overflow-y-auto p-2 space-y-2">
-                                {expenses.map(entry => (
+                                {expenses.slice(0, visibleExpensesCount).map(entry => (
                                     <div key={entry.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
                                         <div className="flex justify-between items-start">
                                             <span className="font-bold text-slate-800">{formatCurrency(entry.amount, storeSettings, 'AFN')}</span>
@@ -676,9 +700,17 @@ const CompanyManagement: React.FC = () => {
                                             </div>
                                         </div>
                                         <p className="text-xs text-slate-500 mt-1">{entry.description}</p>
-                                        <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{entry.date}</div>
+                                        <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{formatJalaliDate(entry.date)}</div>
                                     </div>
                                 ))}
+                                {expenses.length > visibleExpensesCount && (
+                                    <button 
+                                        onClick={() => setVisibleExpensesCount(prev => prev + 5)}
+                                        className="w-full py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-dashed border-blue-200"
+                                    >
+                                        بارگذاری موارد بیشتر...
+                                    </button>
+                                )}
                             </div>
                             <div className="p-4 bg-slate-50 border-t border-slate-100">
                                 <div className="flex justify-between items-center">
@@ -705,7 +737,7 @@ const CompanyManagement: React.FC = () => {
                                 )}
                             </div>
                             <div className="flex-grow overflow-y-auto p-2 space-y-2">
-                                {waterRevenue.map(entry => (
+                                {waterRevenue.slice(0, visibleWaterRevenueCount).map(entry => (
                                     <div key={entry.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
                                         <div className="flex justify-between items-start">
                                             <span className="font-bold text-slate-800">{formatCurrency(entry.amount, storeSettings, 'AFN')}</span>
@@ -719,9 +751,17 @@ const CompanyManagement: React.FC = () => {
                                             </div>
                                         </div>
                                         <p className="text-xs text-slate-500 mt-1">{entry.description}</p>
-                                        <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{entry.date}</div>
+                                        <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{formatJalaliDate(entry.date)}</div>
                                     </div>
                                 ))}
+                                {waterRevenue.length > visibleWaterRevenueCount && (
+                                    <button 
+                                        onClick={() => setVisibleWaterRevenueCount(prev => prev + 5)}
+                                        className="w-full py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-dashed border-blue-200"
+                                    >
+                                        بارگذاری موارد بیشتر...
+                                    </button>
+                                )}
                             </div>
                             <div className="p-4 bg-slate-50 border-t border-slate-100">
                                 <div className="flex justify-between items-center">
@@ -748,7 +788,7 @@ const CompanyManagement: React.FC = () => {
                                 )}
                             </div>
                             <div className="flex-grow overflow-y-auto p-2 space-y-2">
-                                {equipmentRevenue.map(entry => (
+                                {equipmentRevenue.slice(0, visibleEquipmentRevenueCount).map(entry => (
                                     <div key={entry.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
                                         <div className="flex justify-between items-start">
                                             <span className="font-bold text-slate-800">{formatCurrency(entry.amount, storeSettings, 'AFN')}</span>
@@ -762,9 +802,17 @@ const CompanyManagement: React.FC = () => {
                                             </div>
                                         </div>
                                         <p className="text-xs text-slate-500 mt-1">{entry.description}</p>
-                                        <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{entry.date}</div>
+                                        <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{formatJalaliDate(entry.date)}</div>
                                     </div>
                                 ))}
+                                {equipmentRevenue.length > visibleEquipmentRevenueCount && (
+                                    <button 
+                                        onClick={() => setVisibleEquipmentRevenueCount(prev => prev + 5)}
+                                        className="w-full py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-dashed border-blue-200"
+                                    >
+                                        بارگذاری موارد بیشتر...
+                                    </button>
+                                )}
                             </div>
                             <div className="p-4 bg-slate-50 border-t border-slate-100">
                                 <div className="flex justify-between items-center">
@@ -881,19 +929,31 @@ const CompanyManagement: React.FC = () => {
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                 <CurrencyDollarIcon className="w-6 h-6 text-emerald-600" />
                                 وصولی‌ها و بدهکاران
                             </h2>
-                            <div className="flex gap-4">
-                                <div className="bg-red-50 px-4 py-2 rounded-xl border border-red-100">
-                                    <span className="text-xs text-red-600 block">مجموع طلبات:</span>
-                                    <span className="text-lg font-black text-red-700">{formatCurrency(currentCompanyBillingRecords.filter(r => r.status === 'unpaid').reduce((sum, r) => sum + r.amount, 0), storeSettings, 'AFN')}</span>
+                            <div className="flex gap-2 w-full md:w-auto">
+                                <div className="relative flex-grow md:w-64">
+                                    <input 
+                                        type="text" 
+                                        placeholder="جستجوی مشتری (نام، میتر)..." 
+                                        value={collectionSearchQuery}
+                                        onChange={(e) => setCollectionSearchQuery(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
+                                    />
+                                    <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                                 </div>
-                                <div className="bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
-                                    <span className="text-xs text-emerald-600 block">مجموع وصولی:</span>
-                                    <span className="text-lg font-black text-emerald-700">{formatCurrency(currentCompanyBillingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0), storeSettings, 'AFN')}</span>
+                                <div className="flex gap-2">
+                                    <div className="bg-red-50 px-3 py-1.5 rounded-xl border border-red-100 hidden sm:block">
+                                        <span className="text-[10px] text-red-600 block">طلبات:</span>
+                                        <span className="text-sm font-black text-red-700">{formatCurrency(currentCompanyBillingRecords.filter(r => r.status === 'unpaid').reduce((sum, r) => sum + r.amount, 0), storeSettings, 'AFN')}</span>
+                                    </div>
+                                    <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100 hidden sm:block">
+                                        <span className="text-[10px] text-emerald-600 block">وصولی:</span>
+                                        <span className="text-sm font-black text-emerald-700">{formatCurrency(currentCompanyBillingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0), storeSettings, 'AFN')}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -906,9 +966,7 @@ const CompanyManagement: React.FC = () => {
                                             <th className="p-4 text-xs font-bold text-slate-500">مشتری</th>
                                             <th className="p-4 text-xs font-bold text-slate-500">تاریخ بل</th>
                                             <th className="p-4 text-xs font-bold text-slate-500">مصرف (واحد)</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">مبلغ بل</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">بدهی قبلی</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">قابل پرداخت</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">مبلغ قابل پرداخت</th>
                                             <th className="p-4 text-xs font-bold text-slate-500">وضعیت</th>
                                             <th className="p-4 text-xs font-bold text-slate-500">عملیات</th>
                                         </tr>
@@ -922,11 +980,14 @@ const CompanyManagement: React.FC = () => {
                                                         <div className="font-bold text-slate-800 text-sm">{customer?.name}</div>
                                                         <div className="text-[10px] text-slate-400">میتر: {customer?.meterNumber}</div>
                                                     </td>
-                                                    <td className="p-4 text-xs text-slate-600">{record.date}</td>
+                                                    <td className="p-4 text-xs text-slate-600">{formatJalaliDate(record.date)}</td>
                                                     <td className="p-4 text-xs font-bold text-blue-600">{record.consumption}</td>
-                                                    <td className="p-4 text-xs font-bold text-slate-700">{formatCurrency(record.amount, storeSettings, 'AFN')}</td>
-                                                    <td className="p-4 text-xs text-orange-600">{formatCurrency(record.previousBalance || 0, storeSettings, 'AFN')}</td>
-                                                    <td className="p-4 text-sm font-black text-slate-900">{formatCurrency(record.amount + (record.previousBalance || 0), storeSettings, 'AFN')}</td>
+                                                    <td className="p-4 text-sm font-black text-slate-900">
+                                                        {formatCurrency(record.amount, storeSettings, 'AFN')}
+                                                        {record.isMinimumFeeApplied && (
+                                                            <div className="text-[9px] text-red-500 font-bold mt-0.5">حداقل هزینه</div>
+                                                        )}
+                                                    </td>
                                                     <td className="p-4">
                                                         <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                                                             {record.status === 'paid' ? 'پرداخت شده' : 'در انتظار پرداخت'}
@@ -1136,18 +1197,10 @@ const CompanyManagement: React.FC = () => {
                                                 <input name="currentReading" type="number" required defaultValue={editingBillingRecord?.currentReading} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" autoFocus />
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="text-blue-700">قیمت فی واحد:</span>
-                                                    <span className="font-bold text-blue-800">{formatCurrency(selectedCompany.unitPrice || 0, storeSettings, 'AFN')}</span>
-                                                </div>
-                                            </div>
-                                            <div className="p-3 bg-orange-50 rounded-xl border border-orange-100">
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="text-orange-700">بدهی قبلی:</span>
-                                                    <span className="font-bold text-orange-800">{formatCurrency(arrears, storeSettings, 'AFN')}</span>
-                                                </div>
+                                        <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-blue-700">قیمت فی واحد:</span>
+                                                <span className="font-bold text-blue-800">{formatCurrency(selectedCompany.unitPrice || 0, storeSettings, 'AFN')}</span>
                                             </div>
                                         </div>
                                         <div>
@@ -1199,7 +1252,7 @@ const CompanyManagement: React.FC = () => {
                                         <div key={record.id} className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-blue-100 transition-all shadow-sm">
                                             <div className="flex justify-between items-start mb-3">
                                                 <div>
-                                                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {record.date}</div>
+                                                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {formatJalaliDate(record.date)}</div>
                                                     <div className="text-sm font-black text-slate-800">{formatCurrency(record.amount, storeSettings, 'AFN')}</div>
                                                 </div>
                                                 <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
@@ -1472,7 +1525,7 @@ const CompanyManagement: React.FC = () => {
                                             <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
                                                 {ownerExpenseCategories.find(c => c.id === tx.categoryId)?.name || 'عمومی'}
                                             </span>
-                                            <span className="text-[10px] text-slate-400">{tx.date}</span>
+                                            <span className="text-[10px] text-slate-400">{formatJalaliDate(tx.date)}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -1508,7 +1561,7 @@ const CompanyManagement: React.FC = () => {
                                             <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
                                                 {ownerExpenseCategories.find(c => c.id === tx.categoryId)?.name || 'شخصی'}
                                             </span>
-                                            <span className="text-[10px] text-slate-400">{tx.date}</span>
+                                            <span className="text-[10px] text-slate-400">{formatJalaliDate(tx.date)}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -1544,7 +1597,7 @@ const CompanyManagement: React.FC = () => {
                                             <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
                                                 {ownerExpenseCategories.find(c => c.id === tx.categoryId)?.name || 'شخصی'}
                                             </span>
-                                            <span className="text-[10px] text-slate-400">{tx.date}</span>
+                                            <span className="text-[10px] text-slate-400">{formatJalaliDate(tx.date)}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -1995,7 +2048,7 @@ const CompanyManagement: React.FC = () => {
                                         <div key={record.id} className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-blue-100 transition-all shadow-sm">
                                             <div className="flex justify-between items-start mb-3">
                                                 <div>
-                                                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {record.date}</div>
+                                                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {formatJalaliDate(record.date)}</div>
                                                     <div className="text-sm font-black text-slate-800">{formatCurrency(record.amount, storeSettings, 'AFN')}</div>
                                                 </div>
                                                 <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
