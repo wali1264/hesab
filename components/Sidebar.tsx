@@ -48,6 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, storeName,
     { id: 'deposits', label: 'امانات', icon: <SafeIcon className="w-6 h-6 text-indigo-600" />, visible: accessiblePages.deposits },
     { id: 'company_management', label: 'مدیریت شرکت‌ها', icon: <UserGroupIcon className="w-6 h-6 text-emerald-600" />, visible: accessiblePages.company_management },
     { id: 'reports', label: 'گزارشات', icon: <ReportsIcon />, visible: accessiblePages.reports },
+    { id: 'salary_management', label: 'مدیریت حقوق', icon: <UserGroupIcon className="w-6 h-6 text-blue-600" />, visible: accessiblePages.salary_management },
     { id: 'special_reports', label: 'دانلود گزارشات', icon: <ZapIcon className="w-6 h-6 text-amber-500" />, visible: accessiblePages.special_reports },
     { id: 'settings', label: 'تنظیمات', icon: <SettingsIcon />, visible: accessiblePages.settings },
   ];

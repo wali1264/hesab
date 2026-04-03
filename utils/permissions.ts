@@ -11,6 +11,7 @@ export const ALL_PERMISSIONS = [
     { id: 'page:settings', name: 'مشاهده تنظیمات', group: 'صفحات' },
     { id: 'page:orders', name: 'مشاهده سفارشات', group: 'صفحات' },
     { id: 'page:company_management', name: 'مشاهده مدیریت شرکت‌ها', group: 'صفحات' },
+    { id: 'page:salary_management', name: 'مشاهده مدیریت حقوق', group: 'صفحات' },
 
     // Orders
     { id: 'orders:create', name: 'ثبت سفارش جدید', group: 'سفارشات' },
@@ -59,11 +60,14 @@ export const ALL_PERMISSIONS = [
     { id: 'company:view_ledger', name: 'مشاهده دفتر کل شرکت', group: 'مدیریت شرکت‌ها' },
     { id: 'company:view_customers', name: 'مشاهده لیست مشتریان شرکت', group: 'مدیریت شرکت‌ها' },
     { id: 'company:view_collections', name: 'مشاهده وصولی‌های شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:view_dashboard', name: 'مشاهده داشبورد مدیریتی شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:view_activities', name: 'مشاهده گزارش فعالیت‌ها', group: 'مدیریت شرکت‌ها' },
     { id: 'company_customer:create', name: 'ثبت مشتری جدید شرکت', group: 'مدیریت شرکت‌ها' },
     { id: 'company_customer:edit', name: 'ویرایش مشتری شرکت', group: 'مدیریت شرکت‌ها' },
     { id: 'company_customer:delete', name: 'حذف مشتری شرکت', group: 'مدیریت شرکت‌ها' },
     { id: 'company_billing:create', name: 'ثبت میترخوانی جدید', group: 'مدیریت شرکت‌ها' },
     { id: 'company_billing:settle', name: 'وصول طلبات (تسویه)', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:manage_payroll', name: 'مدیریت معاشات (حقوق)', group: 'مدیریت شرکت‌ها' },
 ];
 
 export const groupPermissions = (permissions: typeof ALL_PERMISSIONS) => {

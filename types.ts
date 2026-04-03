@@ -309,6 +309,7 @@ export interface ManagedCompany {
     createdAt: string;
     establishmentCost?: number;
     unitPrice?: number; // Price per unit of water
+    slotNumber: number; // 1-20
 }
 
 export interface ManagedCompanyCustomer {
@@ -401,12 +402,47 @@ export interface StoreSettings {
         IRT: CurrencyConfig;
     };
     expenseCategories: string[]; // Dynamic categories
+    salaryAlertDays?: number; // Days before salary due to show alert
 }
 
 // --- Package/Unit Management ---
 export interface PackageUnits {
     packages: number;
     units: number;
+}
+
+// --- Company Salary Management Types ---
+export interface CompanyEmployee {
+    id: string;
+    name: string;
+    phone: string;
+    position: string;
+    monthlySalary: number;
+    salaryCurrency: 'AFN' | 'USD' | 'IRT';
+    startDate: string; // Jalali date string (e.g., "1402/01/01")
+    isActive: boolean;
+}
+
+export interface SalaryPayment {
+    id: string;
+    recordId: string; // Link to SalaryMonthRecord
+    employeeId: string;
+    amount: number;
+    currency: 'AFN' | 'USD' | 'IRT';
+    date: string; // ISO string
+    description: string;
+    type: 'advance' | 'settlement';
+}
+
+export interface SalaryMonthRecord {
+    id: string;
+    employeeId: string;
+    year: number; // Jalali year
+    month: number; // Jalali month (1-12)
+    baseSalary: number;
+    currency: 'AFN' | 'USD' | 'IRT';
+    status: 'pending' | 'partial' | 'settled';
+    totalPaid: number;
 }
 
 // --- Auth & RBAC Types ---
@@ -416,6 +452,7 @@ export interface Role {
     id: string;
     name: string;
     permissions: Permission[];
+    companyAccess?: number[]; // Array of slot numbers (1-20)
 }
 
 export interface User {
@@ -453,6 +490,9 @@ export interface AppState {
     ownerTransactions: OwnerTransaction[];
     ownerExpenseCategories: OwnerExpenseCategory[];
     partners: Partner[];
+    companyEmployees: CompanyEmployee[];
+    salaryRecords: SalaryMonthRecord[];
+    salaryPayments: SalaryPayment[];
     saleInvoiceCounter: number;
     editingSaleInvoiceId: string | null;
     editingPurchaseInvoiceId: string | null;

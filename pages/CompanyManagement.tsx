@@ -6,12 +6,15 @@ import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingI
 import { formatCurrency, numberToPersianWords } from '../utils/formatters';
 import JalaliDateInput from '../components/JalaliDateInput';
 
-const Modal: React.FC<{ title: string, onClose: () => void, children: React.ReactNode }> = ({ title, onClose, children }) => (
+const Modal: React.FC<{ title: string, onClose: () => void, children: React.ReactNode, headerActions?: React.ReactNode }> = ({ title, onClose, children, headerActions }) => (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-[100] p-4 pt-12 md:pt-20 overflow-y-auto modal-animate">
         <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg overflow-hidden my-0">
             <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-slate-50 sticky top-0 z-10">
                 <h2 className="text-xl font-bold text-slate-800">{title}</h2>
-                <button onClick={onClose} className="p-1 rounded-full text-slate-500 hover:bg-red-100 hover:text-red-600 transition-colors"><XIcon className="w-6 h-6" /></button>
+                <div className="flex items-center gap-2">
+                    {headerActions}
+                    <button onClick={onClose} className="p-1 rounded-full text-slate-500 hover:bg-red-100 hover:text-red-600 transition-colors"><XIcon className="w-6 h-6" /></button>
+                </div>
             </div>
             <div className="p-6 bg-white">{children}</div>
         </div>
@@ -28,12 +31,13 @@ const CompanyManagement: React.FC = () => {
         addCustomerBillingRecord, updateCustomerBillingRecord, deleteCustomerBillingRecord,
         addOwnerTransaction, updateOwnerTransaction, deleteOwnerTransaction,
         addOwnerExpenseCategory, updateOwnerExpenseCategory, deleteOwnerExpenseCategory,
-        showToast, storeSettings, hasPermission, currentUser, logActivity
+        showToast, storeSettings, hasPermission, hasCompanyAccess, currentUser, logActivity
     } = useAppContext();
     
     const [activeTab, setActiveTab] = useState<'companies' | 'dashboard' | 'activities'>('companies');
     const [companyDetailTab, setCompanyDetailTab] = useState<'ledger' | 'customers' | 'collections'>('ledger');
     const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+    const selectedCompany = useMemo(() => managedCompanies.find(c => c.id === selectedCompanyId), [managedCompanies, selectedCompanyId]);
     const [customerSearchQuery, setCustomerSearchQuery] = useState('');
     const [historySearchQuery, setHistorySearchQuery] = useState('');
     
@@ -46,7 +50,12 @@ const CompanyManagement: React.FC = () => {
 
     // Handle default tab selection based on permissions
     useEffect(() => {
-        if (selectedCompanyId) {
+        if (selectedCompanyId && selectedCompany) {
+            if (!hasCompanyAccess(selectedCompany.slotNumber)) {
+                setSelectedCompanyId(null);
+                showToast("شما به این شرکت دسترسی ندارید.");
+                return;
+            }
             if (!hasPermission('company:view_ledger')) {
                 if (hasPermission('company:view_customers')) {
                     setCompanyDetailTab('customers');
@@ -55,7 +64,7 @@ const CompanyManagement: React.FC = () => {
                 }
             }
         }
-    }, [selectedCompanyId, hasPermission]);
+    }, [selectedCompanyId, selectedCompany, hasPermission, hasCompanyAccess]);
     const [isAddCompanyModalOpen, setIsAddCompanyModalOpen] = useState(false);
     const [editingCompany, setEditingCompany] = useState<ManagedCompany | null>(null);
     const [isAddLedgerModalOpen, setIsAddLedgerModalOpen] = useState(false);
@@ -95,6 +104,14 @@ const CompanyManagement: React.FC = () => {
 
     const filteredActivities = useMemo(() => {
         let filtered = activities.filter(a => a.type === 'company' || a.companyId);
+
+        // Filter by company access
+        filtered = filtered.filter(a => {
+            if (!a.companyId) return true;
+            const company = managedCompanies.find(c => c.id === a.companyId);
+            if (!company) return false;
+            return hasCompanyAccess(company.slotNumber);
+        });
 
         // Company Filter
         if (activityCompanyFilter !== 'all') {
@@ -148,7 +165,6 @@ const CompanyManagement: React.FC = () => {
         const uniqueUsers = new Set(activities.map(a => a.user));
         return Array.from(uniqueUsers);
     }, [activities]);
-    const selectedCompany = useMemo(() => managedCompanies.find(c => c.id === selectedCompanyId), [managedCompanies, selectedCompanyId]);
     const companyEntries = useMemo(() => managedCompanyLedger.filter(e => e.companyId === selectedCompanyId), [managedCompanyLedger, selectedCompanyId]);
     const currentCompanyCustomers = useMemo(() => {
         let filtered = managedCompanyCustomers.filter(c => c.companyId === selectedCompanyId);
@@ -166,7 +182,9 @@ const CompanyManagement: React.FC = () => {
     const currentCompanyBillingRecords = useMemo(() => customerBillingRecords.filter(r => r.companyId === selectedCompanyId), [customerBillingRecords, selectedCompanyId]);
 
     const companyStats = useMemo(() => {
-        return managedCompanies.map(company => {
+        return managedCompanies
+            .filter(company => hasCompanyAccess(company.slotNumber))
+            .map(company => {
             const entries = managedCompanyLedger.filter(e => e.companyId === company.id);
             const billingRecords = customerBillingRecords.filter(r => r.companyId === company.id);
             
@@ -174,13 +192,11 @@ const CompanyManagement: React.FC = () => {
             const waterRevenue = entries.filter(e => e.type === 'water_revenue').reduce((sum, e) => sum + e.amount, 0);
             const equipmentRevenue = entries.filter(e => e.type === 'equipment_revenue').reduce((sum, e) => sum + e.amount, 0);
             
-            // Income from paid bills
-            const billingIncome = billingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0);
-            
-            // Total debt from unpaid bills
+            // Total debt from unpaid bills (Keep as statistic only)
             const totalDebt = billingRecords.filter(r => r.status === 'unpaid').reduce((sum, r) => sum + r.amount, 0);
 
-            const totalIncome = waterRevenue + equipmentRevenue + billingIncome;
+            // Total income now ONLY includes manually registered ledger entries
+            const totalIncome = waterRevenue + equipmentRevenue;
             const profit = totalIncome - expenses;
             const investmentRecovery = totalIncome - (expenses + (company.establishmentCost || 0));
             return {
@@ -612,14 +628,14 @@ const CompanyManagement: React.FC = () => {
                                 </div>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">سود/ضرر نهایی</span>
-                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (currentCompanyBillingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0)) - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                        {formatCurrency(totalWater + totalEquipment + (currentCompanyBillingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0)) - totalExpenses, storeSettings, 'AFN')}
+                                    <span className={`text-lg font-black ${(totalWater + totalEquipment - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        {formatCurrency(totalWater + totalEquipment - totalExpenses, storeSettings, 'AFN')}
                                     </span>
                                 </div>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">وضعیت بازگشت سرمایه</span>
-                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (currentCompanyBillingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0)) - totalExpenses - (selectedCompany.establishmentCost || 0)) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                                        {formatCurrency(totalWater + totalEquipment + (currentCompanyBillingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0)) - totalExpenses - (selectedCompany.establishmentCost || 0), storeSettings, 'AFN')}
+                                    <span className={`text-lg font-black ${(totalWater + totalEquipment - totalExpenses - (selectedCompany.establishmentCost || 0)) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                                        {formatCurrency(totalWater + totalEquipment - totalExpenses - (selectedCompany.establishmentCost || 0), storeSettings, 'AFN')}
                                     </span>
                                 </div>
                             </>
@@ -933,6 +949,19 @@ const CompanyManagement: React.FC = () => {
                                                             >
                                                                 <PrintIcon className="w-4 h-4" />
                                                             </button>
+                                                            <button 
+                                                                onClick={() => {
+                                                                    const customer = managedCompanyCustomers.find(c => c.id === record.customerId);
+                                                                    if (customer) {
+                                                                        setSelectedCustomerForHistory(customer);
+                                                                        setIsHistoryModalOpen(true);
+                                                                    }
+                                                                }}
+                                                                className="p-1.5 text-slate-500 hover:bg-slate-50 rounded-lg"
+                                                                title="تاریخچه مشتری"
+                                                            >
+                                                                <HistoryIcon className="w-4 h-4" />
+                                                            </button>
                                                             {hasPermission('company_billing:delete') && (
                                                                 <button 
                                                                     onClick={() => handleDeleteBillingRecord(record.id, customer?.name || 'نامشخص', selectedCompanyId!)}
@@ -1071,6 +1100,18 @@ const CompanyManagement: React.FC = () => {
                     <Modal 
                         title={`ثبت میترخوانی - ${selectedCustomerForBilling.name}`} 
                         onClose={() => setIsBillingModalOpen(false)}
+                        headerActions={
+                            <button 
+                                onClick={() => {
+                                    setSelectedCustomerForHistory(selectedCustomerForBilling);
+                                    setIsHistoryModalOpen(true);
+                                }}
+                                className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-all"
+                                title="تاریخچه بل‌ها"
+                            >
+                                <HistoryIcon className="w-5 h-5" />
+                            </button>
+                        }
                     >
                         <form onSubmit={handleAddBillingRecord} className="space-y-4">
                             {(() => {
@@ -1126,6 +1167,95 @@ const CompanyManagement: React.FC = () => {
                         </form>
                     </Modal>
                 )}
+
+                {isHistoryModalOpen && selectedCustomerForHistory && (
+                    <Modal 
+                        title={`تاریخچه بل‌های ${selectedCustomerForHistory.name}`} 
+                        onClose={() => setIsHistoryModalOpen(false)}
+                    >
+                        <div className="space-y-4">
+                            <div className="relative">
+                                <input 
+                                    type="text"
+                                    placeholder="جستجو در تاریخچه (تاریخ یا مبلغ)..."
+                                    value={historySearchQuery}
+                                    onChange={(e) => setHistorySearchQuery(e.target.value)}
+                                    className="w-full p-3 pr-10 rounded-xl border border-slate-200 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                </div>
+                            </div>
+
+                            <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1">
+                                {customerBillingRecords
+                                    .filter(r => r.customerId === selectedCustomerForHistory.id)
+                                    .filter(r => 
+                                        r.date.includes(historySearchQuery) || 
+                                        r.amount.toString().includes(historySearchQuery)
+                                    )
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                    .map(record => (
+                                        <div key={record.id} className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-blue-100 transition-all shadow-sm">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {record.date}</div>
+                                                    <div className="text-sm font-black text-slate-800">{formatCurrency(record.amount, storeSettings, 'AFN')}</div>
+                                                </div>
+                                                <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {record.status === 'paid' ? 'پرداخت شده' : 'بدهکار'}
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-2 gap-4 mb-4 text-[11px]">
+                                                <div className="bg-slate-50 p-2 rounded-lg">
+                                                    <span className="text-slate-400 block mb-1">میتر قبلی</span>
+                                                    <span className="font-bold text-slate-700">{record.previousReading}</span>
+                                                </div>
+                                                <div className="bg-slate-50 p-2 rounded-lg">
+                                                    <span className="text-slate-400 block mb-1">میتر فعلی</span>
+                                                    <span className="font-bold text-slate-700">{record.currentReading}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
+                                                    <button 
+                                                        onClick={() => handleMarkAsPaid(record)}
+                                                        className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
+                                                    >
+                                                        وصول شد
+                                                    </button>
+                                                )}
+                                                <button 
+                                                    onClick={() => handlePrintInvoice(record)}
+                                                    className="px-3 py-1 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 transition-all"
+                                                >
+                                                    چاپ مجدد
+                                                </button>
+                                                {hasPermission('company_billing:edit') && (
+                                                    <button 
+                                                        onClick={() => {
+                                                            setEditingBillingRecord(record);
+                                                            setSelectedCustomerForBilling(selectedCustomerForHistory);
+                                                            setBillingDate(record.date);
+                                                            setIsBillingModalOpen(true);
+                                                        }}
+                                                        className="px-3 py-1 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-all"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                {customerBillingRecords.filter(r => r.customerId === selectedCustomerForHistory.id).length === 0 && (
+                                    <div className="text-center py-8 text-slate-400 text-sm">هیچ تاریخچه‌ای یافت نشد.</div>
+                                )}
+                            </div>
+                        </div>
+                    </Modal>
+                )}
             </div>
         );
     }
@@ -1148,7 +1278,7 @@ const CompanyManagement: React.FC = () => {
                     >
                         مدیریت شرکت‌ها
                     </button>
-                    {hasPermission('company:view_profit_loss') && (
+                    {hasPermission('company:view_dashboard') && (
                         <button 
                             onClick={() => setActiveTab('dashboard')}
                             className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
@@ -1156,12 +1286,14 @@ const CompanyManagement: React.FC = () => {
                             سود و زیان کل شرکت‌ها
                         </button>
                     )}
-                    <button 
-                        onClick={() => setActiveTab('activities')}
-                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'activities' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        گزارش فعالیت‌ها
-                    </button>
+                    {hasPermission('company:view_activities') && (
+                        <button 
+                            onClick={() => setActiveTab('activities')}
+                            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'activities' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            گزارش فعالیت‌ها
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -1188,6 +1320,9 @@ const CompanyManagement: React.FC = () => {
                                             <BuildingIcon className="w-8 h-8" />
                                         </div>
                                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="bg-blue-600 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-sm mr-2">
+                                                اسلات {company.slotNumber}
+                                            </div>
                                             {hasPermission('company:edit') && (
                                                 <button onClick={() => { setEditingCompany(company); setAmountInWords(numberToPersianWords(company.establishmentCost || 0)); setIsAddCompanyModalOpen(true); }} className="p-2 bg-white rounded-xl border border-slate-100 text-blue-600 hover:bg-blue-50 transition-all shadow-sm"><EditIcon className="w-5 h-5" /></button>
                                             )}
@@ -1525,7 +1660,7 @@ const CompanyManagement: React.FC = () => {
                                         className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="all">همه شرکت‌ها</option>
-                                        {managedCompanies.map(c => (
+                                        {managedCompanies.filter(c => hasCompanyAccess(c.slotNumber)).map(c => (
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
@@ -1590,17 +1725,41 @@ const CompanyManagement: React.FC = () => {
                                                 </div>
                                             </td>
                                             <td className="p-4">
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
-                                                    activity.description.includes('وصول') || activity.description.includes('پرداخت')
-                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                                        : activity.description.includes('میترخوانی')
-                                                        ? 'bg-blue-50 text-blue-700 border-blue-100'
-                                                        : 'bg-slate-50 text-slate-700 border-slate-100'
-                                                }`}>
-                                                    {activity.description.includes('وصول') ? 'وصولی' : 
-                                                     activity.description.includes('میترخوانی') ? 'میترخوانی' : 
-                                                     activity.type === 'company' ? 'مدیریت شرکت' : activity.type}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
+                                                        activity.description.includes('وصول') || activity.description.includes('پرداخت')
+                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                            : activity.description.includes('میترخوانی')
+                                                            ? 'bg-blue-50 text-blue-700 border-blue-100'
+                                                            : 'bg-slate-50 text-slate-700 border-slate-100'
+                                                    }`}>
+                                                        {activity.description.includes('وصول') ? 'وصولی' : 
+                                                         activity.description.includes('میترخوانی') ? 'میترخوانی' : 
+                                                         activity.type === 'company' ? 'مدیریت شرکت' : activity.type}
+                                                    </span>
+                                                    {(activity.description.includes('مشتری:') || activity.description.includes('برای مشتری:')) && (
+                                                        <button 
+                                                            onClick={() => {
+                                                                const customerNameMatch = activity.description.match(/(?:مشتری:|برای مشتری:)\s*([^()]+)/);
+                                                                if (customerNameMatch) {
+                                                                    const name = customerNameMatch[1].trim();
+                                                                    const customer = managedCompanyCustomers.find(c => c.name === name);
+                                                                    if (customer) {
+                                                                        setSelectedCompanyId(customer.companyId);
+                                                                        setSelectedCustomerForHistory(customer);
+                                                                        setIsHistoryModalOpen(true);
+                                                                    } else {
+                                                                        showToast("مشتری یافت نشد.");
+                                                                    }
+                                                                }
+                                                            }}
+                                                            className="p-1 text-slate-400 hover:text-blue-600 transition-colors mr-2"
+                                                            title="مشاهده تاریخچه مشتری"
+                                                        >
+                                                            <HistoryIcon className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="p-4">
                                                 <div className="text-slate-700 text-sm font-medium">{activity.description}</div>
@@ -1805,103 +1964,94 @@ const CompanyManagement: React.FC = () => {
                     </form>
                 </Modal>
             )}
-            {isHistoryModalOpen && selectedCustomerForHistory && (
-                <Modal 
-                    title={`تاریخچه بل‌های ${selectedCustomerForHistory.name}`} 
-                    onClose={() => setIsHistoryModalOpen(false)}
-                >
-                    <div className="space-y-4 max-h-[70vh] overflow-y-auto p-1">
-                        <div className="sticky top-0 bg-white pb-2 z-10">
+                {isHistoryModalOpen && selectedCustomerForHistory && (
+                    <Modal 
+                        title={`تاریخچه بل‌های ${selectedCustomerForHistory.name}`} 
+                        onClose={() => setIsHistoryModalOpen(false)}
+                    >
+                        <div className="space-y-4">
                             <div className="relative">
                                 <input 
-                                    type="text" 
-                                    placeholder="جستجو در تاریخچه (تاریخ، مبلغ)..." 
+                                    type="text"
+                                    placeholder="جستجو در تاریخچه (تاریخ یا مبلغ)..."
                                     value={historySearchQuery}
                                     onChange={(e) => setHistorySearchQuery(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
+                                    className="w-full p-3 pr-10 rounded-xl border border-slate-200 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                                 />
-                                <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                </div>
+                            </div>
+
+                            <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1">
+                                {customerBillingRecords
+                                    .filter(r => r.customerId === selectedCustomerForHistory.id)
+                                    .filter(r => 
+                                        r.date.includes(historySearchQuery) || 
+                                        r.amount.toString().includes(historySearchQuery)
+                                    )
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                    .map(record => (
+                                        <div key={record.id} className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-blue-100 transition-all shadow-sm">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {record.date}</div>
+                                                    <div className="text-sm font-black text-slate-800">{formatCurrency(record.amount, storeSettings, 'AFN')}</div>
+                                                </div>
+                                                <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {record.status === 'paid' ? 'پرداخت شده' : 'بدهکار'}
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-2 gap-4 mb-4 text-[11px]">
+                                                <div className="bg-slate-50 p-2 rounded-lg">
+                                                    <span className="text-slate-400 block mb-1">میتر قبلی</span>
+                                                    <span className="font-bold text-slate-700">{record.previousReading}</span>
+                                                </div>
+                                                <div className="bg-slate-50 p-2 rounded-lg">
+                                                    <span className="text-slate-400 block mb-1">میتر فعلی</span>
+                                                    <span className="font-bold text-slate-700">{record.currentReading}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
+                                                    <button 
+                                                        onClick={() => handleMarkAsPaid(record)}
+                                                        className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
+                                                    >
+                                                        وصول شد
+                                                    </button>
+                                                )}
+                                                <button 
+                                                    onClick={() => handlePrintInvoice(record)}
+                                                    className="px-3 py-1 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 transition-all"
+                                                >
+                                                    چاپ مجدد
+                                                </button>
+                                                {hasPermission('company_billing:edit') && (
+                                                    <button 
+                                                        onClick={() => {
+                                                            setEditingBillingRecord(record);
+                                                            setSelectedCustomerForBilling(selectedCustomerForHistory);
+                                                            setBillingDate(record.date);
+                                                            setIsBillingModalOpen(true);
+                                                        }}
+                                                        className="px-3 py-1 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-all"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                {customerBillingRecords.filter(r => r.customerId === selectedCustomerForHistory.id).length === 0 && (
+                                    <div className="text-center py-8 text-slate-400 text-sm">هیچ تاریخچه‌ای یافت نشد.</div>
+                                )}
                             </div>
                         </div>
-                        {currentCompanyBillingRecords
-                            .filter(r => r.customerId === selectedCustomerForHistory.id)
-                            .filter(r => {
-                                if (!historySearchQuery) return true;
-                                const query = historySearchQuery.toLowerCase();
-                                return r.date.includes(query) || 
-                                       r.amount.toString().includes(query) ||
-                                       (r.amount + (r.previousBalance || 0)).toString().includes(query);
-                            })
-                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                            .map(record => (
-                                <div key={record.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div>
-                                            <span className="text-xs text-slate-400 block">تاریخ قراءت</span>
-                                            <span className="font-bold text-slate-700">{record.date}</span>
-                                        </div>
-                                        <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                            {record.status === 'paid' ? 'پرداخت شده' : 'بدهکار'}
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-                                        <div>
-                                            <span className="text-slate-400 block text-[10px]">قراءت (قبلی/فعلی)</span>
-                                            <span className="font-medium">{record.previousReading} / {record.currentReading}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-400 block text-[10px]">مصرف</span>
-                                            <span className="font-medium">{record.consumption} واحد</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                                        <div>
-                                            <span className="text-xs text-slate-400 block">مجموع قابل پرداخت</span>
-                                            <span className="font-black text-blue-600">{formatCurrency(record.amount + (record.previousBalance || 0), storeSettings, 'AFN')}</span>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
-                                                <button 
-                                                    onClick={() => handleMarkAsPaid(record)}
-                                                    className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
-                                                >
-                                                    وصول شد
-                                                </button>
-                                            )}
-                                            <button 
-                                                onClick={() => handlePrintInvoice(record)}
-                                                className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                                                title="چاپ بل"
-                                            >
-                                                <PrintIcon className="w-5 h-5" />
-                                            </button>
-                                            <button 
-                                                onClick={() => {
-                                                    setEditingBillingRecord(record);
-                                                    setSelectedCustomerForBilling(selectedCustomerForHistory);
-                                                    setBillingDate(record.date);
-                                                    setIsBillingModalOpen(true);
-                                                }}
-                                                className="p-2 bg-slate-50 text-slate-500 rounded-xl hover:bg-slate-200 transition-all shadow-sm"
-                                                title="ویرایش"
-                                            >
-                                                <EditIcon className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        
-                        {currentCompanyBillingRecords.filter(r => r.customerId === selectedCustomerForHistory.id).length === 0 && (
-                            <div className="text-center py-12 text-slate-400 italic">
-                                هیچ سابقه میترخوانی برای این مشتری ثبت نشده است.
-                            </div>
-                        )}
-                    </div>
-                </Modal>
-            )}
+                    </Modal>
+                )}
         </div>
     );
 };

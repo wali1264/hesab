@@ -5,7 +5,8 @@ import type {
     Employee, Expense, Role, User, StoreSettings, ActivityLog, 
     CustomerTransaction, SupplierTransaction, PayrollTransaction, AppState, Service,
     DepositHolder, DepositTransaction, Company, Partner, ManagedCompany, CompanyLedgerEntry, 
-    ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerExpenseCategory
+    ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerExpenseCategory,
+    CompanyEmployee, SalaryMonthRecord, SalaryPayment
 } from '../types';
 
 export interface AdminProfile {
@@ -52,7 +53,8 @@ const DEFAULT_SETTINGS: StoreSettings = {
         USD: { code: 'USD', name: 'دلار', symbol: '$', method: 'divide' },
         IRT: { code: 'IRT', name: 'تومان', symbol: 'IRT', method: 'multiply' }
     },
-    expenseCategories: ['rent', 'utilities', 'supplies', 'salary', 'other']
+    expenseCategories: ['rent', 'utilities', 'supplies', 'salary', 'other'],
+    salaryAlertDays: 3
 };
 
 export const api = {
@@ -314,6 +316,22 @@ export const api = {
     addOwnerExpenseCategory: async (c: OwnerExpenseCategory) => db.putItem(db.STORES.OWNER_EXPENSE_CATEGORIES, c),
     updateOwnerExpenseCategory: async (c: OwnerExpenseCategory) => db.putItem(db.STORES.OWNER_EXPENSE_CATEGORIES, c),
     deleteOwnerExpenseCategory: async (id: string) => db.deleteItem(db.STORES.OWNER_EXPENSE_CATEGORIES, id),
+
+    // --- Salary Management ---
+    getCompanyEmployees: async () => db.getAll<CompanyEmployee>(db.STORES.COMPANY_EMPLOYEES),
+    addCompanyEmployee: async (employee: CompanyEmployee) => db.putItem(db.STORES.COMPANY_EMPLOYEES, employee),
+    updateCompanyEmployee: async (employee: CompanyEmployee) => db.putItem(db.STORES.COMPANY_EMPLOYEES, employee),
+    deleteCompanyEmployee: async (id: string) => db.deleteItem(db.STORES.COMPANY_EMPLOYEES, id),
+
+    getSalaryRecords: async () => db.getAll<SalaryMonthRecord>(db.STORES.SALARY_RECORDS),
+    addSalaryRecord: async (record: SalaryMonthRecord) => db.putItem(db.STORES.SALARY_RECORDS, record),
+    updateSalaryRecord: async (record: SalaryMonthRecord) => db.putItem(db.STORES.SALARY_RECORDS, record),
+    deleteSalaryRecord: async (id: string) => db.deleteItem(db.STORES.SALARY_RECORDS, id),
+
+    getSalaryPayments: async () => db.getAll<SalaryPayment>(db.STORES.SALARY_PAYMENTS),
+    addSalaryPayment: async (payment: SalaryPayment) => db.putItem(db.STORES.SALARY_PAYMENTS, payment),
+    updateSalaryPayment: async (payment: SalaryPayment) => db.putItem(db.STORES.SALARY_PAYMENTS, payment),
+    deleteSalaryPayment: async (id: string) => db.deleteItem(db.STORES.SALARY_PAYMENTS, id),
 
     // --- Orders ---
     getOrders: async () => {
@@ -649,6 +667,9 @@ export const api = {
         if (data.ownerTransactions) for (const t of data.ownerTransactions) await db.putItem(db.STORES.OWNER_TRANSACTIONS, t);
         if (data.ownerExpenseCategories) for (const c of data.ownerExpenseCategories) await db.putItem(db.STORES.OWNER_EXPENSE_CATEGORIES, c);
         if (data.partners) for (const p of data.partners) await db.putItem(db.STORES.PARTNERS, p);
+        if (data.companyEmployees) for (const e of data.companyEmployees) await db.putItem(db.STORES.COMPANY_EMPLOYEES, e);
+        if (data.salaryRecords) for (const r of data.salaryRecords) await db.putItem(db.STORES.SALARY_RECORDS, r);
+        if (data.salaryPayments) for (const p of data.salaryPayments) await db.putItem(db.STORES.SALARY_PAYMENTS, p);
     }
 };
 

@@ -168,7 +168,8 @@ const AlertsTab: React.FC<TabProps> = ({ showToast }) => {
     const { storeSettings, updateSettings } = useAppContext();
     const [formData, setFormData] = useState({
         lowStockThreshold: String(storeSettings.lowStockThreshold),
-        expiryThresholdMonths: String(storeSettings.expiryThresholdMonths)
+        expiryThresholdMonths: String(storeSettings.expiryThresholdMonths),
+        salaryAlertDays: String(storeSettings.salaryAlertDays || 3)
     });
 
      const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,7 +183,8 @@ const AlertsTab: React.FC<TabProps> = ({ showToast }) => {
         updateSettings({ 
             ...storeSettings, 
             lowStockThreshold: Number(formData.lowStockThreshold) || 0,
-            expiryThresholdMonths: Number(formData.expiryThresholdMonths) || 0
+            expiryThresholdMonths: Number(formData.expiryThresholdMonths) || 0,
+            salaryAlertDays: Number(formData.salaryAlertDays) || 3
         });
         showToast("تنظیمات هشدارها با موفقیت بروزرسانی شد.");
     };
@@ -203,6 +205,11 @@ const AlertsTab: React.FC<TabProps> = ({ showToast }) => {
                     <label htmlFor="expiryThresholdMonths" className="block text-sm md:text-md font-bold text-slate-700 mb-2">بازه زمانی هشدار انقضا (به ماه)</label>
                     <input id="expiryThresholdMonths" name="expiryThresholdMonths" type="text" inputMode="numeric" value={formData.expiryThresholdMonths} onChange={handleChange} className="w-full p-3.5 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-50 outline-none transition-all font-bold" />
                     <p className="text-xs text-slate-400 mt-2 font-medium">محصولاتی که تاریخ انقضای آن‌ها کمتر از این تعداد ماه آینده باشد، در داشبورد نمایش داده خواهند شد.</p>
+                </div>
+                <div>
+                    <label htmlFor="salaryAlertDays" className="block text-sm md:text-md font-bold text-slate-700 mb-2">بازه زمانی هشدار حقوق (روز مانده به پایان ماه)</label>
+                    <input id="salaryAlertDays" name="salaryAlertDays" type="text" inputMode="numeric" value={formData.salaryAlertDays} onChange={handleChange} className="w-full p-3.5 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-50 outline-none transition-all font-bold" />
+                    <p className="text-xs text-slate-400 mt-2 font-medium">هشدار پرداخت حقوق از چند روز مانده به پایان ماه نمایش داده شود؟</p>
                 </div>
             </div>
             <div className="flex justify-end pt-4">
@@ -578,6 +585,7 @@ const UsersAndRolesTab: React.FC<TabProps> = ({ showToast }) => {
     const [editingRole, setEditingRole] = useState<Role | null>(null);
     const [roleName, setRoleName] = useState('');
     const [rolePermissions, setRolePermissions] = useState<Permission[]>([]);
+    const [roleCompanyAccess, setRoleCompanyAccess] = useState<number[]>([]);
 
     // User state
     const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -596,25 +604,31 @@ const UsersAndRolesTab: React.FC<TabProps> = ({ showToast }) => {
         setEditingRole(role);
         setRoleName(role.name);
         setRolePermissions(role.permissions || []);
+        setRoleCompanyAccess(role.companyAccess || []);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleSaveRole = async () => {
         if (!roleName) { showToast("نام نقش نمی‌تواند خالی باشد."); return; }
         const result = await (editingRole 
-            ? updateRole({ ...editingRole, name: roleName, permissions: rolePermissions })
-            : addRole({ name: roleName, permissions: rolePermissions }));
+            ? updateRole({ ...editingRole, name: roleName, permissions: rolePermissions, companyAccess: roleCompanyAccess })
+            : addRole({ name: roleName, permissions: rolePermissions, companyAccess: roleCompanyAccess }));
         
         showToast(result.message);
         if(result.success) {
             setEditingRole(null);
             setRoleName('');
             setRolePermissions([]);
+            setRoleCompanyAccess([]);
         }
     };
     
     const handlePermissionChange = (permissionId: string, checked: boolean) => {
         setRolePermissions(prev => checked ? [...prev, permissionId] : prev.filter(p => p !== permissionId));
+    };
+
+    const handleCompanyAccessChange = (slotNumber: number, checked: boolean) => {
+        setRoleCompanyAccess(prev => checked ? [...prev, slotNumber] : prev.filter(s => s !== slotNumber));
     };
 
     const handleEditUser = (user: User) => {
@@ -737,6 +751,26 @@ const UsersAndRolesTab: React.FC<TabProps> = ({ showToast }) => {
                                     </div>
                                 ))}
                             </div>
+
+                            <p className="text-xs font-black text-slate-400 mt-6 mb-4 px-1">دسترسی به شرکت‌ها (شماره اسلات):</p>
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                                    {Array.from({ length: 20 }, (_, i) => i + 1).map(slot => (
+                                        <label key={slot} className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all cursor-pointer ${roleCompanyAccess.includes(slot) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300'}`}>
+                                            <input 
+                                                type="checkbox" 
+                                                className="hidden"
+                                                checked={roleCompanyAccess.includes(slot)}
+                                                onChange={e => handleCompanyAccessChange(slot, e.target.checked)}
+                                                disabled={editingRole?.id === 'admin-role'}
+                                            />
+                                            <span className="text-xs font-black">{slot}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-3 text-center font-bold">انتخاب کنید که این نقش به کدام شماره شرکت‌ها دسترسی داشته باشد.</p>
+                            </div>
+
                              <div className="flex gap-2 mt-6">
                                 <button 
                                     onClick={handleSaveRole} 
@@ -745,7 +779,7 @@ const UsersAndRolesTab: React.FC<TabProps> = ({ showToast }) => {
                                 >
                                     {editingRole ? 'بروزرسانی نهایی' : 'ذخیره نقش'}
                                 </button>
-                                {editingRole && <button onClick={() => {setEditingRole(null); setRoleName(''); setRolePermissions([]);}} className="px-6 rounded-xl bg-slate-100 text-slate-500 font-bold">لغو</button>}
+                                {editingRole && <button onClick={() => {setEditingRole(null); setRoleName(''); setRolePermissions([]); setRoleCompanyAccess([]);}} className="px-6 rounded-xl bg-slate-100 text-slate-500 font-bold">لغو</button>}
                             </div>
                         </div>
                     </div>

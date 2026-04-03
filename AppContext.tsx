@@ -8,7 +8,8 @@ import type {
     Order, OrderStatus, OrderPayment,
     ManagedCompany, CompanyLedgerEntry, LedgerEntryType,
     ManagedCompanyCustomer, CustomerBillingRecord,
-    OwnerTransaction, OwnerTransactionType, OwnerExpenseCategory
+    OwnerTransaction, OwnerTransactionType, OwnerExpenseCategory,
+    CompanyEmployee, SalaryMonthRecord, SalaryPayment
 } from './types';
 import { api } from './services/supabaseService';
 import { supabase } from './utils/supabaseClient';
@@ -24,6 +25,7 @@ interface AppContextType extends AppState {
     signup: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
     logout: (type: 'full' | 'switch') => Promise<{ success: boolean; message: string }>;
     hasPermission: (permission: Permission) => boolean;
+    hasCompanyAccess: (slotNumber: number) => boolean;
     
     // Backup & Restore
     exportData: () => void;
@@ -136,7 +138,7 @@ interface AppContextType extends AppState {
     deletePartnerWithdrawal: (expenseId: string) => Promise<{ success: boolean; message: string }>;
 
     // Managed Companies
-    addManagedCompany: (company: Omit<ManagedCompany, 'id' | 'createdAt'>) => Promise<{ success: boolean; message: string }>;
+    addManagedCompany: (company: Omit<ManagedCompany, 'id' | 'createdAt' | 'slotNumber'>) => Promise<{ success: boolean; message: string }>;
     updateManagedCompany: (company: ManagedCompany) => Promise<{ success: boolean; message: string }>;
     deleteManagedCompany: (id: string) => Promise<{ success: boolean; message: string }>;
     addLedgerEntry: (entry: Omit<CompanyLedgerEntry, 'id'>) => Promise<{ success: boolean; message: string }>;
@@ -162,6 +164,17 @@ interface AppContextType extends AppState {
     addOwnerExpenseCategory: (name: string) => Promise<{ success: boolean; message: string }>;
     updateOwnerExpenseCategory: (category: OwnerExpenseCategory) => Promise<{ success: boolean; message: string }>;
     deleteOwnerExpenseCategory: (id: string) => Promise<{ success: boolean; message: string }>;
+
+    // Company Salary Management
+    addCompanyEmployee: (employee: Omit<CompanyEmployee, 'id' | 'isActive'>) => Promise<{ success: boolean; message: string }>;
+    updateCompanyEmployee: (employee: CompanyEmployee) => Promise<{ success: boolean; message: string }>;
+    deleteCompanyEmployee: (id: string) => Promise<{ success: boolean; message: string }>;
+    addSalaryPayment: (payment: Omit<SalaryPayment, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateSalaryPayment: (payment: SalaryPayment) => Promise<{ success: boolean; message: string }>;
+    deleteSalaryPayment: (id: string) => Promise<{ success: boolean; message: string }>;
+    settleSalaryMonth: (recordId: string) => Promise<{ success: boolean; message: string }>;
+    generateMonthlySalaryRecords: (year: number, month: number) => Promise<{ success: boolean; message: string }>;
+
     logActivity: (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType'], companyId?: string) => Promise<void>;
 }
 
@@ -183,6 +196,7 @@ const getDefaultState = (): AppState => {
         products: [], saleInvoices: [], purchaseInvoices: [], inTransitInvoices: [], customers: [],
         suppliers: [], employees: [], expenses: [], services: [], depositHolders: [], depositTransactions: [],
         companies: [], partners: [],
+        companyEmployees: [], salaryRecords: [], salaryPayments: [],
         storeSettings: {
         storeName: 'Vendura', address: '', phone: '', lowStockThreshold: 10,
             expiryThresholdMonths: 3, currencyName: 'افغانی', currencySymbol: 'AFN',
@@ -242,7 +256,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const fetchData = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const [settings, users, roles, products, services, entities, transactions, invoices, activity, wastageRecords, orders, managedCompanies, managedLedger, managedCustomers, billingRecords, ownerTransactions, ownerExpenseCategories] = await Promise.all([
+            const [settings, users, roles, products, services, entities, transactions, invoices, activity, wastageRecords, orders, managedCompanies, managedLedger, managedCustomers, billingRecords, ownerTransactions, ownerExpenseCategories, companyEmployees, salaryRecords, salaryPayments] = await Promise.all([
                 api.getSettings().catch(() => ({})),
                 api.getUsers().catch(() => []),
                 api.getRoles().catch(() => []),
@@ -259,7 +273,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 api.getManagedCompanyCustomers().catch(() => []),
                 api.getCustomerBillingRecords().catch(() => []),
                 api.getOwnerTransactions().catch(() => []),
-                api.getOwnerExpenseCategories().catch(() => [])
+                api.getOwnerExpenseCategories().catch(() => []),
+                api.getCompanyEmployees().catch(() => []),
+                api.getSalaryRecords().catch(() => []),
+                api.getSalaryPayments().catch(() => [])
             ]);
 
             const isSessionLocked = localStorage.getItem('kasebyar_session_locked') === 'true';
@@ -403,6 +420,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     ownerTransactions: ownerTransactions,
                     ownerExpenseCategories: ownerExpenseCategories,
                     partners: entities.partners || [],
+                    companyEmployees: companyEmployees,
+                    salaryRecords: salaryRecords,
+                    salaryPayments: salaryPayments,
                     isAuthenticated: isAuth,
                     currentUser: restoredUser
                 };
@@ -571,7 +591,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (state.currentUser.roleId === SYSTEM_SUPER_OWNER_ID) return true;
         const userRole = state.roles.find(r => r.id === state.currentUser!.roleId);
         if (!userRole || !userRole.permissions) return false;
+        if (userRole.id === 'admin-role') return true;
         return userRole.permissions.includes(permission);
+    }, [state.currentUser, state.roles]);
+
+    const hasCompanyAccess = useCallback((slotNumber: number): boolean => {
+        if (!state.currentUser) return false;
+        if (state.currentUser.roleId === SYSTEM_SUPER_OWNER_ID) return true;
+        const userRole = state.roles.find(r => r.id === state.currentUser!.roleId);
+        if (!userRole) return false;
+        if (userRole.id === 'admin-role') return true;
+        if (!userRole.companyAccess) return false;
+        return userRole.companyAccess.includes(slotNumber);
     }, [state.currentUser, state.roles]);
 
     const addUser = async (userData: Omit<User, 'id'>) => {
@@ -2572,15 +2603,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const addEmployeeAdvanceToEmployee = (eid: string, a: number, d: string, cur?: any, rate?: number) => { addEmployeeAdvance(eid, a, d, cur, rate); };
 
     // --- Managed Companies Functions ---
-    const addManagedCompany = async (companyData: Omit<ManagedCompany, 'id' | 'createdAt'>) => {
+    const addManagedCompany = async (companyData: Omit<ManagedCompany, 'id' | 'createdAt' | 'slotNumber'>) => {
+        // Find first available slot (1-20)
+        const usedSlots = state.managedCompanies.map(c => c.slotNumber);
+        let slotNumber = 1;
+        for (let i = 1; i <= 20; i++) {
+            if (!usedSlots.includes(i)) {
+                slotNumber = i;
+                break;
+            }
+        }
+
         const newCompany: ManagedCompany = {
             ...companyData,
             id: crypto.randomUUID(),
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            slotNumber
         };
         await api.addManagedCompany(newCompany);
         setState(prev => ({ ...prev, managedCompanies: [...prev.managedCompanies, newCompany] }));
-        return { success: true, message: 'شرکت با موفقیت ثبت شد.' };
+        return { success: true, message: `شرکت با موفقیت ثبت شد. (شماره اختصاصی: ${slotNumber})` };
     };
 
     const updateManagedCompany = async (company: ManagedCompany) => {
@@ -2744,6 +2786,108 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return { success: true, message: 'دسته‌بندی حذف شد.' };
     };
 
+    const addCompanyEmployee = async (employee: Omit<CompanyEmployee, 'id' | 'isActive'>) => {
+        const newEmployee: CompanyEmployee = {
+            ...employee,
+            id: crypto.randomUUID(),
+            isActive: true
+        };
+        await api.addCompanyEmployee(newEmployee);
+        setState(prev => ({ ...prev, companyEmployees: [...prev.companyEmployees, newEmployee] }));
+        return { success: true, message: 'کارمند جدید با موفقیت ثبت شد.' };
+    };
+
+    const updateCompanyEmployee = async (employee: CompanyEmployee) => {
+        await api.updateCompanyEmployee(employee);
+        setState(prev => ({
+            ...prev,
+            companyEmployees: prev.companyEmployees.map(e => e.id === employee.id ? employee : e)
+        }));
+        return { success: true, message: 'اطلاعات کارمند بروزرسانی شد.' };
+    };
+
+    const deleteCompanyEmployee = async (id: string) => {
+        await api.deleteCompanyEmployee(id);
+        setState(prev => ({
+            ...prev,
+            companyEmployees: prev.companyEmployees.filter(e => e.id !== id)
+        }));
+        return { success: true, message: 'کارمند حذف شد.' };
+    };
+
+    const addSalaryPayment = async (payment: Omit<SalaryPayment, 'id'>) => {
+        const newPayment: SalaryPayment = {
+            ...payment,
+            id: crypto.randomUUID()
+        };
+        await api.addSalaryPayment(newPayment);
+        setState(prev => ({ ...prev, salaryPayments: [...prev.salaryPayments, newPayment] }));
+        return { success: true, message: 'پرداختی با موفقیت ثبت شد.' };
+    };
+
+    const updateSalaryPayment = async (payment: SalaryPayment) => {
+        await api.updateSalaryPayment(payment);
+        setState(prev => ({
+            ...prev,
+            salaryPayments: prev.salaryPayments.map(p => p.id === payment.id ? payment : p)
+        }));
+        return { success: true, message: 'پرداختی بروزرسانی شد.' };
+    };
+
+    const deleteSalaryPayment = async (id: string) => {
+        await api.deleteSalaryPayment(id);
+        setState(prev => ({
+            ...prev,
+            salaryPayments: prev.salaryPayments.filter(p => p.id !== id)
+        }));
+        return { success: true, message: 'پرداختی حذف شد.' };
+    };
+
+    const settleSalaryMonth = async (recordId: string) => {
+        const record = state.salaryRecords.find(r => r.id === recordId);
+        if (!record) return { success: false, message: 'رکورد یافت نشد.' };
+        
+        const updatedRecord = { ...record, status: 'settled' as const };
+        await api.updateSalaryRecord(updatedRecord);
+        setState(prev => ({
+            ...prev,
+            salaryRecords: prev.salaryRecords.map(r => r.id === recordId ? updatedRecord : r)
+        }));
+        return { success: true, message: 'وضعیت ماه به تصفیه شده تغییر یافت.' };
+    };
+
+    const generateMonthlySalaryRecords = async (year: number, month: number) => {
+        const activeEmployees = state.companyEmployees.filter(e => e.isActive);
+        const existingRecords = state.salaryRecords.filter(r => r.year === year && r.month === month);
+        const existingEmployeeIds = new Set(existingRecords.map(r => r.employeeId));
+        
+        const newRecords: SalaryMonthRecord[] = [];
+        for (const emp of activeEmployees) {
+            if (!existingEmployeeIds.has(emp.id)) {
+                newRecords.push({
+                    id: crypto.randomUUID(),
+                    employeeId: emp.id,
+                    year,
+                    month,
+                    baseSalary: emp.monthlySalary,
+                    currency: emp.salaryCurrency,
+                    status: 'pending',
+                    totalPaid: 0
+                });
+            }
+        }
+        
+        if (newRecords.length > 0) {
+            for (const record of newRecords) {
+                await api.addSalaryRecord(record);
+            }
+            setState(prev => ({ ...prev, salaryRecords: [...prev.salaryRecords, ...newRecords] }));
+            return { success: true, message: `${newRecords.length} رکورد جدید ایجاد شد.` };
+        }
+        
+        return { success: true, message: 'تمامی رکوردها قبلاً ایجاد شده‌اند.' };
+    };
+
     const setSelectedCompanyId = (id: string | null) => {
         setState(prev => ({ ...prev, selectedCompanyId: id }));
     };
@@ -2751,7 +2895,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (isLoading) return <div className="flex items-center justify-center h-screen text-xl font-bold text-blue-600">در حال دریافت اطلاعات...</div>;
 
     return <AppContext.Provider value={{
-        ...state, showToast, isLoading, isLoggingOut, isShopActive, login, signup, logout, hasPermission, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, exportData, importData,
+        ...state, showToast, isLoading, isLoggingOut, isShopActive, login, signup, logout, hasPermission, hasCompanyAccess, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, exportData, importData,
         cloudBackup, cloudRestore, autoBackupEnabled, setAutoBackupEnabled,
         addProduct, updateProduct, deleteProduct, registerWastage, addOrder, updateOrderStatus, updateOrder, deleteOrder, addOrderPayment, addToCart, updateCartItemQuantity, updateCartItemFinalPrice, removeFromCart, completeSale,
         beginEditSale, cancelEditSale, deleteSaleInvoice, addSaleReturn, addPurchaseInvoice, beginEditPurchase, cancelEditPurchase, updatePurchaseInvoice, addPurchaseReturn,
@@ -2764,6 +2908,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addCustomerBillingRecord, updateCustomerBillingRecord, deleteCustomerBillingRecord,
         addOwnerTransaction, updateOwnerTransaction, deleteOwnerTransaction,
         addOwnerExpenseCategory, updateOwnerExpenseCategory, deleteOwnerExpenseCategory,
+        addCompanyEmployee, updateCompanyEmployee, deleteCompanyEmployee,
+        addSalaryPayment, updateSalaryPayment, deleteSalaryPayment,
+        settleSalaryMonth, generateMonthlySalaryRecords,
         addDepositHolder, deleteDepositHolder, processDepositTransaction, updateDepositTransaction, deleteDepositTransaction,
         setSelectedCompanyId, logActivity
     }}>{children}</AppContext.Provider>;

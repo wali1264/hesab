@@ -13,6 +13,7 @@ import Reports from './pages/Reports';
 import SpecialReports from './pages/SpecialReports';
 import Orders from './pages/Orders';
 import CompanyManagement from './pages/CompanyManagement';
+import SalaryManagement from './pages/SalaryManagement';
 import UpdatePrompt from './components/UpdatePrompt';
 import { AppProvider, useAppContext } from './AppContext';
 import type { Permission } from './types';
@@ -50,6 +51,7 @@ const AppContent: React.FC = () => {
       settings: hasPermission('page:settings'),
       orders: hasPermission('page:orders'),
       company_management: hasPermission('page:company_management'),
+      salary_management: hasPermission('company:manage_payroll'),
   }), [hasPermission]);
   
     const navLabels: { [key: string]: string } = {
@@ -65,6 +67,7 @@ const AppContent: React.FC = () => {
       settings: 'تنظیمات',
       orders: 'سفارشات',
       company_management: 'مدیریت شرکت‌ها',
+      salary_management: 'مدیریت حقوق',
   };
 
   // If the current active view is not accessible, switch to the first accessible one
@@ -97,6 +100,7 @@ const AppContent: React.FC = () => {
       case 'settings': return accessiblePages.settings && <Settings />;
       case 'orders': return accessiblePages.orders && <Orders />;
       case 'company_management': return accessiblePages.company_management && <CompanyManagement />;
+      case 'salary_management': return accessiblePages.salary_management && <SalaryManagement />;
       default: return accessiblePages.dashboard && <Dashboard />;
     }
   };
