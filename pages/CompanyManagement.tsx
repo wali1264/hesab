@@ -65,7 +65,7 @@ const CompanyManagement: React.FC = () => {
     // Handle default tab selection based on permissions
     useEffect(() => {
         if (selectedCompanyId && selectedCompany) {
-            if (!hasCompanyAccess(selectedCompany.slotNumber)) {
+            if (!hasCompanyAccess(selectedCompany?.slotNumber || 0)) {
                 setSelectedCompanyId(null);
                 showToast("شما به این شرکت دسترسی ندارید.");
                 return;
@@ -79,7 +79,7 @@ const CompanyManagement: React.FC = () => {
             }
             
             // Default tab for non-water companies
-            if (selectedCompany.type !== CompanyType.WATER && companyDetailTab === 'collections') {
+            if (selectedCompany?.type !== CompanyType.WATER && companyDetailTab === 'collections') {
                 setCompanyDetailTab('invoices');
             }
         }
@@ -103,6 +103,9 @@ const CompanyManagement: React.FC = () => {
     const [billingDate, setBillingDate] = useState(new Date().toISOString().split('T')[0]);
 
     const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+    const [invoiceUnits, setInvoiceUnits] = useState<number>(0);
+    const [invoicePricePerUnit, setInvoicePricePerUnit] = useState<number>(0);
+    const [selectedCustomerIdForInvoice, setSelectedCustomerIdForInvoice] = useState<string | null>(null);
     const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
     const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -132,6 +135,18 @@ const CompanyManagement: React.FC = () => {
             }
         }
     }, [isAddCompanyModalOpen, editingCompany, currentUser]);
+
+    useEffect(() => {
+        if (isInvoiceModalOpen) {
+            if (editingInvoice) {
+                setInvoiceUnits(editingInvoice.units || 0);
+                setInvoicePricePerUnit(editingInvoice.pricePerUnit || 0);
+            } else {
+                setInvoiceUnits(0);
+                setInvoicePricePerUnit(selectedCompany?.unitPrice || 0);
+            }
+        }
+    }, [isInvoiceModalOpen, editingInvoice, selectedCompany]);
 
     if (!hasPermission('page:company_management')) {
         return (
@@ -263,6 +278,16 @@ const CompanyManagement: React.FC = () => {
         });
     }, [managedCompanies, managedCompanyLedger, customerBillingRecords]);
 
+    const calculateCustomerBalance = (customer: ManagedCompanyCustomer) => {
+        const initial = customer.initialBalance || 0;
+        const initialAdjusted = customer.initialBalanceType === 'they_request' ? -initial : initial;
+        
+        const invoices = managedCompanyInvoices.filter(inv => inv.customerId === customer.id && inv.status === 'unpaid');
+        const unpaidTotal = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+        
+        return initialAdjusted + unpaidTotal;
+    };
+
     const handleMarkAsPaid = async (record: CustomerBillingRecord) => {
         const paymentDate = new Date().toISOString().split('T')[0];
         await updateCustomerBillingRecord({
@@ -343,6 +368,7 @@ const CompanyManagement: React.FC = () => {
             phone: formData.get('phone') as string,
             establishmentCost: Number(formData.get('establishmentCost')) || 0,
             unitPrice: Number(formData.get('unitPrice')) || 0,
+            unitName: formData.get('unitName') as string || undefined,
             type: companyType,
             shareholders: shareholders
         };
@@ -383,18 +409,28 @@ const CompanyManagement: React.FC = () => {
 
     const handleAddCustomer = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!selectedCompanyId) return;
+        if (!selectedCompanyId || !selectedCompany) return;
         const formData = new FormData(e.currentTarget);
-        const customerData = {
+        
+        const isWaterCompany = selectedCompany?.type === CompanyType.WATER;
+        
+        const customerData: any = {
             companyId: selectedCompanyId,
             name: formData.get('name') as string,
             fatherName: formData.get('fatherName') as string,
             address: formData.get('address') as string,
-            meterNumber: formData.get('meterNumber') as string,
             phone: formData.get('phone') as string,
-            initialReading: Number(formData.get('initialReading')),
             registrationDate: new Date().toISOString().split('T')[0],
         };
+
+        if (isWaterCompany) {
+            customerData.meterNumber = formData.get('meterNumber') as string;
+            customerData.initialReading = Number(formData.get('initialReading'));
+        } else {
+            customerData.initialBalance = Number(formData.get('initialBalance')) || 0;
+            customerData.initialBalanceType = formData.get('initialBalanceType') as 'we_request' | 'they_request';
+            customerData.customerType = 'invoiced';
+        }
 
         if (editingCustomer) {
             await updateManagedCompanyCustomer({ ...editingCustomer, ...customerData });
@@ -602,11 +638,11 @@ const CompanyManagement: React.FC = () => {
             companyId: selectedCompanyId,
             customerId: formData.get('customerId') as string,
             date: invoiceDate,
-            quantity: Number(formData.get('quantity')),
-            unitPrice: Number(formData.get('unitPrice')),
-            totalAmount: Number(formData.get('quantity')) * Number(formData.get('unitPrice')),
+            units: Number(formData.get('units')),
+            pricePerUnit: Number(formData.get('pricePerUnit')),
+            totalAmount: Number(formData.get('units')) * Number(formData.get('pricePerUnit')),
             status: formData.get('status') as 'paid' | 'unpaid',
-            notes: formData.get('notes') as string,
+            description: formData.get('description') as string,
         };
 
         if (editingInvoice) {
@@ -627,9 +663,9 @@ const CompanyManagement: React.FC = () => {
         const logData = {
             companyId: selectedCompanyId,
             date: productionDate,
-            totalProduced: Number(formData.get('totalProduced')),
-            wasteCount: Number(formData.get('wasteCount')),
-            notes: formData.get('notes') as string,
+            producedUnits: Number(formData.get('producedUnits')),
+            spoilageUnits: Number(formData.get('spoilageUnits')),
+            description: formData.get('description') as string,
         };
 
         if (editingProductionLog) {
@@ -637,7 +673,7 @@ const CompanyManagement: React.FC = () => {
             await logActivity('company', `ویرایش رکورد تولید: ${logData.date}`, editingProductionLog.id, 'company', selectedCompanyId);
         } else {
             await addManagedCompanyProductionLog(logData);
-            await logActivity('company', `ثبت تولید جدید: ${logData.totalProduced} واحد`, undefined, 'company', selectedCompanyId);
+            await logActivity('company', `ثبت تولید جدید: ${logData.producedUnits} واحد`, undefined, 'company', selectedCompanyId);
         }
         setIsProductionModalOpen(false);
         setEditingProductionLog(null);
@@ -725,7 +761,7 @@ const CompanyManagement: React.FC = () => {
                         <div>
                             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                                 <BuildingIcon className="w-8 h-8 text-blue-600" />
-                                {selectedCompany.name}
+                                {selectedCompany?.name}
                             </h1>
                             <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mt-2 w-fit overflow-x-auto max-w-full">
                                 {hasPermission('company:view_ledger') && (
@@ -744,7 +780,7 @@ const CompanyManagement: React.FC = () => {
                                         مدیریت مشتریان
                                     </button>
                                 )}
-                                {selectedCompany.type === CompanyType.WATER ? (
+                                {selectedCompany?.type === CompanyType.WATER ? (
                                     hasPermission('company:view_collections') && (
                                         <button 
                                             onClick={() => setCompanyDetailTab('collections')}
@@ -778,14 +814,14 @@ const CompanyManagement: React.FC = () => {
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">هزینه تاسیس</span>
                                     <span className="text-lg font-black text-orange-600">
-                                        {formatCurrency(selectedCompany.establishmentCost || 0, storeSettings, 'AFN')}
+                                        {formatCurrency(selectedCompany?.establishmentCost || 0, storeSettings, 'AFN')}
                                     </span>
                                 </div>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">مجموع طلبات</span>
                                     <span className="text-lg font-black text-red-600">
                                         {formatCurrency(
-                                            selectedCompany.type === CompanyType.WATER 
+                                            selectedCompany?.type === CompanyType.WATER 
                                                 ? (companyStats.find(s => s.id === selectedCompanyId)?.totalDebt || 0)
                                                 : managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'unpaid').reduce((sum, inv) => sum + inv.totalAmount, 0),
                                             storeSettings, 'AFN'
@@ -794,18 +830,18 @@ const CompanyManagement: React.FC = () => {
                                 </div>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">سود/ضرر نهایی</span>
-                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (selectedCompany.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (selectedCompany?.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                                         {formatCurrency(
-                                            totalWater + totalEquipment + (selectedCompany.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses, 
+                                            totalWater + totalEquipment + (selectedCompany?.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses, 
                                             storeSettings, 'AFN'
                                         )}
                                     </span>
                                 </div>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">وضعیت بازگشت سرمایه</span>
-                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (selectedCompany.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses - (selectedCompany.establishmentCost || 0)) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (selectedCompany?.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses - (selectedCompany?.establishmentCost || 0)) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
                                         {formatCurrency(
-                                            totalWater + totalEquipment + (selectedCompany.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses - (selectedCompany.establishmentCost || 0), 
+                                            totalWater + totalEquipment + (selectedCompany?.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses - (selectedCompany?.establishmentCost || 0), 
                                             storeSettings, 'AFN'
                                         )}
                                     </span>
@@ -816,7 +852,7 @@ const CompanyManagement: React.FC = () => {
                 </div>
 
                 {companyDetailTab === 'ledger' ? (
-                    <div className={`grid grid-cols-1 ${selectedCompany.type === CompanyType.WATER ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6`}>
+                    <div className={`grid grid-cols-1 ${selectedCompany?.type === CompanyType.WATER ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6`}>
                         {/* Expenses Column */}
                         <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-gray-200/60 shadow-xl overflow-hidden flex flex-col h-[70vh]">
                             <div className="p-4 bg-red-50 border-b border-red-100 flex justify-between items-center">
@@ -868,7 +904,7 @@ const CompanyManagement: React.FC = () => {
                             </div>
                         </div>
 
-                        {selectedCompany.type === CompanyType.WATER ? (
+                        {selectedCompany?.type === CompanyType.WATER ? (
                             <>
                                 {/* Water Revenue Column */}
                                 <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-gray-200/60 shadow-xl overflow-hidden flex flex-col h-[70vh]">
@@ -1079,33 +1115,68 @@ const CompanyManagement: React.FC = () => {
                                         </div>
                                         
                                         <div className="space-y-2 mb-4">
-                                            <div className="flex justify-between text-xs">
-                                                <span className="text-slate-400">شماره میتر:</span>
-                                                <span className="font-bold text-slate-700">{customer.meterNumber}</span>
-                                            </div>
+                                            {selectedCompany?.type === CompanyType.WATER ? (
+                                                <>
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="text-slate-400">شماره میتر:</span>
+                                                        <span className="font-bold text-slate-700">{customer.meterNumber}</span>
+                                                    </div>
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="text-slate-400">آخرین قراءت:</span>
+                                                        <span className="font-bold text-blue-600">{lastRecord ? lastRecord.currentReading : customer.initialReading}</span>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="text-slate-400">باقی سابق:</span>
+                                                        <span className={`font-bold ${customer.initialBalanceType === 'they_request' ? 'text-red-600' : 'text-slate-700'}`}>
+                                                            {formatCurrency(customer.initialBalance || 0, storeSettings, 'AFN')} 
+                                                            <span className="text-[10px] mr-1">({customer.initialBalanceType === 'they_request' ? 'طلب مشتری' : 'طلب ما'})</span>
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="text-slate-400 font-bold">باقی فعلی:</span>
+                                                        <span className="font-bold text-emerald-600">{formatCurrency(calculateCustomerBalance(customer), storeSettings, 'AFN')}</span>
+                                                    </div>
+                                                </>
+                                            )}
                                             <div className="flex justify-between text-xs">
                                                 <span className="text-slate-400">آدرس:</span>
                                                 <span className="text-slate-700">{customer.address}</span>
                                             </div>
-                                            <div className="flex justify-between text-xs">
-                                                <span className="text-slate-400">آخرین قراءت:</span>
-                                                <span className="font-bold text-blue-600">{lastRecord ? lastRecord.currentReading : customer.initialReading}</span>
-                                            </div>
                                         </div>
 
                                         <div className="pt-4 border-t border-slate-100 flex gap-2">
-                                            {hasPermission('company_billing:create') && (
-                                                <button 
-                                                    onClick={() => { 
-                                                        setSelectedCustomerForBilling(customer); 
-                                                        setEditingBillingRecord(null);
-                                                        setIsBillingModalOpen(true); 
-                                                    }}
-                                                    className="flex-grow flex items-center justify-center gap-2 bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold hover:bg-blue-600 hover:text-white transition-all"
-                                                >
-                                                    <ClipboardDocumentListIcon className="w-4 h-4" />
-                                                    ثبت میترخوانی
-                                                </button>
+                                            {selectedCompany?.type === CompanyType.WATER ? (
+                                                hasPermission('company_billing:create') && (
+                                                    <button 
+                                                        onClick={() => { 
+                                                            setSelectedCustomerForBilling(customer); 
+                                                            setEditingBillingRecord(null);
+                                                            setIsBillingModalOpen(true); 
+                                                        }}
+                                                        className="flex-grow flex items-center justify-center gap-2 bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold hover:bg-blue-600 hover:text-white transition-all"
+                                                    >
+                                                        <ClipboardDocumentListIcon className="w-4 h-4" />
+                                                        ثبت میترخوانی
+                                                    </button>
+                                                )
+                                            ) : (
+                                                hasPermission('company_billing:create') && (
+                                                    <button 
+                                                        onClick={() => { 
+                                                            setEditingInvoice(null);
+                                                            setSelectedCustomerIdForInvoice(customer.id);
+                                                            setInvoiceDate(new Date().toISOString().split('T')[0]);
+                                                            setIsInvoiceModalOpen(true); 
+                                                        }}
+                                                        className="flex-grow flex items-center justify-center gap-2 bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold hover:bg-blue-600 hover:text-white transition-all"
+                                                    >
+                                                        <PlusIcon className="w-4 h-4" />
+                                                        ثبت فاکتور
+                                                    </button>
+                                                )
                                             )}
                                             <button 
                                                 onClick={() => { 
@@ -1113,7 +1184,7 @@ const CompanyManagement: React.FC = () => {
                                                     setIsHistoryModalOpen(true); 
                                                 }}
                                                 className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all"
-                                                title="تاریخچه بل‌ها"
+                                                title="تاریخچه"
                                             >
                                                 <HistoryIcon className="w-5 h-5" />
                                             </button>
@@ -1149,7 +1220,7 @@ const CompanyManagement: React.FC = () => {
                                     <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                                 </div>
                                 <button 
-                                    onClick={() => { setEditingInvoice(null); setInvoiceDate(new Date().toISOString().split('T')[0]); setIsInvoiceModalOpen(true); }}
+                                    onClick={() => { setEditingInvoice(null); setSelectedCustomerIdForInvoice(null); setInvoiceDate(new Date().toISOString().split('T')[0]); setIsInvoiceModalOpen(true); }}
                                     className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
                                 >
                                     <PlusIcon className="w-5 h-5" />
@@ -1165,7 +1236,7 @@ const CompanyManagement: React.FC = () => {
                                         <tr>
                                             <th className="p-4 text-xs font-bold text-slate-500">مشتری</th>
                                             <th className="p-4 text-xs font-bold text-slate-500">تاریخ</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">تعداد/مقدار</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">{selectedCompany?.unitName || 'تعداد/مقدار'}</th>
                                             <th className="p-4 text-xs font-bold text-slate-500">مبلغ کل</th>
                                             <th className="p-4 text-xs font-bold text-slate-500">وضعیت</th>
                                             <th className="p-4 text-xs font-bold text-slate-500">عملیات</th>
@@ -1187,7 +1258,7 @@ const CompanyManagement: React.FC = () => {
                                                             <div className="font-bold text-slate-800 text-sm">{customer?.name || 'مشتری گذری'}</div>
                                                         </td>
                                                         <td className="p-4 text-xs text-slate-600">{formatJalaliDate(invoice.date)}</td>
-                                                        <td className="p-4 text-xs font-bold text-blue-600">{invoice.quantity}</td>
+                                                        <td className="p-4 text-xs font-bold text-blue-600">{invoice.units} {selectedCompany?.unitName}</td>
                                                         <td className="p-4 text-sm font-black text-slate-900">{formatCurrency(invoice.totalAmount, storeSettings, 'AFN')}</td>
                                                         <td className="p-4">
                                                             <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${invoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
@@ -1286,10 +1357,10 @@ const CompanyManagement: React.FC = () => {
                                             .map(log => (
                                                 <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
                                                     <td className="p-4 text-xs text-slate-600">{formatJalaliDate(log.date)}</td>
-                                                    <td className="p-4 text-sm font-bold text-blue-600">{log.totalProduced}</td>
-                                                    <td className="p-4 text-sm font-bold text-red-600">{log.wasteCount}</td>
-                                                    <td className="p-4 text-sm font-black text-slate-900">{log.totalProduced - log.wasteCount}</td>
-                                                    <td className="p-4 text-xs text-slate-500">{log.notes || '---'}</td>
+                                                    <td className="p-4 text-sm font-bold text-blue-600">{log.producedUnits}</td>
+                                                    <td className="p-4 text-sm font-bold text-red-600">{log.spoilageUnits}</td>
+                                                    <td className="p-4 text-sm font-black text-slate-900">{log.producedUnits - log.spoilageUnits}</td>
+                                                    <td className="p-4 text-xs text-slate-500">{log.description || '---'}</td>
                                                     <td className="p-4">
                                                         <div className="flex gap-2">
                                                             <button 
@@ -1531,19 +1602,36 @@ const CompanyManagement: React.FC = () => {
                                 <input name="address" required defaultValue={editingCustomer?.address} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">شماره میتر</label>
-                                    <input name="meterNumber" required defaultValue={editingCustomer?.meterNumber} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                                </div>
+                                {selectedCompany?.type === CompanyType.WATER ? (
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">شماره میتر</label>
+                                        <input name="meterNumber" required defaultValue={editingCustomer?.meterNumber} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">نوع تراز (باقی سابق)</label>
+                                        <select name="initialBalanceType" required defaultValue={editingCustomer?.initialBalanceType || 'we_request'} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500">
+                                            <option value="we_request">ما طلبکاریم (بدهی مشتری)</option>
+                                            <option value="they_request">آن‌ها طلبکارند (طلب مشتری)</option>
+                                        </select>
+                                    </div>
+                                )}
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">شماره تماس</label>
                                     <input name="phone" required defaultValue={editingCustomer?.phone} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">قراءت اولیه میتر</label>
-                                <input name="initialReading" type="number" required defaultValue={editingCustomer?.initialReading} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                            </div>
+                            {selectedCompany?.type === CompanyType.WATER ? (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">قراءت اولیه میتر</label>
+                                    <input name="initialReading" type="number" required defaultValue={editingCustomer?.initialReading} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">باقی سابق (افغانی)</label>
+                                    <input name="initialBalance" type="number" required defaultValue={editingCustomer?.initialBalance || 0} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" />
+                                </div>
+                            )}
                             <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
                                 {editingCustomer ? 'بروزرسانی اطلاعات' : 'ثبت مشتری'}
                             </button>
@@ -1594,7 +1682,7 @@ const CompanyManagement: React.FC = () => {
                                         <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-blue-700">قیمت فی واحد:</span>
-                                                <span className="font-bold text-blue-800">{formatCurrency(selectedCompany.unitPrice || 0, storeSettings, 'AFN')}</span>
+                                                <span className="font-bold text-blue-800">{formatCurrency(selectedCompany?.unitPrice || 0, storeSettings, 'AFN')}</span>
                                             </div>
                                         </div>
                                         <div>
@@ -2435,6 +2523,15 @@ const CompanyManagement: React.FC = () => {
                                 />
                             </div>
                         </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">نام واحد (اختیاری - مثلاً متر مکعب، قالب، بوتل)</label>
+                            <input 
+                                name="unitName" 
+                                defaultValue={editingCompany?.unitName}
+                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                placeholder="مثلاً: قالب یخ"
+                            />
+                        </div>
                         {amountInWords && <p className="text-xs text-blue-600 font-bold">{amountInWords} افغانی</p>}
 
                         <div className="pt-2 border-t border-slate-100">
@@ -2602,6 +2699,138 @@ const CompanyManagement: React.FC = () => {
                                 )}
                             </div>
                         </div>
+                    </Modal>
+                )}
+
+                {isInvoiceModalOpen && (
+                    <Modal 
+                        title={editingInvoice ? 'ویرایش فاکتور' : 'ثبت فاکتور جدید'} 
+                        onClose={() => setIsInvoiceModalOpen(false)}
+                    >
+                        <form onSubmit={handleAddInvoice} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">مشتری</label>
+                                <select 
+                                    name="customerId" 
+                                    required 
+                                    defaultValue={editingInvoice?.customerId || selectedCustomerIdForInvoice || ''}
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">انتخاب مشتری...</option>
+                                    {managedCompanyCustomers
+                                        .filter(c => c.companyId === selectedCompanyId)
+                                        .map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ</label>
+                                    <JalaliDateInput value={invoiceDate} onChange={setInvoiceDate} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">وضعیت پرداخت</label>
+                                    <select 
+                                        name="status" 
+                                        required 
+                                        defaultValue={editingInvoice?.status || 'paid'}
+                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="paid">نقد</option>
+                                        <option value="unpaid">قرض</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">{selectedCompany?.unitName || 'تعداد/مقدار'}</label>
+                                    <input 
+                                        name="units" 
+                                        type="number" 
+                                        required 
+                                        value={invoiceUnits}
+                                        onChange={(e) => setInvoiceUnits(Number(e.target.value))}
+                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">قیمت فی واحد</label>
+                                    <input 
+                                        name="pricePerUnit" 
+                                        type="number" 
+                                        required 
+                                        value={invoicePricePerUnit}
+                                        onChange={(e) => setInvoicePricePerUnit(Number(e.target.value))}
+                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                    />
+                                </div>
+                            </div>
+                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
+                                <span className="text-sm text-blue-700 font-bold">مبلغ کل فاکتور:</span>
+                                <span className="text-xl font-black text-blue-800">{formatCurrency(invoiceUnits * invoicePricePerUnit, storeSettings, 'AFN')}</span>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">توضیحات</label>
+                                <textarea 
+                                    name="description" 
+                                    defaultValue={editingInvoice?.description}
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 h-20" 
+                                    placeholder="توضیحات اختیاری..."
+                                />
+                            </div>
+                            <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
+                                {editingInvoice ? 'بروزرسانی فاکتور' : 'ثبت فاکتور'}
+                            </button>
+                        </form>
+                    </Modal>
+                )}
+
+                {isProductionModalOpen && (
+                    <Modal 
+                        title={editingProductionLog ? 'ویرایش رکورد تولید' : 'ثبت تولید جدید'} 
+                        onClose={() => setIsProductionModalOpen(false)}
+                    >
+                        <form onSubmit={handleAddProductionLog} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ</label>
+                                <JalaliDateInput value={productionDate} onChange={setProductionDate} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">تعداد تولید شده</label>
+                                    <input 
+                                        name="producedUnits" 
+                                        type="number" 
+                                        required 
+                                        defaultValue={editingProductionLog?.producedUnits}
+                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">ضایعات/بازگشتی</label>
+                                    <input 
+                                        name="spoilageUnits" 
+                                        type="number" 
+                                        required 
+                                        defaultValue={editingProductionLog?.spoilageUnits || 0}
+                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">توضیحات</label>
+                                <textarea 
+                                    name="description" 
+                                    defaultValue={editingProductionLog?.description}
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 h-20" 
+                                    placeholder="توضیحات اختیاری..."
+                                />
+                            </div>
+                            <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
+                                {editingProductionLog ? 'بروزرسانی رکورد' : 'ثبت رکورد تولید'}
+                            </button>
+                        </form>
                     </Modal>
                 )}
         </div>

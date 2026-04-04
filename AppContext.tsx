@@ -8,6 +8,7 @@ import type {
     Order, OrderStatus, OrderPayment,
     ManagedCompany, CompanyLedgerEntry, LedgerEntryType,
     ManagedCompanyCustomer, CustomerBillingRecord,
+    ManagedCompanyInvoice, ManagedCompanyProductionLog,
     OwnerTransaction, OwnerTransactionType, OwnerExpenseCategory,
     CompanyEmployee, SalaryMonthRecord, SalaryPayment
 } from './types';

@@ -321,6 +321,7 @@ export interface ManagedCompany {
     createdAt: string;
     establishmentCost?: number;
     unitPrice?: number; // Price per unit of water/ice/etc
+    unitName?: string; // NEW: Custom unit name (e.g., "cubic meter", "ice cube")
     slotNumber: number; // 1-20
     type: CompanyType;
     shareholders: Shareholder[];
@@ -336,6 +337,7 @@ export interface ManagedCompanyCustomer {
     phone: string;
     initialReading?: number;
     initialBalance?: number;
+    initialBalanceType?: 'we_request' | 'they_request';
     customerType: 'metered' | 'invoiced';
     createdAt: string;
 }
@@ -386,6 +388,7 @@ export interface ManagedCompanyInvoice {
     returnedUnits?: number; // For Reference/Return
     returnAmount?: number;
     date: string;
+    status: 'paid' | 'unpaid';
     description?: string;
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type { Product, ActivityLog, InvoiceItem, StoreSettings } from '../types';
 import { useAppContext } from '../AppContext';
 import { POSIcon, InventoryIcon, PurchaseIcon, WarningIcon, BellIcon, UserGroupIcon, EyeIcon, XIcon, ChevronDownIcon, CheckIcon, BuildingIcon } from '../components/icons';
@@ -409,7 +409,7 @@ const Dashboard: React.FC = () => {
       <div className="bg-white/60 backdrop-blur-xl p-5 md:p-8 rounded-3xl shadow-xl border border-gray-200/60 mb-10">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
               <h3 className="font-black text-slate-800 text-xl md:text-2xl">آخرین فعالیت‌های فروشگاه</h3>
-              <DateRangeFilter onFilterChange={(start, end) => setDateRange({ start, end })} />
+              <DateRangeFilter onFilterChange={useCallback((start, end) => setDateRange({ start, end }), [])} />
           </div>
           
           <div className="space-y-4 max-h-[500px] overflow-y-auto no-scrollbar">
