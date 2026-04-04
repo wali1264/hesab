@@ -739,15 +739,24 @@ const CompanyManagement: React.FC = () => {
         return { expenses, receivables, payables, netWorth };
     }, [ownerTransactions, myFinancialShare]);
 
-    if (selectedCompanyId && selectedCompany) {
-        const expenses = companyEntries.filter(e => e.type === 'expense').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const waterRevenue = companyEntries.filter(e => e.type === 'water_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const equipmentRevenue = companyEntries.filter(e => e.type === 'equipment_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const { 
+        expenses, waterRevenue, equipmentRevenue, totalExpenses, totalWater, totalEquipment 
+    } = useMemo(() => {
+        if (!selectedCompanyId || !selectedCompany) {
+            return { expenses: [], waterRevenue: [], equipmentRevenue: [], totalExpenses: 0, totalWater: 0, totalEquipment: 0 };
+        }
+        const expenses = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'expense').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const waterRevenue = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'water_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const equipmentRevenue = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'equipment_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
         const totalWater = waterRevenue.reduce((sum, e) => sum + e.amount, 0);
         const totalEquipment = equipmentRevenue.reduce((sum, e) => sum + e.amount, 0);
+        
+        return { expenses, waterRevenue, equipmentRevenue, totalExpenses, totalWater, totalEquipment };
+    }, [selectedCompanyId, selectedCompany, managedCompanyLedger]);
 
+    if (selectedCompanyId && selectedCompany) {
         return (
             <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -2708,22 +2717,27 @@ const CompanyManagement: React.FC = () => {
                         onClose={() => setIsInvoiceModalOpen(false)}
                     >
                         <form onSubmit={handleAddInvoice} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">مشتری</label>
-                                <select 
-                                    name="customerId" 
-                                    required 
-                                    defaultValue={editingInvoice?.customerId || selectedCustomerIdForInvoice || ''}
-                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="">انتخاب مشتری...</option>
-                                    {managedCompanyCustomers
-                                        .filter(c => c.companyId === selectedCompanyId)
-                                        .map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                </select>
-                            </div>
+                            {!selectedCustomerIdForInvoice && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">مشتری</label>
+                                    <select 
+                                        name="customerId" 
+                                        required 
+                                        defaultValue={editingInvoice?.customerId || selectedCustomerIdForInvoice || ''}
+                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="">انتخاب مشتری...</option>
+                                        {managedCompanyCustomers
+                                            .filter(c => c.companyId === selectedCompanyId)
+                                            .map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                    </select>
+                                </div>
+                            )}
+                            {selectedCustomerIdForInvoice && (
+                                <input type="hidden" name="customerId" value={selectedCustomerIdForInvoice} />
+                            )}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ</label>
@@ -2734,7 +2748,7 @@ const CompanyManagement: React.FC = () => {
                                     <select 
                                         name="status" 
                                         required 
-                                        defaultValue={editingInvoice?.status || 'paid'}
+                                        defaultValue={editingInvoice?.status || 'unpaid'}
                                         className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="paid">نقد</option>
