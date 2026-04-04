@@ -1,7 +1,7 @@
 import type { SalesMemoImage, Product, SaleInvoice, PurchaseInvoice, InTransitInvoice, Customer, Supplier, Employee, Expense, Service, StoreSettings, CustomerTransaction, SupplierTransaction, PayrollTransaction, ActivityLog, User, Role, DepositHolder, DepositTransaction } from '../types';
 
 const DB_NAME = 'KetabestanLocalDB';
-const DB_VERSION = 14; // Increment for salary management
+const DB_VERSION = 15; // Increment for invoices and production logs
 
 const STORES = {
   SALES_MEMOS: 'salesMemos',
@@ -26,6 +26,8 @@ const STORES = {
   MANAGED_COMPANIES: 'managed_companies',
   MANAGED_COMPANY_LEDGER: 'managed_company_ledger',
   MANAGED_COMPANY_CUSTOMERS: 'managed_company_customers',
+  MANAGED_COMPANY_INVOICES: 'managed_company_invoices',
+  MANAGED_COMPANY_PRODUCTION_LOGS: 'managed_company_production_logs',
   CUSTOMER_BILLING_RECORDS: 'customer_billing_records',
   OWNER_TRANSACTIONS: 'owner_transactions',
   OWNER_EXPENSE_CATEGORIES: 'owner_expense_categories',

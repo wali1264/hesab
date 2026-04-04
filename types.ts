@@ -301,6 +301,18 @@ export interface Company {
     initialProfitDescription?: string;
 }
 
+export enum CompanyType {
+    WATER = 'water',
+    ICE = 'ice',
+    BOTTLED_WATER = 'bottled_water'
+}
+
+export interface Shareholder {
+    name: string;
+    percentage: number;
+    isCurrentUser: boolean;
+}
+
 export interface ManagedCompany {
     id: string;
     name: string;
@@ -308,8 +320,10 @@ export interface ManagedCompany {
     phone: string;
     createdAt: string;
     establishmentCost?: number;
-    unitPrice?: number; // Price per unit of water
+    unitPrice?: number; // Price per unit of water/ice/etc
     slotNumber: number; // 1-20
+    type: CompanyType;
+    shareholders: Shareholder[];
 }
 
 export interface ManagedCompanyCustomer {
@@ -318,9 +332,11 @@ export interface ManagedCompanyCustomer {
     name: string;
     fatherName: string;
     address: string; // House/Shop Number
-    meterNumber: string;
+    meterNumber?: string;
     phone: string;
-    initialReading: number;
+    initialReading?: number;
+    initialBalance?: number;
+    customerType: 'metered' | 'invoiced';
     createdAt: string;
 }
 
@@ -358,7 +374,29 @@ export interface OwnerTransaction {
     category?: string; // e.g., 'Home', 'Travel', 'Charity'
 }
 
-export type LedgerEntryType = 'expense' | 'water_revenue' | 'equipment_revenue';
+export type LedgerEntryType = 'expense' | 'water_revenue' | 'equipment_revenue' | 'revenue';
+
+export interface ManagedCompanyInvoice {
+    id: string;
+    companyId: string;
+    customerId: string;
+    units: number;
+    pricePerUnit: number;
+    totalAmount: number;
+    returnedUnits?: number; // For Reference/Return
+    returnAmount?: number;
+    date: string;
+    description?: string;
+}
+
+export interface ManagedCompanyProductionLog {
+    id: string;
+    companyId: string;
+    date: string;
+    producedUnits: number;
+    spoilageUnits: number;
+    description?: string;
+}
 
 export interface CompanyLedgerEntry {
     id: string;
@@ -488,6 +526,8 @@ export interface AppState {
     managedCompanies: ManagedCompany[];
     managedCompanyLedger: CompanyLedgerEntry[];
     managedCompanyCustomers: ManagedCompanyCustomer[];
+    managedCompanyInvoices: ManagedCompanyInvoice[];
+    managedCompanyProductionLogs: ManagedCompanyProductionLog[];
     customerBillingRecords: CustomerBillingRecord[];
     ownerTransactions: OwnerTransaction[];
     ownerExpenseCategories: OwnerExpenseCategory[];

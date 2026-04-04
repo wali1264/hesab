@@ -154,6 +154,12 @@ interface AppContextType extends AppState {
     addCustomerBillingRecord: (record: Omit<CustomerBillingRecord, 'id'>) => Promise<{ success: boolean; message: string }>;
     updateCustomerBillingRecord: (record: CustomerBillingRecord) => Promise<{ success: boolean; message: string }>;
     deleteCustomerBillingRecord: (id: string) => Promise<{ success: boolean; message: string }>;
+    addManagedCompanyInvoice: (invoice: Omit<ManagedCompanyInvoice, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateManagedCompanyInvoice: (invoice: ManagedCompanyInvoice) => Promise<{ success: boolean; message: string }>;
+    deleteManagedCompanyInvoice: (id: string) => Promise<{ success: boolean; message: string }>;
+    addManagedCompanyProductionLog: (log: Omit<ManagedCompanyProductionLog, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateManagedCompanyProductionLog: (log: ManagedCompanyProductionLog) => Promise<{ success: boolean; message: string }>;
+    deleteManagedCompanyProductionLog: (id: string) => Promise<{ success: boolean; message: string }>;
 
     // Owner Transactions
     addOwnerTransaction: (tx: Omit<OwnerTransaction, 'id'>) => Promise<{ success: boolean; message: string }>;
@@ -217,6 +223,8 @@ const getDefaultState = (): AppState => {
         managedCompanies: [],
         managedCompanyLedger: [],
         managedCompanyCustomers: [],
+        managedCompanyInvoices: [],
+        managedCompanyProductionLogs: [],
         customerBillingRecords: [],
         ownerTransactions: [],
         ownerExpenseCategories: [],
@@ -256,7 +264,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const fetchData = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const [settings, users, roles, products, services, entities, transactions, invoices, activity, wastageRecords, orders, managedCompanies, managedLedger, managedCustomers, billingRecords, ownerTransactions, ownerExpenseCategories, companyEmployees, salaryRecords, salaryPayments] = await Promise.all([
+            const [settings, users, roles, products, services, entities, transactions, invoices, activity, wastageRecords, orders, managedCompanies, managedLedger, managedCustomers, managedInvoices, managedProductionLogs, billingRecords, ownerTransactions, ownerExpenseCategories, companyEmployees, salaryRecords, salaryPayments] = await Promise.all([
                 api.getSettings().catch(() => ({})),
                 api.getUsers().catch(() => []),
                 api.getRoles().catch(() => []),
@@ -271,6 +279,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 api.getManagedCompanies().catch(() => []),
                 api.getManagedCompanyLedger().catch(() => []),
                 api.getManagedCompanyCustomers().catch(() => []),
+                api.getManagedCompanyInvoices().catch(() => []),
+                api.getManagedCompanyProductionLogs().catch(() => []),
                 api.getCustomerBillingRecords().catch(() => []),
                 api.getOwnerTransactions().catch(() => []),
                 api.getOwnerExpenseCategories().catch(() => []),
@@ -416,6 +426,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     managedCompanies: managedCompanies,
                     managedCompanyLedger: managedLedger,
                     managedCompanyCustomers: managedCustomers,
+                    managedCompanyInvoices: managedInvoices,
+                    managedCompanyProductionLogs: managedProductionLogs,
                     customerBillingRecords: billingRecords,
                     ownerTransactions: ownerTransactions,
                     ownerExpenseCategories: ownerExpenseCategories,
@@ -2729,6 +2741,62 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }));
         return { success: true, message: 'قبض حذف شد.' };
     };
+    
+    const addManagedCompanyInvoice = async (invoiceData: Omit<ManagedCompanyInvoice, 'id'>) => {
+        const newInvoice: ManagedCompanyInvoice = {
+            ...invoiceData,
+            id: crypto.randomUUID()
+        };
+        await api.addManagedCompanyInvoice(newInvoice);
+        setState(prev => ({ ...prev, managedCompanyInvoices: [...prev.managedCompanyInvoices, newInvoice] }));
+        return { success: true, message: 'فاکتور با موفقیت ثبت شد.' };
+    };
+
+    const updateManagedCompanyInvoice = async (invoice: ManagedCompanyInvoice) => {
+        await api.updateManagedCompanyInvoice(invoice);
+        setState(prev => ({
+            ...prev,
+            managedCompanyInvoices: prev.managedCompanyInvoices.map(i => i.id === invoice.id ? invoice : i)
+        }));
+        return { success: true, message: 'فاکتور بروزرسانی شد.' };
+    };
+
+    const deleteManagedCompanyInvoice = async (id: string) => {
+        await api.deleteManagedCompanyInvoice(id);
+        setState(prev => ({
+            ...prev,
+            managedCompanyInvoices: prev.managedCompanyInvoices.filter(i => i.id !== id)
+        }));
+        return { success: true, message: 'فاکتور حذف شد.' };
+    };
+
+    const addManagedCompanyProductionLog = async (logData: Omit<ManagedCompanyProductionLog, 'id'>) => {
+        const newLog: ManagedCompanyProductionLog = {
+            ...logData,
+            id: crypto.randomUUID()
+        };
+        await api.addManagedCompanyProductionLog(newLog);
+        setState(prev => ({ ...prev, managedCompanyProductionLogs: [...prev.managedCompanyProductionLogs, newLog] }));
+        return { success: true, message: 'گزارش تولید با موفقیت ثبت شد.' };
+    };
+
+    const updateManagedCompanyProductionLog = async (log: ManagedCompanyProductionLog) => {
+        await api.updateManagedCompanyProductionLog(log);
+        setState(prev => ({
+            ...prev,
+            managedCompanyProductionLogs: prev.managedCompanyProductionLogs.map(l => l.id === log.id ? log : l)
+        }));
+        return { success: true, message: 'گزارش تولید بروزرسانی شد.' };
+    };
+
+    const deleteManagedCompanyProductionLog = async (id: string) => {
+        await api.deleteManagedCompanyProductionLog(id);
+        setState(prev => ({
+            ...prev,
+            managedCompanyProductionLogs: prev.managedCompanyProductionLogs.filter(l => l.id !== id)
+        }));
+        return { success: true, message: 'گزارش تولید حذف شد.' };
+    };
 
     const addOwnerTransaction = async (txData: Omit<OwnerTransaction, 'id'>) => {
         const newTx: OwnerTransaction = {
@@ -2906,6 +2974,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addManagedCompany, updateManagedCompany, deleteManagedCompany, addLedgerEntry, updateLedgerEntry, deleteLedgerEntry,
         addManagedCompanyCustomer, updateManagedCompanyCustomer, deleteManagedCompanyCustomer,
         addCustomerBillingRecord, updateCustomerBillingRecord, deleteCustomerBillingRecord,
+        addManagedCompanyInvoice, updateManagedCompanyInvoice, deleteManagedCompanyInvoice,
+        addManagedCompanyProductionLog, updateManagedCompanyProductionLog, deleteManagedCompanyProductionLog,
         addOwnerTransaction, updateOwnerTransaction, deleteOwnerTransaction,
         addOwnerExpenseCategory, updateOwnerExpenseCategory, deleteOwnerExpenseCategory,
         addCompanyEmployee, updateCompanyEmployee, deleteCompanyEmployee,

@@ -6,7 +6,7 @@ import type {
     CustomerTransaction, SupplierTransaction, PayrollTransaction, AppState, Service,
     DepositHolder, DepositTransaction, Company, Partner, ManagedCompany, CompanyLedgerEntry, 
     ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerExpenseCategory,
-    CompanyEmployee, SalaryMonthRecord, SalaryPayment
+    CompanyEmployee, SalaryMonthRecord, SalaryPayment, ManagedCompanyInvoice, ManagedCompanyProductionLog
 } from '../types';
 
 export interface AdminProfile {
@@ -332,6 +332,18 @@ export const api = {
     addSalaryPayment: async (payment: SalaryPayment) => db.putItem(db.STORES.SALARY_PAYMENTS, payment),
     updateSalaryPayment: async (payment: SalaryPayment) => db.putItem(db.STORES.SALARY_PAYMENTS, payment),
     deleteSalaryPayment: async (id: string) => db.deleteItem(db.STORES.SALARY_PAYMENTS, id),
+
+    // --- Managed Company Invoices ---
+    getManagedCompanyInvoices: async () => db.getAll<ManagedCompanyInvoice>(db.STORES.MANAGED_COMPANY_INVOICES),
+    addManagedCompanyInvoice: async (invoice: ManagedCompanyInvoice) => db.putItem(db.STORES.MANAGED_COMPANY_INVOICES, invoice),
+    updateManagedCompanyInvoice: async (invoice: ManagedCompanyInvoice) => db.putItem(db.STORES.MANAGED_COMPANY_INVOICES, invoice),
+    deleteManagedCompanyInvoice: async (id: string) => db.deleteItem(db.STORES.MANAGED_COMPANY_INVOICES, id),
+
+    // --- Managed Company Production Logs ---
+    getManagedCompanyProductionLogs: async () => db.getAll<ManagedCompanyProductionLog>(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS),
+    addManagedCompanyProductionLog: async (log: ManagedCompanyProductionLog) => db.putItem(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS, log),
+    updateManagedCompanyProductionLog: async (log: ManagedCompanyProductionLog) => db.putItem(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS, log),
+    deleteManagedCompanyProductionLog: async (id: string) => db.deleteItem(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS, id),
 
     // --- Orders ---
     getOrders: async () => {
@@ -670,6 +682,8 @@ export const api = {
         if (data.companyEmployees) for (const e of data.companyEmployees) await db.putItem(db.STORES.COMPANY_EMPLOYEES, e);
         if (data.salaryRecords) for (const r of data.salaryRecords) await db.putItem(db.STORES.SALARY_RECORDS, r);
         if (data.salaryPayments) for (const p of data.salaryPayments) await db.putItem(db.STORES.SALARY_PAYMENTS, p);
+        if (data.managedCompanyInvoices) for (const i of data.managedCompanyInvoices) await db.putItem(db.STORES.MANAGED_COMPANY_INVOICES, i);
+        if (data.managedCompanyProductionLogs) for (const l of data.managedCompanyProductionLogs) await db.putItem(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS, l);
     }
 };
 

@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
-import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType } from '../types';
+import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType, Shareholder } from '../types';
+import { CompanyType } from '../types';
 import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon } from '../components/icons';
 import { formatCurrency, numberToPersianWords } from '../utils/formatters';
 import { formatJalaliDate } from '../utils/jalali';
@@ -25,35 +26,41 @@ const Modal: React.FC<{ title: string, onClose: () => void, children: React.Reac
 const CompanyManagement: React.FC = () => {
     const { 
         managedCompanies, managedCompanyLedger, managedCompanyCustomers, customerBillingRecords,
+        managedCompanyInvoices, managedCompanyProductionLogs,
         ownerTransactions, ownerExpenseCategories, activities,
         addManagedCompany, updateManagedCompany, deleteManagedCompany, 
         addLedgerEntry, updateLedgerEntry, deleteLedgerEntry,
         addManagedCompanyCustomer, updateManagedCompanyCustomer, deleteManagedCompanyCustomer,
         addCustomerBillingRecord, updateCustomerBillingRecord, deleteCustomerBillingRecord,
+        addManagedCompanyInvoice, updateManagedCompanyInvoice, deleteManagedCompanyInvoice,
+        addManagedCompanyProductionLog, updateManagedCompanyProductionLog, deleteManagedCompanyProductionLog,
         addOwnerTransaction, updateOwnerTransaction, deleteOwnerTransaction,
         addOwnerExpenseCategory, updateOwnerExpenseCategory, deleteOwnerExpenseCategory,
         showToast, storeSettings, hasPermission, hasCompanyAccess, currentUser, logActivity
     } = useAppContext();
     
     const [activeTab, setActiveTab] = useState<'companies' | 'dashboard' | 'activities'>('companies');
-    const [companyDetailTab, setCompanyDetailTab] = useState<'ledger' | 'customers' | 'collections'>('ledger');
+    const [companyDetailTab, setCompanyDetailTab] = useState<'ledger' | 'customers' | 'collections' | 'invoices' | 'production'>('ledger');
     const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
     const selectedCompany = useMemo(() => managedCompanies.find(c => c.id === selectedCompanyId), [managedCompanies, selectedCompanyId]);
     const [customerSearchQuery, setCustomerSearchQuery] = useState('');
     const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
     const [historySearchQuery, setHistorySearchQuery] = useState('');
+    const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
+    const [productionSearchQuery, setProductionSearchQuery] = useState('');
     
     // Pagination for financial columns
     const [visibleExpensesCount, setVisibleExpensesCount] = useState(5);
     const [visibleWaterRevenueCount, setVisibleWaterRevenueCount] = useState(5);
     const [visibleEquipmentRevenueCount, setVisibleEquipmentRevenueCount] = useState(5);
+    const [visibleRevenueCount, setVisibleRevenueCount] = useState(5); // For non-water companies
     
     // Activity Filters
     const [activityCompanyFilter, setActivityCompanyFilter] = useState<string>('all');
     const [activityEmployeeFilter, setActivityEmployeeFilter] = useState<string>('all');
     const [activityDateFilter, setActivityDateFilter] = useState<string>('all'); // all, today, yesterday, custom
     const [activityCustomDate, setActivityCustomDate] = useState(new Date().toISOString().split('T')[0]);
-    const [activitySubTab, setActivitySubTab] = useState<'all' | 'collections' | 'readings'>('all');
+    const [activitySubTab, setActivitySubTab] = useState<'all' | 'collections' | 'readings' | 'invoices' | 'production'>('all');
 
     // Handle default tab selection based on permissions
     useEffect(() => {
@@ -70,10 +77,17 @@ const CompanyManagement: React.FC = () => {
                     setCompanyDetailTab('collections');
                 }
             }
+            
+            // Default tab for non-water companies
+            if (selectedCompany.type !== CompanyType.WATER && companyDetailTab === 'collections') {
+                setCompanyDetailTab('invoices');
+            }
         }
     }, [selectedCompanyId, selectedCompany, hasPermission, hasCompanyAccess]);
     const [isAddCompanyModalOpen, setIsAddCompanyModalOpen] = useState(false);
     const [editingCompany, setEditingCompany] = useState<ManagedCompany | null>(null);
+    const [companyType, setCompanyType] = useState<CompanyType>(CompanyType.WATER);
+    const [shareholders, setShareholders] = useState<Shareholder[]>([]);
     const [isAddLedgerModalOpen, setIsAddLedgerModalOpen] = useState(false);
     const [editingLedgerEntry, setEditingLedgerEntry] = useState<CompanyLedgerEntry | null>(null);
     const [ledgerEntryType, setLedgerEntryType] = useState<LedgerEntryType>('expense');
@@ -88,6 +102,14 @@ const CompanyManagement: React.FC = () => {
     const [editingBillingRecord, setEditingBillingRecord] = useState<CustomerBillingRecord | null>(null);
     const [billingDate, setBillingDate] = useState(new Date().toISOString().split('T')[0]);
 
+    const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+    const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
+    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+
+    const [isProductionModalOpen, setIsProductionModalOpen] = useState(false);
+    const [editingProductionLog, setEditingProductionLog] = useState<any | null>(null);
+    const [productionDate, setProductionDate] = useState(new Date().toISOString().split('T')[0]);
+
     // Owner Dashboard States
     const [isOwnerTxModalOpen, setIsOwnerTxModalOpen] = useState(false);
     const [editingOwnerTx, setEditingOwnerTx] = useState<OwnerTransaction | null>(null);
@@ -99,6 +121,18 @@ const CompanyManagement: React.FC = () => {
     const [editingCategory, setEditingCategory] = useState<{ id: string, name: string } | null>(null);
     const [amountInWords, setAmountInWords] = useState('');
     
+    useEffect(() => {
+        if (isAddCompanyModalOpen) {
+            if (editingCompany) {
+                setCompanyType(editingCompany.type || CompanyType.WATER);
+                setShareholders(editingCompany.shareholders || []);
+            } else {
+                setCompanyType(CompanyType.WATER);
+                setShareholders([{ name: currentUser?.username || 'مدیر', percentage: 100, isCurrentUser: true }]);
+            }
+        }
+    }, [isAddCompanyModalOpen, editingCompany, currentUser]);
+
     if (!hasPermission('page:company_management')) {
         return (
             <div className="flex flex-col items-center justify-center h-[70vh] text-slate-500">
@@ -278,23 +312,46 @@ const CompanyManagement: React.FC = () => {
         }
     };
 
+    const addShareholder = () => {
+        setShareholders([...shareholders, { name: '', percentage: 0, isCurrentUser: false }]);
+    };
+
+    const removeShareholder = (index: number) => {
+        setShareholders(shareholders.filter((_, i) => i !== index));
+    };
+
+    const updateShareholder = (index: number, updates: Partial<Shareholder>) => {
+        const newShareholders = [...shareholders];
+        newShareholders[index] = { ...newShareholders[index], ...updates };
+        setShareholders(newShareholders);
+    };
+
     const handleAddCompany = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
+        
+        // Validate total percentage
+        const totalPercentage = shareholders.reduce((sum, s) => sum + s.percentage, 0);
+        if (totalPercentage !== 100) {
+            showToast("مجموع درصد سهام باید دقیقاً ۱۰۰ باشد.");
+            return;
+        }
+
         const companyData = {
             name: formData.get('name') as string,
             managerName: formData.get('managerName') as string,
             phone: formData.get('phone') as string,
             establishmentCost: Number(formData.get('establishmentCost')) || 0,
             unitPrice: Number(formData.get('unitPrice')) || 0,
+            type: companyType,
+            shareholders: shareholders
         };
 
         if (editingCompany) {
             await updateManagedCompany({ ...editingCompany, ...companyData });
             await logActivity('company', `ویرایش اطلاعات شرکت: ${companyData.name}`, editingCompany.id, 'company', editingCompany.id);
         } else {
-            const result = await addManagedCompany(companyData);
-            // @ts-ignore - result might contain the new id depending on implementation
+            await addManagedCompany(companyData);
             await logActivity('company', `ثبت شرکت جدید: ${companyData.name}`, undefined, 'company');
         }
         setIsAddCompanyModalOpen(false);
@@ -537,6 +594,55 @@ const CompanyManagement: React.FC = () => {
         setSelectedCustomerForBilling(null);
     };
 
+    const handleAddInvoice = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!selectedCompanyId) return;
+        const formData = new FormData(e.currentTarget);
+        const invoiceData = {
+            companyId: selectedCompanyId,
+            customerId: formData.get('customerId') as string,
+            date: invoiceDate,
+            quantity: Number(formData.get('quantity')),
+            unitPrice: Number(formData.get('unitPrice')),
+            totalAmount: Number(formData.get('quantity')) * Number(formData.get('unitPrice')),
+            status: formData.get('status') as 'paid' | 'unpaid',
+            notes: formData.get('notes') as string,
+        };
+
+        if (editingInvoice) {
+            await updateManagedCompanyInvoice({ ...editingInvoice, ...invoiceData });
+            await logActivity('company', `ویرایش فاکتور: ${invoiceData.totalAmount} افغانی`, editingInvoice.id, 'company', selectedCompanyId);
+        } else {
+            await addManagedCompanyInvoice(invoiceData);
+            await logActivity('company', `ثبت فاکتور جدید: ${invoiceData.totalAmount} افغانی`, undefined, 'company', selectedCompanyId);
+        }
+        setIsInvoiceModalOpen(false);
+        setEditingInvoice(null);
+    };
+
+    const handleAddProductionLog = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!selectedCompanyId) return;
+        const formData = new FormData(e.currentTarget);
+        const logData = {
+            companyId: selectedCompanyId,
+            date: productionDate,
+            totalProduced: Number(formData.get('totalProduced')),
+            wasteCount: Number(formData.get('wasteCount')),
+            notes: formData.get('notes') as string,
+        };
+
+        if (editingProductionLog) {
+            await updateManagedCompanyProductionLog({ ...editingProductionLog, ...logData });
+            await logActivity('company', `ویرایش رکورد تولید: ${logData.date}`, editingProductionLog.id, 'company', selectedCompanyId);
+        } else {
+            await addManagedCompanyProductionLog(logData);
+            await logActivity('company', `ثبت تولید جدید: ${logData.totalProduced} واحد`, undefined, 'company', selectedCompanyId);
+        }
+        setIsProductionModalOpen(false);
+        setEditingProductionLog(null);
+    };
+
     const handleOwnerTxSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
@@ -571,17 +677,31 @@ const CompanyManagement: React.FC = () => {
         setEditingCategory(null);
     };
 
-    const totalCompanyProfit = useMemo(() => {
-        return companyStats.reduce((sum, c) => sum + c.profit, 0);
+    const myFinancialShare = useMemo(() => {
+        return companyStats.reduce((acc, company) => {
+            // Find the current user's share percentage in this company
+            const myShare = company.shareholders?.find(s => s.isCurrentUser)?.percentage || 0;
+            
+            acc.totalProfitShare += (company.profit * myShare) / 100;
+            acc.totalCapitalShare += ((company.establishmentCost || 0) * myShare) / 100;
+            return acc;
+        }, { totalProfitShare: 0, totalCapitalShare: 0 });
     }, [companyStats]);
+
+    const totalCompanyProfit = useMemo(() => {
+        return myFinancialShare.totalProfitShare;
+    }, [myFinancialShare]);
 
     const ownerStats = useMemo(() => {
         const expenses = ownerTransactions.filter(t => t.type === 'personal_expense').reduce((sum, t) => sum + t.amount, 0);
         const receivables = ownerTransactions.filter(t => t.type === 'receivable').reduce((sum, t) => sum + t.amount, 0);
         const payables = ownerTransactions.filter(t => t.type === 'payable').reduce((sum, t) => sum + t.amount, 0);
-        const netWorth = totalCompanyProfit - expenses + receivables - payables;
+        
+        // Net Worth = User's share of profits + User's share of initial capital - personal expenses + receivables - payables
+        const netWorth = myFinancialShare.totalProfitShare + myFinancialShare.totalCapitalShare - expenses + receivables - payables;
+        
         return { expenses, receivables, payables, netWorth };
-    }, [ownerTransactions, totalCompanyProfit]);
+    }, [ownerTransactions, myFinancialShare]);
 
     if (selectedCompanyId && selectedCompany) {
         const expenses = companyEntries.filter(e => e.type === 'expense').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -607,11 +727,11 @@ const CompanyManagement: React.FC = () => {
                                 <BuildingIcon className="w-8 h-8 text-blue-600" />
                                 {selectedCompany.name}
                             </h1>
-                            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mt-2 w-fit">
+                            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mt-2 w-fit overflow-x-auto max-w-full">
                                 {hasPermission('company:view_ledger') && (
                                     <button 
                                         onClick={() => setCompanyDetailTab('ledger')}
-                                        className={`px-4 py-1.5 rounded-lg font-bold text-xs transition-all ${companyDetailTab === 'ledger' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        className={`px-4 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${companyDetailTab === 'ledger' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                                     >
                                         تراکنش‌های مالی
                                     </button>
@@ -619,18 +739,35 @@ const CompanyManagement: React.FC = () => {
                                 {hasPermission('company:view_customers') && (
                                     <button 
                                         onClick={() => setCompanyDetailTab('customers')}
-                                        className={`px-4 py-1.5 rounded-lg font-bold text-xs transition-all ${companyDetailTab === 'customers' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        className={`px-4 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${companyDetailTab === 'customers' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                                     >
                                         مدیریت مشتریان
                                     </button>
                                 )}
-                                {hasPermission('company:view_collections') && (
-                                    <button 
-                                        onClick={() => setCompanyDetailTab('collections')}
-                                        className={`px-4 py-1.5 rounded-lg font-bold text-xs transition-all ${companyDetailTab === 'collections' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        وصولی‌ها (بدهکاران)
-                                    </button>
+                                {selectedCompany.type === CompanyType.WATER ? (
+                                    hasPermission('company:view_collections') && (
+                                        <button 
+                                            onClick={() => setCompanyDetailTab('collections')}
+                                            className={`px-4 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${companyDetailTab === 'collections' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            وصولی‌ها (بدهکاران)
+                                        </button>
+                                    )
+                                ) : (
+                                    <>
+                                        <button 
+                                            onClick={() => setCompanyDetailTab('invoices')}
+                                            className={`px-4 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${companyDetailTab === 'invoices' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            فروشات و فاکتورها
+                                        </button>
+                                        <button 
+                                            onClick={() => setCompanyDetailTab('production')}
+                                            className={`px-4 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${companyDetailTab === 'production' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            تولیدات روزانه
+                                        </button>
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -647,19 +784,30 @@ const CompanyManagement: React.FC = () => {
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">مجموع طلبات</span>
                                     <span className="text-lg font-black text-red-600">
-                                        {formatCurrency(companyStats.find(s => s.id === selectedCompanyId)?.totalDebt || 0, storeSettings, 'AFN')}
+                                        {formatCurrency(
+                                            selectedCompany.type === CompanyType.WATER 
+                                                ? (companyStats.find(s => s.id === selectedCompanyId)?.totalDebt || 0)
+                                                : managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'unpaid').reduce((sum, inv) => sum + inv.totalAmount, 0),
+                                            storeSettings, 'AFN'
+                                        )}
                                     </span>
                                 </div>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">سود/ضرر نهایی</span>
-                                    <span className={`text-lg font-black ${(totalWater + totalEquipment - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                        {formatCurrency(totalWater + totalEquipment - totalExpenses, storeSettings, 'AFN')}
+                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (selectedCompany.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        {formatCurrency(
+                                            totalWater + totalEquipment + (selectedCompany.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses, 
+                                            storeSettings, 'AFN'
+                                        )}
                                     </span>
                                 </div>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">وضعیت بازگشت سرمایه</span>
-                                    <span className={`text-lg font-black ${(totalWater + totalEquipment - totalExpenses - (selectedCompany.establishmentCost || 0)) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                                        {formatCurrency(totalWater + totalEquipment - totalExpenses - (selectedCompany.establishmentCost || 0), storeSettings, 'AFN')}
+                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (selectedCompany.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses - (selectedCompany.establishmentCost || 0)) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                                        {formatCurrency(
+                                            totalWater + totalEquipment + (selectedCompany.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses - (selectedCompany.establishmentCost || 0), 
+                                            storeSettings, 'AFN'
+                                        )}
                                     </span>
                                 </div>
                             </>
@@ -668,7 +816,7 @@ const CompanyManagement: React.FC = () => {
                 </div>
 
                 {companyDetailTab === 'ledger' ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className={`grid grid-cols-1 ${selectedCompany.type === CompanyType.WATER ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6`}>
                         {/* Expenses Column */}
                         <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-gray-200/60 shadow-xl overflow-hidden flex flex-col h-[70vh]">
                             <div className="p-4 bg-red-50 border-b border-red-100 flex justify-between items-center">
@@ -720,107 +868,162 @@ const CompanyManagement: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Water Revenue Column */}
-                        <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-gray-200/60 shadow-xl overflow-hidden flex flex-col h-[70vh]">
-                            <div className="p-4 bg-blue-50 border-b border-blue-100 flex justify-between items-center">
-                                <h3 className="font-bold text-blue-700 flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                    عواید فروش آب
-                                </h3>
-                                {hasPermission('company:view_ledger') && (
-                                    <button 
-                                        onClick={() => { setLedgerEntryType('water_revenue'); setEditingLedgerEntry(null); setAmountInWords(''); setIsAddLedgerModalOpen(true); }}
-                                        className="p-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
-                                    >
-                                        <PlusIcon className="w-5 h-5" />
-                                    </button>
-                                )}
-                            </div>
-                            <div className="flex-grow overflow-y-auto p-2 space-y-2">
-                                {waterRevenue.slice(0, visibleWaterRevenueCount).map(entry => (
-                                    <div key={entry.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-                                        <div className="flex justify-between items-start">
-                                            <span className="font-bold text-slate-800">{formatCurrency(entry.amount, storeSettings, 'AFN')}</span>
-                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                {hasPermission('company:view_ledger') && (
-                                                    <>
-                                                        <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('water_revenue'); setLedgerDate(entry.date); setAmountInWords(numberToPersianWords(entry.amount)); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
-                                                        <button onClick={() => handleDeleteLedgerEntry(entry.id, entry.description, selectedCompanyId!)} className="p-1 text-red-600 hover:bg-red-50 rounded-md"><TrashIcon className="w-4 h-4" /></button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1">{entry.description}</p>
-                                        <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{formatJalaliDate(entry.date)}</div>
+                        {selectedCompany.type === CompanyType.WATER ? (
+                            <>
+                                {/* Water Revenue Column */}
+                                <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-gray-200/60 shadow-xl overflow-hidden flex flex-col h-[70vh]">
+                                    <div className="p-4 bg-blue-50 border-b border-blue-100 flex justify-between items-center">
+                                        <h3 className="font-bold text-blue-700 flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                            عواید فروش آب
+                                        </h3>
+                                        {hasPermission('company:view_ledger') && (
+                                            <button 
+                                                onClick={() => { setLedgerEntryType('water_revenue'); setEditingLedgerEntry(null); setAmountInWords(''); setIsAddLedgerModalOpen(true); }}
+                                                className="p-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
+                                            >
+                                                <PlusIcon className="w-5 h-5" />
+                                            </button>
+                                        )}
                                     </div>
-                                ))}
-                                {waterRevenue.length > visibleWaterRevenueCount && (
-                                    <button 
-                                        onClick={() => setVisibleWaterRevenueCount(prev => prev + 5)}
-                                        className="w-full py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-dashed border-blue-200"
-                                    >
-                                        بارگذاری موارد بیشتر...
-                                    </button>
-                                )}
-                            </div>
-                            <div className="p-4 bg-slate-50 border-t border-slate-100">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-xs font-bold text-slate-500">مجموع عواید آب:</span>
-                                    <span className="font-black text-blue-600">{formatCurrency(totalWater, storeSettings, 'AFN')}</span>
+                                    <div className="flex-grow overflow-y-auto p-2 space-y-2">
+                                        {waterRevenue.slice(0, visibleWaterRevenueCount).map(entry => (
+                                            <div key={entry.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                                                <div className="flex justify-between items-start">
+                                                    <span className="font-bold text-slate-800">{formatCurrency(entry.amount, storeSettings, 'AFN')}</span>
+                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {hasPermission('company:view_ledger') && (
+                                                            <>
+                                                                <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('water_revenue'); setLedgerDate(entry.date); setAmountInWords(numberToPersianWords(entry.amount)); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
+                                                                <button onClick={() => handleDeleteLedgerEntry(entry.id, entry.description, selectedCompanyId!)} className="p-1 text-red-600 hover:bg-red-50 rounded-md"><TrashIcon className="w-4 h-4" /></button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-1">{entry.description}</p>
+                                                <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{formatJalaliDate(entry.date)}</div>
+                                            </div>
+                                        ))}
+                                        {waterRevenue.length > visibleWaterRevenueCount && (
+                                            <button 
+                                                onClick={() => setVisibleWaterRevenueCount(prev => prev + 5)}
+                                                className="w-full py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-dashed border-blue-200"
+                                            >
+                                                بارگذاری موارد بیشتر...
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="p-4 bg-slate-50 border-t border-slate-100">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-500">مجموع عواید آب:</span>
+                                            <span className="font-black text-blue-600">{formatCurrency(totalWater, storeSettings, 'AFN')}</span>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
 
-                        {/* Equipment Revenue Column */}
-                        <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-gray-200/60 shadow-xl overflow-hidden flex flex-col h-[70vh]">
-                            <div className="p-4 bg-emerald-50 border-b border-emerald-100 flex justify-between items-center">
-                                <h3 className="font-bold text-emerald-700 flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                    عواید فروش تجهیزات
-                                </h3>
-                                {hasPermission('company:view_ledger') && (
-                                    <button 
-                                        onClick={() => { setLedgerEntryType('equipment_revenue'); setEditingLedgerEntry(null); setAmountInWords(''); setIsAddLedgerModalOpen(true); }}
-                                        className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20"
-                                    >
-                                        <PlusIcon className="w-5 h-5" />
-                                    </button>
-                                )}
-                            </div>
-                            <div className="flex-grow overflow-y-auto p-2 space-y-2">
-                                {equipmentRevenue.slice(0, visibleEquipmentRevenueCount).map(entry => (
-                                    <div key={entry.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-                                        <div className="flex justify-between items-start">
-                                            <span className="font-bold text-slate-800">{formatCurrency(entry.amount, storeSettings, 'AFN')}</span>
-                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                {hasPermission('company:view_ledger') && (
-                                                    <>
-                                                        <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('equipment_revenue'); setLedgerDate(entry.date); setAmountInWords(numberToPersianWords(entry.amount)); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
-                                                        <button onClick={() => handleDeleteLedgerEntry(entry.id, entry.description, selectedCompanyId!)} className="p-1 text-red-600 hover:bg-red-50 rounded-md"><TrashIcon className="w-4 h-4" /></button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1">{entry.description}</p>
-                                        <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{formatJalaliDate(entry.date)}</div>
+                                {/* Equipment Revenue Column */}
+                                <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-gray-200/60 shadow-xl overflow-hidden flex flex-col h-[70vh]">
+                                    <div className="p-4 bg-emerald-50 border-b border-emerald-100 flex justify-between items-center">
+                                        <h3 className="font-bold text-emerald-700 flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                            عواید فروش تجهیزات
+                                        </h3>
+                                        {hasPermission('company:view_ledger') && (
+                                            <button 
+                                                onClick={() => { setLedgerEntryType('equipment_revenue'); setEditingLedgerEntry(null); setAmountInWords(''); setIsAddLedgerModalOpen(true); }}
+                                                className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20"
+                                            >
+                                                <PlusIcon className="w-5 h-5" />
+                                            </button>
+                                        )}
                                     </div>
-                                ))}
-                                {equipmentRevenue.length > visibleEquipmentRevenueCount && (
-                                    <button 
-                                        onClick={() => setVisibleEquipmentRevenueCount(prev => prev + 5)}
-                                        className="w-full py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-dashed border-blue-200"
-                                    >
-                                        بارگذاری موارد بیشتر...
-                                    </button>
-                                )}
-                            </div>
-                            <div className="p-4 bg-slate-50 border-t border-slate-100">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-xs font-bold text-slate-500">مجموع عواید تجهیزات:</span>
-                                    <span className="font-black text-emerald-600">{formatCurrency(totalEquipment, storeSettings, 'AFN')}</span>
+                                    <div className="flex-grow overflow-y-auto p-2 space-y-2">
+                                        {equipmentRevenue.slice(0, visibleEquipmentRevenueCount).map(entry => (
+                                            <div key={entry.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                                                <div className="flex justify-between items-start">
+                                                    <span className="font-bold text-slate-800">{formatCurrency(entry.amount, storeSettings, 'AFN')}</span>
+                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {hasPermission('company:view_ledger') && (
+                                                            <>
+                                                                <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType('equipment_revenue'); setLedgerDate(entry.date); setAmountInWords(numberToPersianWords(entry.amount)); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
+                                                                <button onClick={() => handleDeleteLedgerEntry(entry.id, entry.description, selectedCompanyId!)} className="p-1 text-red-600 hover:bg-red-50 rounded-md"><TrashIcon className="w-4 h-4" /></button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-1">{entry.description}</p>
+                                                <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{formatJalaliDate(entry.date)}</div>
+                                            </div>
+                                        ))}
+                                        {equipmentRevenue.length > visibleEquipmentRevenueCount && (
+                                            <button 
+                                                onClick={() => setVisibleEquipmentRevenueCount(prev => prev + 5)}
+                                                className="w-full py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-dashed border-blue-200"
+                                            >
+                                                بارگذاری موارد بیشتر...
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="p-4 bg-slate-50 border-t border-slate-100">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-500">مجموع عواید تجهیزات:</span>
+                                            <span className="font-black text-emerald-600">{formatCurrency(totalEquipment, storeSettings, 'AFN')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            /* Combined Revenue Column for non-water companies */
+                            <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-gray-200/60 shadow-xl overflow-hidden flex flex-col h-[70vh]">
+                                <div className="p-4 bg-blue-50 border-b border-blue-100 flex justify-between items-center">
+                                    <h3 className="font-bold text-blue-700 flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                        عواید متفرقه
+                                    </h3>
+                                    {hasPermission('company:view_ledger') && (
+                                        <button 
+                                            onClick={() => { setLedgerEntryType('water_revenue'); setEditingLedgerEntry(null); setAmountInWords(''); setIsAddLedgerModalOpen(true); }}
+                                            className="p-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
+                                        >
+                                            <PlusIcon className="w-5 h-5" />
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex-grow overflow-y-auto p-2 space-y-2">
+                                    {[...waterRevenue, ...equipmentRevenue].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, visibleRevenueCount).map(entry => (
+                                        <div key={entry.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                                            <div className="flex justify-between items-start">
+                                                <span className="font-bold text-slate-800">{formatCurrency(entry.amount, storeSettings, 'AFN')}</span>
+                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {hasPermission('company:view_ledger') && (
+                                                        <>
+                                                            <button onClick={() => { setEditingLedgerEntry(entry); setLedgerEntryType(entry.type); setLedgerDate(entry.date); setAmountInWords(numberToPersianWords(entry.amount)); setIsAddLedgerModalOpen(true); }} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"><EditIcon className="w-4 h-4" /></button>
+                                                            <button onClick={() => handleDeleteLedgerEntry(entry.id, entry.description, selectedCompanyId!)} className="p-1 text-red-600 hover:bg-red-50 rounded-md"><TrashIcon className="w-4 h-4" /></button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-slate-500 mt-1">{entry.description}</p>
+                                            <div className="text-[10px] text-slate-400 mt-2 flex justify-end">{formatJalaliDate(entry.date)}</div>
+                                        </div>
+                                    ))}
+                                    {[...waterRevenue, ...equipmentRevenue].length > visibleRevenueCount && (
+                                        <button 
+                                            onClick={() => setVisibleRevenueCount(prev => prev + 5)}
+                                            className="w-full py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-dashed border-blue-200"
+                                        >
+                                            بارگذاری موارد بیشتر...
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="p-4 bg-slate-50 border-t border-slate-100">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-slate-500">مجموع عواید:</span>
+                                        <span className="font-black text-blue-600">{formatCurrency(totalWater + totalEquipment, storeSettings, 'AFN')}</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 ) : companyDetailTab === 'customers' ? (
                     <div className="space-y-6">
@@ -926,6 +1129,197 @@ const CompanyManagement: React.FC = () => {
                                 <p className="text-slate-500">هیچ مشتری برای این شرکت ثبت نشده است.</p>
                             </div>
                         )}
+                    </div>
+                ) : companyDetailTab === 'invoices' ? (
+                    <div className="space-y-6">
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <ClipboardDocumentListIcon className="w-6 h-6 text-blue-600" />
+                                فروشات و فاکتورها
+                            </h2>
+                            <div className="flex gap-2 w-full md:w-auto">
+                                <div className="relative flex-grow md:w-64">
+                                    <input 
+                                        type="text" 
+                                        placeholder="جستجوی فاکتور (نام مشتری، شماره)..." 
+                                        value={invoiceSearchQuery}
+                                        onChange={(e) => setInvoiceSearchQuery(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
+                                    />
+                                    <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                </div>
+                                <button 
+                                    onClick={() => { setEditingInvoice(null); setInvoiceDate(new Date().toISOString().split('T')[0]); setIsInvoiceModalOpen(true); }}
+                                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                                >
+                                    <PlusIcon className="w-5 h-5" />
+                                    ثبت فاکتور جدید
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-right">
+                                    <thead className="bg-slate-50 border-b border-slate-100">
+                                        <tr>
+                                            <th className="p-4 text-xs font-bold text-slate-500">مشتری</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">تاریخ</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">تعداد/مقدار</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">مبلغ کل</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">وضعیت</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">عملیات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {managedCompanyInvoices
+                                            .filter(inv => inv.companyId === selectedCompanyId)
+                                            .filter(inv => {
+                                                const customer = managedCompanyCustomers.find(c => c.id === inv.customerId);
+                                                return customer?.name.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) || inv.id.includes(invoiceSearchQuery);
+                                            })
+                                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                            .map(invoice => {
+                                                const customer = managedCompanyCustomers.find(c => c.id === invoice.customerId);
+                                                return (
+                                                    <tr key={invoice.id} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="p-4">
+                                                            <div className="font-bold text-slate-800 text-sm">{customer?.name || 'مشتری گذری'}</div>
+                                                        </td>
+                                                        <td className="p-4 text-xs text-slate-600">{formatJalaliDate(invoice.date)}</td>
+                                                        <td className="p-4 text-xs font-bold text-blue-600">{invoice.quantity}</td>
+                                                        <td className="p-4 text-sm font-black text-slate-900">{formatCurrency(invoice.totalAmount, storeSettings, 'AFN')}</td>
+                                                        <td className="p-4">
+                                                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${invoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                                {invoice.status === 'paid' ? 'نقد' : 'قرض'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="flex gap-2">
+                                                                {invoice.status === 'unpaid' && (
+                                                                    <button 
+                                                                        onClick={async () => {
+                                                                            await updateManagedCompanyInvoice({ ...invoice, status: 'paid' });
+                                                                            showToast("فاکتور به عنوان پرداخت شده علامت‌گذاری شد.");
+                                                                        }}
+                                                                        className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
+                                                                    >
+                                                                        وصول شد
+                                                                    </button>
+                                                                )}
+                                                                <button 
+                                                                    onClick={() => { setEditingInvoice(invoice); setInvoiceDate(invoice.date); setIsInvoiceModalOpen(true); }}
+                                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                                >
+                                                                    <EditIcon className="w-4 h-4" />
+                                                                </button>
+                                                                <button 
+                                                                    onClick={async () => {
+                                                                        if (window.confirm("آیا از حذف این فاکتور مطمئن هستید؟")) {
+                                                                            await deleteManagedCompanyInvoice(invoice.id);
+                                                                            showToast("فاکتور با موفقیت حذف شد.");
+                                                                        }
+                                                                    }}
+                                                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                                                                >
+                                                                    <TrashIcon className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId).length === 0 && (
+                                <div className="p-12 text-center text-slate-400 italic">هیچ فاکتوری ثبت نشده است.</div>
+                            )}
+                        </div>
+                    </div>
+                ) : companyDetailTab === 'production' ? (
+                    <div className="space-y-6">
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <ChartBarIcon className="w-6 h-6 text-blue-600" />
+                                تولیدات روزانه
+                            </h2>
+                            <div className="flex gap-2 w-full md:w-auto">
+                                <div className="relative flex-grow md:w-64">
+                                    <input 
+                                        type="text" 
+                                        placeholder="جستجوی تولید (تاریخ)..." 
+                                        value={productionSearchQuery}
+                                        onChange={(e) => setProductionSearchQuery(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
+                                    />
+                                    <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                </div>
+                                <button 
+                                    onClick={() => { setEditingProductionLog(null); setProductionDate(new Date().toISOString().split('T')[0]); setIsProductionModalOpen(true); }}
+                                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                                >
+                                    <PlusIcon className="w-5 h-5" />
+                                    ثبت تولید جدید
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-right">
+                                    <thead className="bg-slate-50 border-b border-slate-100">
+                                        <tr>
+                                            <th className="p-4 text-xs font-bold text-slate-500">تاریخ</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">تولید کل</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">ضایعات/بازگشتی</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">تولید خالص</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">توضیحات</th>
+                                            <th className="p-4 text-xs font-bold text-slate-500">عملیات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {managedCompanyProductionLogs
+                                            .filter(log => log.companyId === selectedCompanyId)
+                                            .filter(log => log.date.includes(productionSearchQuery))
+                                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                            .map(log => (
+                                                <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="p-4 text-xs text-slate-600">{formatJalaliDate(log.date)}</td>
+                                                    <td className="p-4 text-sm font-bold text-blue-600">{log.totalProduced}</td>
+                                                    <td className="p-4 text-sm font-bold text-red-600">{log.wasteCount}</td>
+                                                    <td className="p-4 text-sm font-black text-slate-900">{log.totalProduced - log.wasteCount}</td>
+                                                    <td className="p-4 text-xs text-slate-500">{log.notes || '---'}</td>
+                                                    <td className="p-4">
+                                                        <div className="flex gap-2">
+                                                            <button 
+                                                                onClick={() => { setEditingProductionLog(log); setProductionDate(log.date); setIsProductionModalOpen(true); }}
+                                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                            >
+                                                                <EditIcon className="w-4 h-4" />
+                                                            </button>
+                                                            <button 
+                                                                onClick={async () => {
+                                                                    if (window.confirm("آیا از حذف این رکورد تولید مطمئن هستید؟")) {
+                                                                        await deleteManagedCompanyProductionLog(log.id);
+                                                                        showToast("رکورد تولید با موفقیت حذف شد.");
+                                                                    }
+                                                                }}
+                                                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                                                            >
+                                                                <TrashIcon className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {managedCompanyProductionLogs.filter(log => log.companyId === selectedCompanyId).length === 0 && (
+                                <div className="p-12 text-center text-slate-400 italic">هیچ رکورد تولیدی ثبت نشده است.</div>
+                            )}
+                        </div>
                     </div>
                 ) : (
                     <div className="space-y-6">
@@ -1486,7 +1880,7 @@ const CompanyManagement: React.FC = () => {
                                 <h2 className="text-5xl font-black mt-2 tracking-tight text-white">
                                     {formatCurrency(ownerStats.netWorth, storeSettings, 'AFN')}
                                 </h2>
-                                <p className="text-slate-400 mt-2 text-sm">محاسبه شده بر اساس سود شرکت‌ها، طلبات، بدهی‌ها و مصارف شخصی</p>
+                                <p className="text-slate-400 mt-2 text-sm">محاسبه شده بر اساس سهم شما از سود و سرمایه شرکت‌ها، طلبات، بدهی‌ها و مصارف شخصی</p>
                             </div>
                             <div className="p-6 bg-white/10 backdrop-blur-md rounded-3xl border border-white/10">
                                 <ChartBarIcon className="w-12 h-12 text-blue-400" />
@@ -1958,13 +2352,39 @@ const CompanyManagement: React.FC = () => {
                 >
                     <form onSubmit={handleAddCompany} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">نام شرکت آبرسانی</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">نوع شرکت</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <button 
+                                    type="button"
+                                    onClick={() => setCompanyType(CompanyType.WATER)}
+                                    className={`p-2 text-xs rounded-xl border transition-all ${companyType === CompanyType.WATER ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}
+                                >
+                                    آبرسانی
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => setCompanyType(CompanyType.ICE)}
+                                    className={`p-2 text-xs rounded-xl border transition-all ${companyType === CompanyType.ICE ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}
+                                >
+                                    تولید یخ
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => setCompanyType(CompanyType.BOTTLED_WATER)}
+                                    className={`p-2 text-xs rounded-xl border transition-all ${companyType === CompanyType.BOTTLED_WATER ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}
+                                >
+                                    آب معدنی
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">نام شرکت</label>
                             <input 
                                 name="name" 
                                 required 
                                 defaultValue={editingCompany?.name}
                                 className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-                                placeholder="مثلاً: شرکت آبرسانی پامیر"
+                                placeholder="نام شرکت را وارد کنید..."
                             />
                         </div>
                         <div>
@@ -1987,30 +2407,109 @@ const CompanyManagement: React.FC = () => {
                                 placeholder="07xx xxx xxx"
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">هزینه تاسیس (افغانی)</label>
-                            <input 
-                                name="establishmentCost" 
-                                type="number"
-                                required 
-                                defaultValue={editingCompany?.establishmentCost}
-                                onChange={(e) => setAmountInWords(numberToPersianWords(Number(e.target.value)))}
-                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-                                placeholder="0"
-                            />
-                            {amountInWords && <p className="text-xs text-blue-600 mt-1 font-bold">{amountInWords} افغانی</p>}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">هزینه تاسیس (افغانی)</label>
+                                <input 
+                                    name="establishmentCost" 
+                                    type="number"
+                                    required 
+                                    defaultValue={editingCompany?.establishmentCost}
+                                    onChange={(e) => setAmountInWords(numberToPersianWords(Number(e.target.value)))}
+                                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                    placeholder="0"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    {companyType === CompanyType.WATER ? 'قیمت فی واحد آب' : 
+                                     companyType === CompanyType.ICE ? 'قیمت فی واحد یخ' : 'قیمت فی واحد گالن'}
+                                </label>
+                                <input 
+                                    name="unitPrice" 
+                                    type="number"
+                                    required 
+                                    defaultValue={editingCompany?.unitPrice}
+                                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                    placeholder="0"
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">قیمت فی واحد آب (افغانی)</label>
-                            <input 
-                                name="unitPrice" 
-                                type="number"
-                                required 
-                                defaultValue={editingCompany?.unitPrice}
-                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-                                placeholder="مثلاً: 50"
-                            />
+                        {amountInWords && <p className="text-xs text-blue-600 font-bold">{amountInWords} افغانی</p>}
+
+                        <div className="pt-2 border-t border-slate-100">
+                            <div className="flex justify-between items-center mb-3">
+                                <label className="block text-sm font-bold text-slate-700">مدیریت شرکا و سهام</label>
+                                <button 
+                                    type="button" 
+                                    onClick={addShareholder}
+                                    className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-700"
+                                >
+                                    <PlusIcon className="w-3 h-3" /> افزودن شریک
+                                </button>
+                            </div>
+                            <div className="space-y-3">
+                                {shareholders.map((s, index) => (
+                                    <div key={index} className="flex gap-2 items-start bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <div className="flex-1 space-y-2">
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    placeholder="نام شریک"
+                                                    value={s.name}
+                                                    onChange={(e) => updateShareholder(index, { name: e.target.value })}
+                                                    className="flex-1 p-2 text-xs rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                                                    required
+                                                />
+                                                <div className="relative w-24">
+                                                    <input 
+                                                        type="number"
+                                                        placeholder="درصد"
+                                                        value={s.percentage}
+                                                        onChange={(e) => updateShareholder(index, { percentage: Number(e.target.value) })}
+                                                        className="w-full p-2 pr-6 text-xs rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                                                        required
+                                                        min="0"
+                                                        max="100"
+                                                    />
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">%</span>
+                                                </div>
+                                            </div>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={s.isCurrentUser}
+                                                    onChange={(e) => {
+                                                        const newShareholders = shareholders.map((sh, i) => ({
+                                                            ...sh,
+                                                            isCurrentUser: i === index ? e.target.checked : false
+                                                        }));
+                                                        setShareholders(newShareholders);
+                                                    }}
+                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <span className="text-[10px] text-slate-500">این سهم متعلق به من است</span>
+                                            </label>
+                                        </div>
+                                        {shareholders.length > 1 && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => removeShareholder(index)}
+                                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                            >
+                                                <TrashIcon className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                <div className="flex justify-between items-center px-1">
+                                    <span className="text-[10px] text-slate-400">مجموع سهام:</span>
+                                    <span className={`text-xs font-bold ${shareholders.reduce((sum, s) => sum + s.percentage, 0) === 100 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        {shareholders.reduce((sum, s) => sum + s.percentage, 0)}%
+                                    </span>
+                                </div>
+                            </div>
                         </div>
+
                         <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20">
                             {editingCompany ? 'بروزرسانی اطلاعات' : 'ثبت شرکت'}
                         </button>
