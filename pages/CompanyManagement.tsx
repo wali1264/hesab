@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType, Shareholder, ManagedCompanyInvoice } from '../types';
 import { CompanyType } from '../types';
-import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon } from '../components/icons';
+import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon, ExclamationCircleIcon } from '../components/icons';
 import { formatCurrency, numberToPersianWords } from '../utils/formatters';
 import { formatJalaliDate } from '../utils/jalali';
 import JalaliDateInput from '../components/JalaliDateInput';
@@ -61,6 +61,19 @@ const CompanyManagement: React.FC = () => {
     const [activityDateFilter, setActivityDateFilter] = useState<string>('all'); // all, today, yesterday, custom
     const [activityCustomDate, setActivityCustomDate] = useState(new Date().toISOString().split('T')[0]);
     const [activitySubTab, setActivitySubTab] = useState<'all' | 'collections' | 'readings' | 'invoices' | 'production'>('all');
+    
+    // Production Dashboard States
+    const [productionDateFilter, setProductionDateFilter] = useState<'all' | 'week' | 'month' | 'year' | 'custom'>('all');
+    const [productionStartDate, setProductionStartDate] = useState('');
+    const [productionEndDate, setProductionEndDate] = useState('');
+
+    // Sales Dashboard States
+    const [salesSubTab, setSalesSubTab] = useState<'list' | 'dashboard'>('list');
+    const [collectionSubTab, setCollectionSubTab] = useState<'list' | 'dashboard'>('list');
+    const [salesDateFilter, setSalesDateFilter] = useState<'all' | 'week' | 'month' | 'year' | 'custom'>('all');
+    const [salesStartDate, setSalesStartDate] = useState('');
+    const [salesEndDate, setSalesEndDate] = useState('');
+    const [salesEmployeeFilter, setSalesEmployeeFilter] = useState<string>('all');
 
     // Handle default tab selection based on permissions
     useEffect(() => {
@@ -219,8 +232,16 @@ const CompanyManagement: React.FC = () => {
 
     const employees = useMemo(() => {
         const uniqueUsers = new Set(activities.map(a => a.user));
+        managedCompanyInvoices.forEach(inv => {
+            if (inv.registrarName) uniqueUsers.add(inv.registrarName);
+            if (inv.collectorName) uniqueUsers.add(inv.collectorName);
+        });
+        customerBillingRecords.forEach(r => {
+            if (r.surveyorName) uniqueUsers.add(r.surveyorName);
+            if (r.collectorName) uniqueUsers.add(r.collectorName);
+        });
         return Array.from(uniqueUsers);
-    }, [activities]);
+    }, [activities, managedCompanyInvoices, customerBillingRecords]);
     const companyEntries = useMemo(() => managedCompanyLedger.filter(e => e.companyId === selectedCompanyId), [managedCompanyLedger, selectedCompanyId]);
     const currentCompanyCustomers = useMemo(() => {
         let filtered = managedCompanyCustomers.filter(c => c.companyId === selectedCompanyId);
@@ -290,6 +311,127 @@ const CompanyManagement: React.FC = () => {
         
         return initialAdjusted + unpaidTotal + unpaidBillingTotal;
     };
+
+    const filteredProductionLogs = useMemo(() => {
+        let filtered = managedCompanyProductionLogs.filter(log => log.companyId === selectedCompanyId);
+        
+        if (productionSearchQuery) {
+            filtered = filtered.filter(log => log.date.includes(productionSearchQuery));
+        }
+
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        
+        if (productionDateFilter === 'week') {
+            const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            filtered = filtered.filter(log => new Date(log.date) >= lastWeek);
+        } else if (productionDateFilter === 'month') {
+            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+            filtered = filtered.filter(log => new Date(log.date) >= lastMonth);
+        } else if (productionDateFilter === 'year') {
+            const lastYear = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+            filtered = filtered.filter(log => new Date(log.date) >= lastYear);
+        } else if (productionDateFilter === 'custom' && productionStartDate && productionEndDate) {
+            filtered = filtered.filter(log => log.date >= productionStartDate && log.date <= productionEndDate);
+        }
+
+        return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [managedCompanyProductionLogs, selectedCompanyId, productionSearchQuery, productionDateFilter, productionStartDate, productionEndDate]);
+
+    const productionStats = useMemo(() => {
+        const totalProduced = filteredProductionLogs.reduce((sum, log) => sum + log.producedUnits, 0);
+        const totalSpoilage = filteredProductionLogs.reduce((sum, log) => sum + log.spoilageUnits, 0);
+        const netProduction = totalProduced - totalSpoilage;
+        return { totalProduced, totalSpoilage, netProduction };
+    }, [filteredProductionLogs]);
+
+    const filteredInvoices = useMemo(() => {
+        let filtered = managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId);
+        
+        if (invoiceSearchQuery) {
+            filtered = filtered.filter(inv => {
+                const customer = managedCompanyCustomers.find(c => c.id === inv.customerId);
+                return customer?.name.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) || inv.id.includes(invoiceSearchQuery);
+            });
+        }
+
+        if (salesEmployeeFilter !== 'all') {
+            filtered = filtered.filter(inv => 
+                inv.registrarName === salesEmployeeFilter || 
+                inv.collectorName === salesEmployeeFilter
+            );
+        }
+
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        
+        if (salesDateFilter === 'week') {
+            const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            filtered = filtered.filter(inv => new Date(inv.date) >= lastWeek);
+        } else if (salesDateFilter === 'month') {
+            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+            filtered = filtered.filter(inv => new Date(inv.date) >= lastMonth);
+        } else if (salesDateFilter === 'year') {
+            const lastYear = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+            filtered = filtered.filter(inv => new Date(inv.date) >= lastYear);
+        } else if (salesDateFilter === 'custom' && salesStartDate && salesEndDate) {
+            filtered = filtered.filter(inv => inv.date >= salesStartDate && inv.date <= salesEndDate);
+        }
+
+        return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [managedCompanyInvoices, selectedCompanyId, invoiceSearchQuery, salesDateFilter, salesStartDate, salesEndDate, salesEmployeeFilter, managedCompanyCustomers]);
+
+    const salesStats = useMemo(() => {
+        const totalSales = filteredInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+        const totalCollected = filteredInvoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0);
+        const totalOutstanding = totalSales - totalCollected;
+        return { totalSales, totalCollected, totalOutstanding };
+    }, [filteredInvoices]);
+
+    const filteredBillingRecords = useMemo(() => {
+        let filtered = customerBillingRecords.filter(r => r.companyId === selectedCompanyId);
+        
+        if (collectionSearchQuery) {
+            filtered = filtered.filter(r => {
+                const customer = managedCompanyCustomers.find(c => c.id === r.customerId);
+                return customer?.name.toLowerCase().includes(collectionSearchQuery.toLowerCase()) || 
+                       customer?.meterNumber.includes(collectionSearchQuery) ||
+                       customer?.phone.includes(collectionSearchQuery);
+            });
+        }
+
+        if (salesEmployeeFilter !== 'all') {
+            filtered = filtered.filter(r => 
+                r.surveyorName === salesEmployeeFilter || 
+                r.collectorName === salesEmployeeFilter
+            );
+        }
+
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        
+        if (salesDateFilter === 'week') {
+            const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            filtered = filtered.filter(r => new Date(r.date) >= lastWeek);
+        } else if (salesDateFilter === 'month') {
+            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+            filtered = filtered.filter(r => new Date(r.date) >= lastMonth);
+        } else if (salesDateFilter === 'year') {
+            const lastYear = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+            filtered = filtered.filter(r => new Date(r.date) >= lastYear);
+        } else if (salesDateFilter === 'custom' && salesStartDate && salesEndDate) {
+            filtered = filtered.filter(r => r.date >= salesStartDate && r.date <= salesEndDate);
+        }
+
+        return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [customerBillingRecords, selectedCompanyId, collectionSearchQuery, salesDateFilter, salesStartDate, salesEndDate, salesEmployeeFilter, managedCompanyCustomers]);
+
+    const billingStats = useMemo(() => {
+        const totalSales = filteredBillingRecords.reduce((sum, r) => sum + r.amount, 0);
+        const totalCollected = filteredBillingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0);
+        const totalOutstanding = totalSales - totalCollected;
+        return { totalSales, totalCollected, totalOutstanding };
+    }, [filteredBillingRecords]);
 
     const handleMarkAsPaid = async (record: CustomerBillingRecord) => {
         const paymentDate = new Date().toISOString().split('T')[0];
@@ -475,12 +617,9 @@ const CompanyManagement: React.FC = () => {
             <html dir="rtl">
             <head>
                 <title>${title}</title>
+                <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazir-font@v30.1.0/dist/font-face.css" rel="stylesheet" type="text/css" />
                 <style>
-                    @font-face {
-                        font-family: 'Inter';
-                        src: url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-                    }
-                    body { font-family: 'Tahoma', 'Arial', sans-serif; padding: 40px; color: #333; }
+                    body { font-family: 'Vazir', 'Tahoma', 'Arial', sans-serif; padding: 40px; color: #333; }
                     .invoice-box { max-width: 800px; margin: auto; border: 2px solid #eee; padding: 30px; border-radius: 10px; }
                     .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #3b82f6; padding-bottom: 20px; margin-bottom: 20px; }
                     .company-info h1 { margin: 0; color: #1e40af; font-size: 24px; }
@@ -1257,21 +1396,21 @@ const CompanyManagement: React.FC = () => {
                 ) : companyDetailTab === 'invoices' ? (
                     <div className="space-y-6">
                         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                <ClipboardDocumentListIcon className="w-6 h-6 text-blue-600" />
-                                فروشات و فاکتورها
-                            </h2>
-                            <div className="flex gap-2 w-full md:w-auto">
-                                <div className="relative flex-grow md:w-64">
-                                    <input 
-                                        type="text" 
-                                        placeholder="جستجوی فاکتور (نام مشتری، شماره)..." 
-                                        value={invoiceSearchQuery}
-                                        onChange={(e) => setInvoiceSearchQuery(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
-                                    />
-                                    <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                                </div>
+                            <div className="flex bg-slate-100 p-1 rounded-2xl">
+                                <button 
+                                    onClick={() => setSalesSubTab('list')}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${salesSubTab === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    لیست فاکتورها
+                                </button>
+                                <button 
+                                    onClick={() => setSalesSubTab('dashboard')}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${salesSubTab === 'dashboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    گزارش فروش و وصولی
+                                </button>
+                            </div>
+                            {salesSubTab === 'list' && (
                                 <button 
                                     onClick={() => { 
                                         setEditingInvoice(null); 
@@ -1281,105 +1420,235 @@ const CompanyManagement: React.FC = () => {
                                         setInvoicePricePerUnit(selectedCompany?.unitPrice || 0);
                                         setIsInvoiceModalOpen(true); 
                                     }}
-                                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 w-full md:w-auto"
                                 >
                                     <PlusIcon className="w-5 h-5" />
                                     ثبت فاکتور جدید
                                 </button>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-right">
-                                    <thead className="bg-slate-50 border-b border-slate-100">
-                                        <tr>
-                                            <th className="p-4 text-xs font-bold text-slate-500">مشتری</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">تاریخ</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">{selectedCompany?.unitName || 'تعداد/مقدار'}</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">مبلغ کل</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">وضعیت</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">عملیات</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                        {managedCompanyInvoices
-                                            .filter(inv => inv.companyId === selectedCompanyId)
-                                            .filter(inv => {
-                                                const customer = managedCompanyCustomers.find(c => c.id === inv.customerId);
-                                                return customer?.name.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) || inv.id.includes(invoiceSearchQuery);
-                                            })
-                                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                            .map(invoice => {
-                                                const customer = managedCompanyCustomers.find(c => c.id === invoice.customerId);
-                                                return (
-                                                    <tr key={invoice.id} className="hover:bg-slate-50/50 transition-colors">
-                                                        <td className="p-4">
-                                                            <div className="font-bold text-slate-800 text-sm">{customer?.name || 'مشتری گذری'}</div>
-                                                        </td>
-                                                        <td className="p-4 text-xs text-slate-600">{formatJalaliDate(invoice.date)}</td>
-                                                        <td className="p-4 text-xs font-bold text-blue-600">{invoice.units} {selectedCompany?.unitName}</td>
-                                                        <td className="p-4 text-sm font-black text-slate-900">{formatCurrency(invoice.totalAmount, storeSettings, 'AFN')}</td>
-                                                        <td className="p-4">
-                                                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${invoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                                                {invoice.status === 'paid' ? 'نقد' : 'قرض'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-4">
-                                                            <div className="flex gap-2">
-                                                                {invoice.status === 'unpaid' && (
-                                                                    <button 
-                                                                        onClick={async () => {
-                                                                            await updateManagedCompanyInvoice({ ...invoice, status: 'paid' });
-                                                                            showToast("فاکتور به عنوان پرداخت شده علامت‌گذاری شد.");
-                                                                        }}
-                                                                        className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
-                                                                    >
-                                                                        وصول شد
-                                                                    </button>
-                                                                )}
-                                                                <button 
-                                                                    onClick={() => handlePrintInvoice(invoice)}
-                                                                    className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"
-                                                                    title="چاپ فاکتور"
-                                                                >
-                                                                    <PrintIcon className="w-4 h-4" />
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => { 
-                                                                        setEditingInvoice(invoice); 
-                                                                        setInvoiceDate(invoice.date); 
-                                                                        setInvoiceUnits(invoice.units);
-                                                                        setInvoicePricePerUnit(invoice.pricePerUnit);
-                                                                        setIsInvoiceModalOpen(true); 
-                                                                    }}
-                                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                                                >
-                                                                    <EditIcon className="w-4 h-4" />
-                                                                </button>
-                                                                <button 
-                                                                    onClick={async () => {
-                                                                        if (window.confirm("آیا از حذف این فاکتور مطمئن هستید؟")) {
-                                                                            await deleteManagedCompanyInvoice(invoice.id);
-                                                                            showToast("فاکتور با موفقیت حذف شد.");
-                                                                        }
-                                                                    }}
-                                                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
-                                                                >
-                                                                    <TrashIcon className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId).length === 0 && (
-                                <div className="p-12 text-center text-slate-400 italic">هیچ فاکتوری ثبت نشده است.</div>
                             )}
                         </div>
+
+                        {salesSubTab === 'dashboard' ? (
+                            <div className="space-y-6">
+                                {/* Sales Dashboard Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
+                                            <CurrencyDollarIcon className="w-8 h-8" />
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-slate-500 block">کل فروش</span>
+                                            <span className="text-2xl font-black text-slate-800">{formatCurrency(salesStats.totalSales, storeSettings, 'AFN')}</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600">
+                                            <CheckCircleIcon className="w-8 h-8" />
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-slate-500 block">کل وصولی</span>
+                                            <span className="text-2xl font-black text-emerald-600">{formatCurrency(salesStats.totalCollected, storeSettings, 'AFN')}</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="p-3 bg-red-50 rounded-2xl text-red-600">
+                                            <ExclamationCircleIcon className="w-8 h-8" />
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-slate-500 block">باقیمانده (طلب)</span>
+                                            <span className="text-2xl font-black text-red-600">{formatCurrency(salesStats.totalOutstanding, storeSettings, 'AFN')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Sales Filters */}
+                                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-end">
+                                    <div className="flex-grow min-w-[200px]">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">فیلتر کارمند</label>
+                                        <select 
+                                            value={salesEmployeeFilter}
+                                            onChange={(e) => setSalesEmployeeFilter(e.target.value)}
+                                            className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="all">همه کارمندان</option>
+                                            {employees.map(emp => (
+                                                <option key={emp} value={emp}>{emp}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">بازه زمانی</label>
+                                        <select 
+                                            value={salesDateFilter}
+                                            onChange={(e) => setSalesDateFilter(e.target.value as any)}
+                                            className="p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="all">همه زمان‌ها</option>
+                                            <option value="week">هفته اخیر</option>
+                                            <option value="month">ماه اخیر</option>
+                                            <option value="year">سال اخیر</option>
+                                            <option value="custom">بازه دلخواه</option>
+                                        </select>
+                                    </div>
+                                    {salesDateFilter === 'custom' && (
+                                        <>
+                                            <div className="w-32">
+                                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">از تاریخ</label>
+                                                <JalaliDateInput 
+                                                    value={salesStartDate}
+                                                    onChange={setSalesStartDate}
+                                                    className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                                />
+                                            </div>
+                                            <div className="w-32">
+                                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">تا تاریخ</label>
+                                                <JalaliDateInput 
+                                                    value={salesEndDate}
+                                                    onChange={setSalesEndDate}
+                                                    className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-right">
+                                            <thead className="bg-slate-50 border-b border-slate-100">
+                                                <tr>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">تاریخ</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">مشتری</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">مبلغ کل</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">وضعیت</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">ثبت‌کننده</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">وصول‌کننده</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {filteredInvoices.map(inv => {
+                                                    const customer = managedCompanyCustomers.find(c => c.id === inv.customerId);
+                                                    return (
+                                                        <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
+                                                            <td className="p-4 text-xs text-slate-600">{formatJalaliDate(inv.date)}</td>
+                                                            <td className="p-4 text-sm font-bold text-slate-800">{customer?.name || 'مشتری گذری'}</td>
+                                                            <td className="p-4 text-sm font-bold text-blue-600">{formatCurrency(inv.totalAmount, storeSettings, 'AFN')}</td>
+                                                            <td className="p-4">
+                                                                <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${inv.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                                    {inv.status === 'paid' ? 'پرداخت شده' : 'پرداخت نشده'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="p-4 text-xs text-slate-500">{inv.registrarName || '-'}</td>
+                                                            <td className="p-4 text-xs text-slate-500">{inv.collectorName || '-'}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                    <div className="relative flex-grow">
+                                        <input 
+                                            type="text" 
+                                            placeholder="جستجوی فاکتور (نام مشتری، شماره)..." 
+                                            value={invoiceSearchQuery}
+                                            onChange={(e) => setInvoiceSearchQuery(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
+                                        />
+                                        <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-right">
+                                            <thead className="bg-slate-50 border-b border-slate-100">
+                                                <tr>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">مشتری</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">تاریخ</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">{selectedCompany?.unitName || 'تعداد/مقدار'}</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">مبلغ کل</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">وضعیت</th>
+                                                    <th className="p-4 text-xs font-bold text-slate-500">عملیات</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {filteredInvoices.map(invoice => {
+                                                    const customer = managedCompanyCustomers.find(c => c.id === invoice.customerId);
+                                                    return (
+                                                        <tr key={invoice.id} className="hover:bg-slate-50/50 transition-colors">
+                                                            <td className="p-4">
+                                                                <div className="font-bold text-slate-800 text-sm">{customer?.name || 'مشتری گذری'}</div>
+                                                            </td>
+                                                            <td className="p-4 text-xs text-slate-600">{formatJalaliDate(invoice.date)}</td>
+                                                            <td className="p-4 text-xs font-bold text-blue-600">{invoice.units} {selectedCompany?.unitName}</td>
+                                                            <td className="p-4 text-sm font-black text-slate-900">{formatCurrency(invoice.totalAmount, storeSettings, 'AFN')}</td>
+                                                            <td className="p-4">
+                                                                <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${invoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                                    {invoice.status === 'paid' ? 'نقد' : 'قرض'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="p-4">
+                                                                <div className="flex gap-2">
+                                                                    {invoice.status === 'unpaid' && (
+                                                                        <button 
+                                                                            onClick={async () => {
+                                                                                await updateManagedCompanyInvoice({ ...invoice, status: 'paid' });
+                                                                                showToast("فاکتور به عنوان پرداخت شده علامت‌گذاری شد.");
+                                                                            }}
+                                                                            className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
+                                                                        >
+                                                                            وصول شد
+                                                                        </button>
+                                                                    )}
+                                                                    <button 
+                                                                        onClick={() => handlePrintInvoice(invoice)}
+                                                                        className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                                                                        title="چاپ فاکتور"
+                                                                    >
+                                                                        <PrintIcon className="w-4 h-4" />
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => { 
+                                                                            setEditingInvoice(invoice); 
+                                                                            setInvoiceDate(invoice.date); 
+                                                                            setInvoiceUnits(invoice.units);
+                                                                            setInvoicePricePerUnit(invoice.pricePerUnit);
+                                                                            setIsInvoiceModalOpen(true); 
+                                                                        }}
+                                                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                                    >
+                                                                        <EditIcon className="w-4 h-4" />
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={async () => {
+                                                                            if (window.confirm("آیا از حذف این فاکتور مطمئن هستید؟")) {
+                                                                                await deleteManagedCompanyInvoice(invoice.id);
+                                                                                showToast("فاکتور با موفقیت حذف شد.");
+                                                                            }
+                                                                        }}
+                                                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                                                                    >
+                                                                        <TrashIcon className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {filteredInvoices.length === 0 && (
+                                        <div className="p-12 text-center text-slate-400 italic">هیچ فاکتوری یافت نشد.</div>
+                                    )}
+                                </div>
+                            </>
+                        )}
                     </div>
                 ) : companyDetailTab === 'production' ? (
                     <div className="space-y-6">
@@ -1389,7 +1658,52 @@ const CompanyManagement: React.FC = () => {
                                 تولیدات روزانه
                             </h2>
                             <div className="flex gap-2 w-full md:w-auto">
-                                <div className="relative flex-grow md:w-64">
+                                <button 
+                                    onClick={() => { setEditingProductionLog(null); setProductionDate(new Date().toISOString().split('T')[0]); setIsProductionModalOpen(true); }}
+                                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                                >
+                                    <PlusIcon className="w-5 h-5" />
+                                    ثبت تولید جدید
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Production Dashboard Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
+                                    <ChartBarIcon className="w-8 h-8" />
+                                </div>
+                                <div>
+                                    <span className="text-xs text-slate-500 block">مجموع تولید</span>
+                                    <span className="text-2xl font-black text-slate-800">{productionStats.totalProduced.toLocaleString()}</span>
+                                </div>
+                            </div>
+                            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                <div className="p-3 bg-red-50 rounded-2xl text-red-600">
+                                    <TrendingDownIcon className="w-8 h-8" />
+                                </div>
+                                <div>
+                                    <span className="text-xs text-slate-500 block">مجموع ضایعات</span>
+                                    <span className="text-2xl font-black text-red-600">{productionStats.totalSpoilage.toLocaleString()}</span>
+                                </div>
+                            </div>
+                            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600">
+                                    <TrendingUpIcon className="w-8 h-8" />
+                                </div>
+                                <div>
+                                    <span className="text-xs text-slate-500 block">تولید خالص</span>
+                                    <span className="text-2xl font-black text-emerald-700">{productionStats.netProduction.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Production Filters */}
+                        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-end">
+                            <div className="flex-grow min-w-[200px]">
+                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">جستجوی تاریخ</label>
+                                <div className="relative">
                                     <input 
                                         type="text" 
                                         placeholder="جستجوی تولید (تاریخ)..." 
@@ -1399,14 +1713,41 @@ const CompanyManagement: React.FC = () => {
                                     />
                                     <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                                 </div>
-                                <button 
-                                    onClick={() => { setEditingProductionLog(null); setProductionDate(new Date().toISOString().split('T')[0]); setIsProductionModalOpen(true); }}
-                                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
-                                >
-                                    <PlusIcon className="w-5 h-5" />
-                                    ثبت تولید جدید
-                                </button>
                             </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">فیلتر بازه زمانی</label>
+                                <select 
+                                    value={productionDateFilter}
+                                    onChange={(e) => setProductionDateFilter(e.target.value as any)}
+                                    className="p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="all">همه زمان‌ها</option>
+                                    <option value="week">هفته اخیر</option>
+                                    <option value="month">ماه اخیر</option>
+                                    <option value="year">سال اخیر</option>
+                                    <option value="custom">بازه دلخواه</option>
+                                </select>
+                            </div>
+                            {productionDateFilter === 'custom' && (
+                                <>
+                                    <div className="w-32">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">از تاریخ</label>
+                                        <JalaliDateInput 
+                                            value={productionStartDate}
+                                            onChange={setProductionStartDate}
+                                            className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                        />
+                                    </div>
+                                    <div className="w-32">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">تا تاریخ</label>
+                                        <JalaliDateInput 
+                                            value={productionEndDate}
+                                            onChange={setProductionEndDate}
+                                            className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1423,11 +1764,7 @@ const CompanyManagement: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
-                                        {managedCompanyProductionLogs
-                                            .filter(log => log.companyId === selectedCompanyId)
-                                            .filter(log => log.date.includes(productionSearchQuery))
-                                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                            .map(log => (
+                                        {filteredProductionLogs.map(log => (
                                                 <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
                                                     <td className="p-4 text-xs text-slate-600">{formatJalaliDate(log.date)}</td>
                                                     <td className="p-4 text-sm font-bold text-blue-600">{log.producedUnits}</td>
@@ -1468,10 +1805,20 @@ const CompanyManagement: React.FC = () => {
                 ) : (
                     <div className="space-y-6">
                         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                <CurrencyDollarIcon className="w-6 h-6 text-emerald-600" />
-                                وصولی‌ها و بدهکاران
-                            </h2>
+                            <div className="flex bg-slate-100 p-1 rounded-2xl">
+                                <button 
+                                    onClick={() => setCollectionSubTab('list')}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${collectionSubTab === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    لیست وصولی‌ها
+                                </button>
+                                <button 
+                                    onClick={() => setCollectionSubTab('dashboard')}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${collectionSubTab === 'dashboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    گزارش وصولی و طلبات
+                                </button>
+                            </div>
                             <div className="flex gap-2 w-full md:w-auto">
                                 <div className="relative flex-grow md:w-64">
                                     <input 
@@ -1483,105 +1830,181 @@ const CompanyManagement: React.FC = () => {
                                     />
                                     <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                                 </div>
-                                <div className="flex gap-2">
-                                    <div className="bg-red-50 px-3 py-1.5 rounded-xl border border-red-100 hidden sm:block">
-                                        <span className="text-[10px] text-red-600 block">طلبات:</span>
-                                        <span className="text-sm font-black text-red-700">{formatCurrency(currentCompanyBillingRecords.filter(r => r.status === 'unpaid').reduce((sum, r) => sum + r.amount, 0), storeSettings, 'AFN')}</span>
-                                    </div>
-                                    <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100 hidden sm:block">
-                                        <span className="text-[10px] text-emerald-600 block">وصولی:</span>
-                                        <span className="text-sm font-black text-emerald-700">{formatCurrency(currentCompanyBillingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0), storeSettings, 'AFN')}</span>
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-right">
-                                    <thead className="bg-slate-50 border-b border-slate-100">
-                                        <tr>
-                                            <th className="p-4 text-xs font-bold text-slate-500">مشتری</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">تاریخ بل</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">مصرف (واحد)</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">مبلغ قابل پرداخت</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">وضعیت</th>
-                                            <th className="p-4 text-xs font-bold text-slate-500">عملیات</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                        {currentCompanyBillingRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(record => {
-                                            const customer = currentCompanyCustomers.find(c => c.id === record.customerId);
-                                            return (
-                                                <tr key={record.id} className="hover:bg-slate-50/50 transition-colors">
-                                                    <td className="p-4">
-                                                        <div className="font-bold text-slate-800 text-sm">{customer?.name}</div>
-                                                        <div className="text-[10px] text-slate-400">میتر: {customer?.meterNumber}</div>
-                                                    </td>
-                                                    <td className="p-4 text-xs text-slate-600">{formatJalaliDate(record.date)}</td>
-                                                    <td className="p-4 text-xs font-bold text-blue-600">{record.consumption}</td>
-                                                    <td className="p-4 text-sm font-black text-slate-900">
-                                                        {formatCurrency(record.amount, storeSettings, 'AFN')}
-                                                        {record.isMinimumFeeApplied && (
-                                                            <div className="text-[9px] text-red-500 font-bold mt-0.5">حداقل هزینه</div>
-                                                        )}
-                                                    </td>
-                                                    <td className="p-4">
-                                                        <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                                            {record.status === 'paid' ? 'پرداخت شده' : 'در انتظار پرداخت'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="p-4">
-                                                        <div className="flex gap-2">
-                                                            {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
-                                                                <button 
-                                                                    onClick={() => handleMarkAsPaid(record)}
-                                                                    className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
-                                                                >
-                                                                    وصول شد
-                                                                </button>
-                                                            )}
-                                                            <button 
-                                                                onClick={() => handlePrintInvoice(record)}
-                                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                                                title="چاپ بل"
-                                                            >
-                                                                <PrintIcon className="w-4 h-4" />
-                                                            </button>
-                                                            <button 
-                                                                onClick={() => {
-                                                                    const customer = managedCompanyCustomers.find(c => c.id === record.customerId);
-                                                                    if (customer) {
-                                                                        setSelectedCustomerForHistory(customer);
-                                                                        setIsHistoryModalOpen(true);
-                                                                    }
-                                                                }}
-                                                                className="p-1.5 text-slate-500 hover:bg-slate-50 rounded-lg"
-                                                                title="تاریخچه مشتری"
-                                                            >
-                                                                <HistoryIcon className="w-4 h-4" />
-                                                            </button>
-                                                            {hasPermission('company_billing:delete') && (
-                                                                <button 
-                                                                    onClick={() => handleDeleteBillingRecord(record.id, customer?.name || 'نامشخص', selectedCompanyId!)}
-                                                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
-                                                                    title="حذف"
-                                                                >
-                                                                    <TrashIcon className="w-4 h-4" />
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                        {collectionSubTab === 'dashboard' ? (
+                            <div className="space-y-6">
+                                {/* Collection Dashboard Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
+                                            <CurrencyDollarIcon className="w-8 h-8" />
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-slate-500 block">کل فروش (بل‌ها)</span>
+                                            <span className="text-2xl font-black text-slate-800">{formatCurrency(salesStats.totalSales, storeSettings, 'AFN')}</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600">
+                                            <CheckCircleIcon className="w-8 h-8" />
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-slate-500 block">کل وصولی</span>
+                                            <span className="text-2xl font-black text-emerald-600">{formatCurrency(salesStats.totalCollected, storeSettings, 'AFN')}</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="p-3 bg-red-50 rounded-2xl text-red-600">
+                                            <ExclamationCircleIcon className="w-8 h-8" />
+                                        </div>
+                                        <div>
+                                            <span className="text-xs text-slate-500 block">باقیمانده (طلبات)</span>
+                                            <span className="text-2xl font-black text-red-600">{formatCurrency(salesStats.totalOutstanding, storeSettings, 'AFN')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Collection Filters */}
+                                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-end">
+                                    <div className="flex-grow min-w-[200px]">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">فیلتر کارمند (تحصیلدار/میترخوان)</label>
+                                        <select 
+                                            value={salesEmployeeFilter}
+                                            onChange={(e) => setSalesEmployeeFilter(e.target.value)}
+                                            className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="all">همه کارمندان</option>
+                                            {employees.map(emp => (
+                                                <option key={emp} value={emp}>{emp}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">بازه زمانی</label>
+                                        <select 
+                                            value={salesDateFilter}
+                                            onChange={(e) => setSalesDateFilter(e.target.value as any)}
+                                            className="p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="all">همه زمان‌ها</option>
+                                            <option value="week">هفته اخیر</option>
+                                            <option value="month">ماه اخیر</option>
+                                            <option value="year">سال اخیر</option>
+                                            <option value="custom">بازه دلخواه</option>
+                                        </select>
+                                    </div>
+                                    {salesDateFilter === 'custom' && (
+                                        <>
+                                            <div className="w-32">
+                                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">از تاریخ</label>
+                                                <JalaliDateInput 
+                                                    value={salesStartDate}
+                                                    onChange={setSalesStartDate}
+                                                    className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                                />
+                                            </div>
+                                            <div className="w-32">
+                                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">تا تاریخ</label>
+                                                <JalaliDateInput 
+                                                    value={salesEndDate}
+                                                    onChange={setSalesEndDate}
+                                                    className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
                             </div>
-                            {currentCompanyBillingRecords.length === 0 && (
-                                <div className="p-12 text-center text-slate-400 italic">هیچ سابقه میترخوانی ثبت نشده است.</div>
-                            )}
-                        </div>
+                        ) : (
+                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-right">
+                                        <thead className="bg-slate-50 border-b border-slate-100">
+                                            <tr>
+                                                <th className="p-4 text-xs font-bold text-slate-500">مشتری</th>
+                                                <th className="p-4 text-xs font-bold text-slate-500">تاریخ بل</th>
+                                                <th className="p-4 text-xs font-bold text-slate-500">مصرف (واحد)</th>
+                                                <th className="p-4 text-xs font-bold text-slate-500">مبلغ قابل پرداخت</th>
+                                                <th className="p-4 text-xs font-bold text-slate-500">وضعیت</th>
+                                                <th className="p-4 text-xs font-bold text-slate-500">عملیات</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {filteredBillingRecords.map(record => {
+                                                const customer = currentCompanyCustomers.find(c => c.id === record.customerId);
+                                                return (
+                                                    <tr key={record.id} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="p-4">
+                                                            <div className="font-bold text-slate-800 text-sm">{customer?.name}</div>
+                                                            <div className="text-[10px] text-slate-400">میتر: {customer?.meterNumber}</div>
+                                                        </td>
+                                                        <td className="p-4 text-xs text-slate-600">{formatJalaliDate(record.date)}</td>
+                                                        <td className="p-4 text-xs font-bold text-blue-600">{record.consumption}</td>
+                                                        <td className="p-4 text-sm font-black text-slate-900">
+                                                            {formatCurrency(record.amount, storeSettings, 'AFN')}
+                                                            {record.isMinimumFeeApplied && (
+                                                                <div className="text-[9px] text-red-500 font-bold mt-0.5">حداقل هزینه</div>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                                {record.status === 'paid' ? 'پرداخت شده' : 'در انتظار پرداخت'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="flex gap-2">
+                                                                {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
+                                                                    <button 
+                                                                        onClick={() => handleMarkAsPaid(record)}
+                                                                        className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
+                                                                    >
+                                                                        وصول شد
+                                                                    </button>
+                                                                )}
+                                                                <button 
+                                                                    onClick={() => handlePrintInvoice(record)}
+                                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                                    title="چاپ بل"
+                                                                >
+                                                                    <PrintIcon className="w-4 h-4" />
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        const customer = managedCompanyCustomers.find(c => c.id === record.customerId);
+                                                                        if (customer) {
+                                                                            setSelectedCustomerForHistory(customer);
+                                                                            setIsHistoryModalOpen(true);
+                                                                        }
+                                                                    }}
+                                                                    className="p-1.5 text-slate-500 hover:bg-slate-50 rounded-lg"
+                                                                    title="تاریخچه مشتری"
+                                                                >
+                                                                    <HistoryIcon className="w-4 h-4" />
+                                                                </button>
+                                                                {hasPermission('company_billing:delete') && (
+                                                                    <button 
+                                                                        onClick={() => handleDeleteBillingRecord(record.id, customer?.name || 'نامشخص', selectedCompanyId!)}
+                                                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                                                                        title="حذف"
+                                                                    >
+                                                                        <TrashIcon className="w-4 h-4" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {filteredBillingRecords.length === 0 && (
+                                    <div className="p-12 text-center text-slate-400 italic">هیچ سابقه میترخوانی یافت نشد.</div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
                 </>
