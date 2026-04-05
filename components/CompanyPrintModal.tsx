@@ -46,140 +46,101 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                     {/* Printable Area */}
                     <div className="printable-area bg-white mx-auto p-8 rounded-sm min-h-[29.7cm] w-full max-w-[21cm] text-slate-900 print:p-2 print:m-0 print:w-full print:max-w-none print:min-h-0 font-sans" dir="rtl">
                         {/* Header Section */}
-                        <div className="text-center mb-8 print:mb-6">
-                            <h1 className="text-3xl font-black text-slate-900 print:text-2xl mb-1 tracking-tight">{company.name}</h1>
-                            <p className="text-sm font-bold text-slate-500 print:text-[10px] mb-4 uppercase tracking-widest">
+                        <div className="text-center mb-6 print:mb-4">
+                            <h1 className="text-2xl font-black text-slate-900 print:text-xl mb-1 tracking-tight">{company.name}</h1>
+                            <p className="text-[10px] font-bold text-slate-500 print:text-[8px] mb-2 uppercase tracking-widest">
                                 {isBillingRecord ? 'مدیریت آبرسانی و خدمات فنی' : 'تولید و توزیع محصولات'}
                             </p>
-                            <div className="inline-block border-y-2 border-slate-900 py-1 px-8 print:px-6">
-                                <h2 className="text-lg font-black text-slate-900 print:text-sm tracking-widest">{headerTitle}</h2>
+                            <div className="border-y border-slate-900 py-1">
+                                <h2 className="text-sm font-black text-slate-900 print:text-xs tracking-widest">{headerTitle}</h2>
                             </div>
                         </div>
 
                         {/* Metadata Section */}
-                        <div className="grid grid-cols-2 gap-4 text-xs font-bold text-slate-700 mb-8 print:mb-6 print:text-[10px] border-b border-slate-100 pb-4">
-                            <div className="space-y-1.5">
-                                <p className="flex items-center gap-2">
-                                    <span className="text-slate-400">تاریخ:</span>
-                                    <span className="font-mono text-slate-900">{formatJalaliDate(record.date)}</span>
+                        <div className="flex justify-between text-[10px] font-bold text-slate-700 mb-4 print:mb-3 border-b border-slate-100 pb-2">
+                            <div className="space-y-1">
+                                <p className="flex items-center gap-1">
+                                    <span>تاریخ:</span>
+                                    <span className="font-mono text-slate-900">{new Date(record.date).toLocaleDateString('fa-IR')}</span>
                                 </p>
-                                <p className="flex items-center gap-2">
-                                    <span className="text-slate-400">ساعت:</span>
+                                <p className="flex items-center gap-1">
+                                    <span>ساعت:</span>
                                     <span className="font-mono text-slate-900">{new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span>
                                 </p>
                             </div>
-                            <div className="text-left space-y-1.5">
-                                <p className="flex items-center justify-end gap-2">
-                                    <span className="text-slate-400">شماره فاکتور:</span>
-                                    <span className="font-mono text-slate-900">{record.id.slice(-8).toUpperCase()}</span>
-                                </p>
-                                <p className="flex items-center justify-end gap-2">
-                                    <span className="text-slate-400">واحد پول:</span>
-                                    <span className="text-slate-900">افغانی (AFN)</span>
+                            <div className="text-left space-y-1">
+                                <p className="flex items-center justify-end gap-1">
+                                    <span>شماره:</span>
+                                    <span className="font-mono text-slate-900">{record.id.slice(-6).toUpperCase()}</span>
                                 </p>
                             </div>
                         </div>
 
                         {/* Customer Info Section */}
-                        <div className="space-y-3 mb-8 print:mb-6 print:space-y-2">
-                            <div className="flex items-center gap-3">
-                                <span className="text-xs font-black text-slate-400 uppercase print:text-[9px]">مشتری:</span>
-                                <span className="text-lg font-black text-slate-900 print:text-sm">{customer.name} {customer.fatherName ? `فرزند ${customer.fatherName}` : ''}</span>
+                        <div className="mb-6 print:mb-4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black text-slate-400 uppercase">مشتری:</span>
+                                <span className="text-sm font-black text-slate-900">{customer.name} {customer.fatherName ? `فرزند ${customer.fatherName}` : ''}</span>
                             </div>
                             {isBillingRecord && (
-                                <div className="flex items-center gap-3">
-                                    <span className="text-xs font-black text-slate-400 uppercase print:text-[9px]">شماره میتر:</span>
-                                    <span className="text-sm font-mono font-black text-slate-900 print:text-[11px]">{customer.meterNumber || '---'}</span>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase">شماره میتر:</span>
+                                    <span className="text-xs font-mono font-black text-slate-900">{customer.meterNumber || '---'}</span>
                                 </div>
                             )}
-                            <div className="flex items-start gap-3">
-                                <span className="text-xs font-black text-slate-400 uppercase print:text-[9px]">نشانی:</span>
-                                <span className="text-sm font-bold text-slate-800 print:text-[10px] leading-relaxed">{customer.address || '---'} | <span className="font-mono">{customer.phone || '---'}</span></span>
-                            </div>
                         </div>
 
-                        {/* Items Section */}
-                        <div className="mb-8 print:mb-6">
-                            <table className="w-full text-right border-collapse">
-                                <thead>
-                                    <tr className="border-b-2 border-slate-900">
-                                        <th className="py-2 text-xs font-black text-slate-900 print:text-[9px]">شرح کالا / خدمات</th>
-                                        <th className="py-2 text-xs font-black text-slate-900 text-center print:text-[9px]">تعداد</th>
-                                        <th className="py-2 text-xs font-black text-slate-900 text-center print:text-[9px]">فی</th>
-                                        <th className="py-2 text-xs font-black text-slate-900 text-left print:text-[9px]">مجموع</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 print:py-2">
-                                            <div className="text-sm font-black text-slate-900 print:text-[10px]">
-                                                {isBillingRecord ? 'مصرف آب دوره' : (record as ManagedCompanyInvoice).description || 'فروش محصول'}
-                                            </div>
-                                            {isBillingRecord && (
-                                                <div className="text-[10px] text-slate-500 font-mono mt-1 print:text-[8px]">
-                                                    قراءت: {(record as CustomerBillingRecord).previousReading} → {(record as CustomerBillingRecord).currentReading}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="py-4 text-center font-mono font-bold text-slate-900 print:py-2 print:text-[10px]">
-                                            {isBillingRecord ? (record as CustomerBillingRecord).consumption : (record as ManagedCompanyInvoice).units}
-                                        </td>
-                                        <td className="py-4 text-center font-mono text-slate-700 print:py-2 print:text-[10px]">
-                                            {formatCurrency(isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit, storeSettings, 'AFN').replace('AFN', '').trim()}
-                                        </td>
-                                        <td className="py-4 text-left font-mono font-black text-slate-900 print:py-2 print:text-[10px]">
-                                            {formatCurrency(totalAmount, storeSettings, 'AFN').replace('AFN', '').trim()}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        {/* Items Section (Textual Format) */}
+                        <div className="mb-6 print:mb-4 space-y-3 border-t border-b border-slate-900 py-3">
+                            <div className="flex flex-col gap-1">
+                                <div className="text-sm font-black text-slate-900">
+                                    {isBillingRecord ? 'مصرف آب دوره' : (record as ManagedCompanyInvoice).description || 'فروش محصول'}
+                                </div>
+                                {isBillingRecord && (
+                                    <div className="text-[9px] text-slate-500 font-mono">
+                                        قراءت: {(record as CustomerBillingRecord).previousReading} الی {(record as CustomerBillingRecord).currentReading}
+                                    </div>
+                                )}
+                                <div className="flex justify-between items-center mt-1">
+                                    <div className="text-xs font-mono font-bold text-slate-700" dir="ltr">
+                                        {isBillingRecord ? (record as CustomerBillingRecord).consumption : (record as ManagedCompanyInvoice).units} 
+                                        {' '} × {' '}
+                                        {(isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('fa-IR')}
+                                    </div>
+                                    <div className="text-sm font-mono font-black text-slate-900" dir="ltr">
+                                        {totalAmount.toLocaleString('fa-IR')}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Totals Section */}
-                        <div className="border-t-2 border-slate-900 pt-4 mb-12 print:pt-2 print:mb-6">
-                            <div className="flex justify-between items-start mb-4 print:mb-2">
-                                <div className="space-y-2">
-                                    <p className="text-xs font-bold text-slate-700 print:text-[9px]">
-                                        مبلغ به حروف: <span className="text-slate-900 font-black">{numberToPersianWords(totalAmount)} افغانی</span>
-                                    </p>
-                                    {isBillingRecord && (record as CustomerBillingRecord).isMinimumFeeApplied && (
-                                        <p className="text-[10px] font-black text-red-600 print:text-[8px]">
-                                            * توجه: حداقل هزینه خدمات (۱۰۰ افغانی) برای این دوره اعمال گردیده است.
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="text-left">
-                                    <span className="text-xs font-black text-slate-400 uppercase print:text-[9px] block mb-1">{totalLabel}</span>
-                                    <span className="text-3xl font-black text-slate-900 print:text-2xl font-mono" dir="ltr">
-                                        {totalAmount.toLocaleString('fa-IR')} <span className="text-sm print:text-xs">AFN</span>
-                                    </span>
-                                </div>
+                        <div className="mb-8 print:mb-6">
+                            <div className="flex flex-col items-end gap-1">
+                                <span className="text-[10px] font-black text-slate-400 uppercase">{totalLabel}</span>
+                                <span className="text-3xl font-black text-slate-900 font-mono leading-none" dir="ltr">
+                                    {totalAmount.toLocaleString('fa-IR')}
+                                </span>
+                            </div>
+                            <div className="mt-4 text-[10px] font-bold text-slate-700 border-t border-slate-100 pt-2">
+                                مبلغ به حروف: <span className="text-slate-900 font-black">{numberToPersianWords(totalAmount)} افغانی</span>
                             </div>
                             {record.status === 'paid' && (
-                                <div className="flex justify-end mt-2">
-                                    <div className="border-4 border-slate-900 px-6 py-1 rounded-lg rotate-[-5deg]">
-                                        <span className="text-xl font-black text-slate-900 print:text-lg uppercase tracking-widest">وصول شد</span>
-                                    </div>
+                                <div className="mt-4 text-center">
+                                    <span className="text-lg font-black text-slate-900 border-2 border-slate-900 px-4 py-0.5 rounded inline-block rotate-[-2deg]">وصول شد</span>
                                 </div>
                             )}
                         </div>
 
                         {/* Signatures Section */}
-                        <div className="grid grid-cols-3 gap-8 text-center mb-16 print:mb-8 print:gap-4">
-                            <div className="space-y-8 print:space-y-6">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest print:text-[8px]">{registrarLabel}</p>
-                                <div className="border-b border-slate-200 w-3/4 mx-auto"></div>
-                                <p className="text-xs font-black text-slate-900 print:text-[10px]">{registrarValue || '---'}</p>
+                        <div className="grid grid-cols-2 gap-4 text-center mb-10 print:mb-6">
+                            <div className="space-y-4">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{registrarLabel}</p>
+                                <p className="text-[11px] font-black text-slate-900">{registrarValue || '---'}</p>
                             </div>
-                            <div className="space-y-8 print:space-y-6">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest print:text-[8px]">نام وصول‌کننده</p>
-                                <div className="border-b border-slate-200 w-3/4 mx-auto"></div>
-                                <p className="text-xs font-black text-slate-900 print:text-[10px]">{collectorValue}</p>
-                            </div>
-                            <div className="space-y-8 print:space-y-6">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest print:text-[8px]">مهر و امضاء شرکت</p>
-                                <div className="border-b border-slate-200 w-3/4 mx-auto"></div>
-                                <div className="h-10"></div>
+                            <div className="space-y-4">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">مهر و امضاء</p>
+                                <div className="h-8"></div>
                             </div>
                         </div>
 
