@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
-import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType, Shareholder } from '../types';
+import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType, Shareholder, ManagedCompanyInvoice } from '../types';
 import { CompanyType } from '../types';
 import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon } from '../components/icons';
 import { formatCurrency, numberToPersianWords } from '../utils/formatters';
@@ -446,19 +446,24 @@ const CompanyManagement: React.FC = () => {
         setEditingCustomer(null);
     };
 
-    const handlePrintInvoice = (record: CustomerBillingRecord) => {
+    const handlePrintInvoice = (record: CustomerBillingRecord | ManagedCompanyInvoice) => {
         const customer = managedCompanyCustomers.find(c => c.id === record.customerId);
         const company = managedCompanies.find(c => c.id === record.companyId);
         if (!customer || !company) return;
 
-        const totalAmount = record.amount;
+        const isBillingRecord = 'previousReading' in record;
+        const totalAmount = isBillingRecord ? (record as CustomerBillingRecord).amount : (record as ManagedCompanyInvoice).totalAmount;
+        
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
+
+        const title = isBillingRecord ? `بل مصرف آب - ${customer.name}` : `فاکتور فروش - ${customer.name}`;
+        const headerTitle = isBillingRecord ? "بل مصرف آب" : "فاکتور فروش";
 
         const html = `
             <html dir="rtl">
             <head>
-                <title>بل مصرف آب - ${customer.name}</title>
+                <title>${title}</title>
                 <style>
                     @font-face {
                         font-family: 'Inter';
@@ -492,10 +497,10 @@ const CompanyManagement: React.FC = () => {
                     <div class="header">
                         <div class="company-info">
                             <h1>${company.name}</h1>
-                            <p>مدیریت آبرسانی و خدمات فنی</p>
+                            <p>${isBillingRecord ? 'مدیریت آبرسانی و خدمات فنی' : 'تولید و توزیع محصولات'}</p>
                         </div>
                         <div style="text-align: left;">
-                            <h2 style="margin: 0; color: #64748b;">بل مصرف آب</h2>
+                            <h2 style="margin: 0; color: #64748b;">${headerTitle}</h2>
                             <p>تاریخ: ${formatJalaliDate(record.date)}</p>
                         </div>
                     </div>
@@ -503,19 +508,21 @@ const CompanyManagement: React.FC = () => {
                     <div class="invoice-details">
                         <div class="detail-item">
                             <div class="detail-label">نام مشترک:</div>
-                            <div class="detail-value">${customer.name} فرزند ${customer.fatherName}</div>
+                            <div class="detail-value">${customer.name} ${customer.fatherName ? `فرزند ${customer.fatherName}` : ''}</div>
                         </div>
+                        ${isBillingRecord ? `
                         <div class="detail-item">
                             <div class="detail-label">شماره میتر:</div>
-                            <div class="detail-value">${customer.meterNumber}</div>
+                            <div class="detail-value">${customer.meterNumber || '---'}</div>
                         </div>
+                        ` : ''}
                         <div class="detail-item">
                             <div class="detail-label">آدرس:</div>
-                            <div class="detail-value">${customer.address}</div>
+                            <div class="detail-value">${customer.address || '---'}</div>
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">شماره تماس:</div>
-                            <div class="detail-value">${customer.phone}</div>
+                            <div class="detail-value">${customer.phone || '---'}</div>
                         </div>
                     </div>
 
@@ -523,21 +530,25 @@ const CompanyManagement: React.FC = () => {
                         <thead>
                             <tr>
                                 <th>شرح</th>
+                                ${isBillingRecord ? `
                                 <th>قراءت قبلی</th>
                                 <th>قراءت فعلی</th>
-                                <th>مصرف (واحد)</th>
+                                ` : ''}
+                                <th>تعداد/مقدار</th>
                                 <th>قیمت واحد</th>
                                 <th>مجموع</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td>مصرف آب دوره</td>
-                                <td>${record.previousReading}</td>
-                                <td>${record.currentReading}</td>
-                                <td>${record.consumption}</td>
-                                <td>${company.unitPrice}</td>
-                                <td>${record.amount.toLocaleString()}</td>
+                                <td>${isBillingRecord ? 'مصرف آب دوره' : 'فروش محصول'}</td>
+                                ${isBillingRecord ? `
+                                <td>${(record as CustomerBillingRecord).previousReading}</td>
+                                <td>${(record as CustomerBillingRecord).currentReading}</td>
+                                ` : ''}
+                                <td>${isBillingRecord ? (record as CustomerBillingRecord).consumption : (record as ManagedCompanyInvoice).units} ${company.unitName || ''}</td>
+                                <td>${isBillingRecord ? company.unitPrice : (record as ManagedCompanyInvoice).pricePerUnit}</td>
+                                <td>${totalAmount.toLocaleString()}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -547,7 +558,7 @@ const CompanyManagement: React.FC = () => {
                             <span>قابل پرداخت:</span>
                             <span>${totalAmount.toLocaleString()} افغانی</span>
                         </div>
-                        ${record.isMinimumFeeApplied ? `
+                        ${isBillingRecord && (record as CustomerBillingRecord).isMinimumFeeApplied ? `
                             <div class="min-fee-label">
                                 * حداقل هزینه خدمات (۱۰۰ افغانی) اعمال شده است.
                             </div>
@@ -560,11 +571,11 @@ const CompanyManagement: React.FC = () => {
                     <div class="footer">
                         <div class="signature-box">
                             <strong>نام میترخوان:</strong><br/>
-                            ${record.surveyorName || '---'}
+                            ${isBillingRecord ? (record as CustomerBillingRecord).surveyorName || '---' : '---'}
                         </div>
                         <div class="signature-box">
                             <strong>نام تحصیلدار:</strong><br/>
-                            ${record.collectorName || '---'}
+                            ${isBillingRecord ? (record as CustomerBillingRecord).collectorName || '---' : '---'}
                         </div>
                         <div class="signature-box">
                             <strong>مهر و امضاء شرکت:</strong><br/>
@@ -1301,6 +1312,13 @@ const CompanyManagement: React.FC = () => {
                                                                         وصول شد
                                                                     </button>
                                                                 )}
+                                                                <button 
+                                                                    onClick={() => handlePrintInvoice(invoice)}
+                                                                    className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                                                                    title="چاپ فاکتور"
+                                                                >
+                                                                    <PrintIcon className="w-4 h-4" />
+                                                                </button>
                                                                 <button 
                                                                     onClick={() => { 
                                                                         setEditingInvoice(invoice); 
@@ -2364,7 +2382,7 @@ const CompanyManagement: React.FC = () => {
 
             {isHistoryModalOpen && selectedCustomerForHistory && (
                 <Modal 
-                    title={`تاریخچه بل‌های ${selectedCustomerForHistory.name}`} 
+                    title={`تاریخچه فاکتورهای ${selectedCustomerForHistory.name}`} 
                     onClose={() => setIsHistoryModalOpen(false)}
                 >
                     <div className="space-y-4">
@@ -2382,70 +2400,119 @@ const CompanyManagement: React.FC = () => {
                         </div>
 
                         <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1">
-                            {customerBillingRecords
-                                .filter(r => r.customerId === selectedCustomerForHistory.id)
-                                .filter(r => 
-                                    r.date.includes(historySearchQuery) || 
-                                    r.amount.toString().includes(historySearchQuery)
-                                )
-                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                .map(record => (
-                                    <div key={record.id} className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-blue-100 transition-all shadow-sm">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {formatJalaliDate(record.date)}</div>
-                                                <div className="text-sm font-black text-slate-800">{formatCurrency(record.amount, storeSettings, 'AFN')}</div>
-                                            </div>
-                                            <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                                {record.status === 'paid' ? 'پرداخت شده' : 'بدهکار'}
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="grid grid-cols-2 gap-4 mb-4 text-[11px]">
-                                            <div className="bg-slate-50 p-2 rounded-lg">
-                                                <span className="text-slate-400 block mb-1">میتر قبلی</span>
-                                                <span className="font-bold text-slate-700">{record.previousReading}</span>
-                                            </div>
-                                            <div className="bg-slate-50 p-2 rounded-lg">
-                                                <span className="text-slate-400 block mb-1">میتر فعلی</span>
-                                                <span className="font-bold text-slate-700">{record.currentReading}</span>
-                                            </div>
-                                        </div>
+                            {(() => {
+                                const billingRecords = customerBillingRecords
+                                    .filter(r => r.customerId === selectedCustomerForHistory.id)
+                                    .map(r => ({ ...r, type: 'billing' as const }));
+                                
+                                const invoices = managedCompanyInvoices
+                                    .filter(inv => inv.customerId === selectedCustomerForHistory.id)
+                                    .map(inv => ({ ...inv, type: 'invoice' as const }));
 
-                                        <div className="flex gap-2">
-                                            {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
-                                                <button 
-                                                    onClick={() => handleMarkAsPaid(record)}
-                                                    className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
-                                                >
-                                                    وصول شد
-                                                </button>
+                                const combinedHistory = [...billingRecords, ...invoices]
+                                    .filter(r => {
+                                        const amount = r.type === 'billing' ? (r as any).amount : (r as any).totalAmount;
+                                        return r.date.includes(historySearchQuery) || amount.toString().includes(historySearchQuery);
+                                    })
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                                if (combinedHistory.length === 0) {
+                                    return <div className="text-center py-8 text-slate-400 text-sm">هیچ تاریخچه‌ای یافت نشد.</div>;
+                                }
+
+                                return combinedHistory.map(record => {
+                                    const isBilling = record.type === 'billing';
+                                    const amount = isBilling ? (record as any).amount : (record as any).totalAmount;
+                                    
+                                    return (
+                                        <div key={record.id} className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-blue-100 transition-all shadow-sm">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">
+                                                        {isBilling ? 'بل میترخوانی' : 'فاکتور فروش'} | تاریخ: {formatJalaliDate(record.date)}
+                                                    </div>
+                                                    <div className="text-sm font-black text-slate-800">{formatCurrency(amount, storeSettings, 'AFN')}</div>
+                                                </div>
+                                                <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {record.status === 'paid' ? 'پرداخت شده' : 'بدهکار'}
+                                                </div>
+                                            </div>
+                                            
+                                            {isBilling ? (
+                                                <div className="grid grid-cols-2 gap-4 mb-4 text-[11px]">
+                                                    <div className="bg-slate-50 p-2 rounded-lg">
+                                                        <span className="text-slate-400 block mb-1">میتر قبلی</span>
+                                                        <span className="font-bold text-slate-700">{(record as any).previousReading}</span>
+                                                    </div>
+                                                    <div className="bg-slate-50 p-2 rounded-lg">
+                                                        <span className="text-slate-400 block mb-1">میتر فعلی</span>
+                                                        <span className="font-bold text-slate-700">{(record as any).currentReading}</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-slate-50 p-2 rounded-lg mb-4 text-[11px]">
+                                                    <span className="text-slate-400 block mb-1">جزئیات فروش</span>
+                                                    <span className="font-bold text-slate-700">
+                                                        {(record as any).units} {selectedCompany?.unitName} (فی واحد: {formatCurrency((record as any).pricePerUnit, storeSettings, 'AFN')})
+                                                    </span>
+                                                </div>
                                             )}
-                                            <button 
-                                                onClick={() => handlePrintInvoice(record)}
-                                                className="px-3 py-1 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 transition-all"
-                                            >
-                                                چاپ مجدد
-                                            </button>
-                                            {hasPermission('company_billing:edit') && (
+
+                                            <div className="flex gap-2">
+                                                {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
+                                                    <button 
+                                                        onClick={async () => {
+                                                            if (isBilling) {
+                                                                await handleMarkAsPaid(record as any);
+                                                            } else {
+                                                                await updateManagedCompanyInvoice({ ...(record as any), status: 'paid' });
+                                                                showToast("فاکتور به عنوان پرداخت شده علامت‌گذاری شد.");
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
+                                                    >
+                                                        وصول شد
+                                                    </button>
+                                                )}
                                                 <button 
-                                                    onClick={() => {
-                                                        setEditingBillingRecord(record);
-                                                        setSelectedCustomerForBilling(selectedCustomerForHistory);
-                                                        setBillingDate(record.date);
-                                                        setIsBillingModalOpen(true);
-                                                    }}
-                                                    className="px-3 py-1 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-all"
+                                                    onClick={() => handlePrintInvoice(record as any)}
+                                                    className="px-3 py-1 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 transition-all flex items-center gap-1"
                                                 >
-                                                    ویرایش
+                                                    <PrintIcon className="w-3 h-3" />
+                                                    چاپ فاکتور
                                                 </button>
-                                            )}
+                                                {isBilling && hasPermission('company_billing:edit') && (
+                                                    <button 
+                                                        onClick={() => {
+                                                            setEditingBillingRecord(record as any);
+                                                            setSelectedCustomerForBilling(selectedCustomerForHistory);
+                                                            setBillingDate(record.date);
+                                                            setIsBillingModalOpen(true);
+                                                        }}
+                                                        className="px-3 py-1 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-all"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                )}
+                                                {!isBilling && (
+                                                    <button 
+                                                        onClick={() => { 
+                                                            setEditingInvoice(record as any); 
+                                                            setInvoiceDate(record.date); 
+                                                            setInvoiceUnits((record as any).units);
+                                                            setInvoicePricePerUnit((record as any).pricePerUnit);
+                                                            setIsInvoiceModalOpen(true); 
+                                                        }}
+                                                        className="px-3 py-1 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-all"
+                                                    >
+                                                        ویرایش
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
-                            {customerBillingRecords.filter(r => r.customerId === selectedCustomerForHistory.id).length === 0 && (
-                                <div className="text-center py-8 text-slate-400 text-sm">هیچ تاریخچه‌ای یافت نشد.</div>
-                            )}
+                                    );
+                                });
+                            })()}
                         </div>
                     </div>
                 </Modal>
