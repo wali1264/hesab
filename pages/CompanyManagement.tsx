@@ -483,36 +483,62 @@ const CompanyManagement: React.FC = () => {
         showToast('مبلغ با موفقیت دریافت شد');
     };
 
-    const handleDeleteCompany = async (id: string, name: string) => {
-        if (window.confirm(`آیا از حذف شرکت "${name}" اطمینان دارید؟`)) {
-            await deleteManagedCompany(id);
-            await logActivity('company', `حذف شرکت: ${name}`, id, 'company');
-            showToast('شرکت با موفقیت حذف شد');
-        }
+    const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
+
+    const handleDeleteCompany = (id: string, name: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'حذف شرکت',
+            message: `آیا از حذف شرکت "${name}" اطمینان دارید؟`,
+            onConfirm: async () => {
+                await deleteManagedCompany(id);
+                await logActivity('company', `حذف شرکت: ${name}`, id, 'company');
+                showToast('شرکت با موفقیت حذف شد');
+                setConfirmModal(null);
+            }
+        });
     };
 
-    const handleDeleteLedgerEntry = async (id: string, description: string, companyId: string) => {
-        if (window.confirm(`آیا از حذف این رکورد اطمینان دارید؟`)) {
-            await deleteLedgerEntry(id);
-            await logActivity('company', `حذف رکورد دفتر کل: ${description}`, id, 'company', companyId);
-            showToast('رکورد با موفقیت حذف شد');
-        }
+    const handleDeleteLedgerEntry = (id: string, description: string, companyId: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'حذف رکورد دفتر کل',
+            message: `آیا از حذف این رکورد اطمینان دارید؟`,
+            onConfirm: async () => {
+                await deleteLedgerEntry(id);
+                await logActivity('company', `حذف رکورد دفتر کل: ${description}`, id, 'company', companyId);
+                showToast('رکورد با موفقیت حذف شد');
+                setConfirmModal(null);
+            }
+        });
     };
 
-    const handleDeleteCustomer = async (id: string, name: string, companyId: string) => {
-        if (window.confirm(`آیا از حذف مشتری "${name}" اطمینان دارید؟`)) {
-            await deleteManagedCompanyCustomer(id);
-            await logActivity('company', `حذف مشتری: ${name}`, id, 'company', companyId);
-            showToast('مشتری با موفقیت حذف شد');
-        }
+    const handleDeleteCustomer = (id: string, name: string, companyId: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'حذف مشتری',
+            message: `آیا از حذف مشتری "${name}" اطمینان دارید؟`,
+            onConfirm: async () => {
+                await deleteManagedCompanyCustomer(id);
+                await logActivity('company', `حذف مشتری: ${name}`, id, 'company', companyId);
+                showToast('مشتری با موفقیت حذف شد');
+                setConfirmModal(null);
+            }
+        });
     };
 
-    const handleDeleteBillingRecord = async (id: string, customerName: string, companyId: string) => {
-        if (window.confirm(`آیا از حذف این رکورد میترخوانی برای "${customerName}" اطمینان دارید؟`)) {
-            await deleteCustomerBillingRecord(id);
-            await logActivity('company', `حذف رکورد میترخوانی: ${customerName}`, id, 'company', companyId);
-            showToast('رکورد با موفقیت حذف شد');
-        }
+    const handleDeleteBillingRecord = (id: string, customerName: string, companyId: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'حذف رکورد میترخوانی',
+            message: `آیا از حذف این رکورد میترخوانی برای "${customerName}" اطمینان دارید؟`,
+            onConfirm: async () => {
+                await deleteCustomerBillingRecord(id);
+                await logActivity('company', `حذف رکورد میترخوانی: ${customerName}`, id, 'company', companyId);
+                showToast('رکورد با موفقیت حذف شد');
+                setConfirmModal(null);
+            }
+        });
     };
 
     const addShareholder = () => {
@@ -544,6 +570,7 @@ const CompanyManagement: React.FC = () => {
             name: formData.get('name') as string,
             managerName: formData.get('managerName') as string,
             phone: formData.get('phone') as string,
+            address: formData.get('address') as string,
             establishmentCost: Number(formData.get('establishmentCost')) || 0,
             unitPrice: Number(formData.get('unitPrice')) || 0,
             unitName: formData.get('unitName') as string || undefined,
@@ -2573,6 +2600,15 @@ const CompanyManagement: React.FC = () => {
                                 placeholder="07xx xxx xxx"
                             />
                         </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">آدرس شرکت</label>
+                            <input 
+                                name="address" 
+                                defaultValue={editingCompany?.address}
+                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                placeholder="آدرس دقیق شرکت..."
+                            />
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">هزینه تاسیس (افغانی)</label>
@@ -3159,6 +3195,32 @@ const CompanyManagement: React.FC = () => {
                     </form>
                 </Modal>
             )}
+            {confirmModal?.isOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[300] p-4 modal-animate">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-sm overflow-hidden">
+                        <div className="p-6 text-center">
+                            <ExclamationCircleIcon className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                            <h3 className="text-xl font-bold text-slate-800 mb-2">{confirmModal.title}</h3>
+                            <p className="text-slate-600 mb-6">{confirmModal.message}</p>
+                            <div className="flex gap-3">
+                                <button 
+                                    onClick={() => setConfirmModal(null)}
+                                    className="flex-1 p-3 rounded-xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-all"
+                                >
+                                    انصراف
+                                </button>
+                                <button 
+                                    onClick={confirmModal.onConfirm}
+                                    className="flex-1 p-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-600/20"
+                                >
+                                    تایید و حذف
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {printRecord && (
                 <CompanyPrintModal 
                     record={printRecord.record}

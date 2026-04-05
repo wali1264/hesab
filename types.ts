@@ -318,6 +318,7 @@ export interface ManagedCompany {
     name: string;
     managerName: string;
     phone: string;
+    address?: string; // NEW: Company address
     createdAt: string;
     establishmentCost?: number;
     unitPrice?: number; // Price per unit of water/ice/etc
