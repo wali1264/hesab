@@ -390,6 +390,8 @@ export interface ManagedCompanyInvoice {
     date: string;
     status: 'paid' | 'unpaid';
     description?: string;
+    registrarName?: string;
+    collectorName?: string;
 }
 
 export interface ManagedCompanyProductionLog {

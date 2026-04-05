@@ -454,6 +454,17 @@ const CompanyManagement: React.FC = () => {
         const isBillingRecord = 'previousReading' in record;
         const totalAmount = isBillingRecord ? (record as CustomerBillingRecord).amount : (record as ManagedCompanyInvoice).totalAmount;
         
+        const registrarLabel = isBillingRecord ? "نام میترخوان" : "نام ثبت‌کننده فاکتور";
+        const registrarValue = isBillingRecord 
+            ? (record as CustomerBillingRecord).surveyorName 
+            : (record as ManagedCompanyInvoice).registrarName;
+        
+        const collectorValue = record.status === 'paid' 
+            ? (record as any).collectorName || '---' 
+            : '<span style="color: #dc2626;">هنوز وصول نشده</span>';
+            
+        const totalLabel = record.status === 'paid' ? "مبلغ وصول شده:" : "مبلغ قابل پرداخت:";
+        
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
 
@@ -471,7 +482,7 @@ const CompanyManagement: React.FC = () => {
                     }
                     body { font-family: 'Tahoma', 'Arial', sans-serif; padding: 40px; color: #333; }
                     .invoice-box { max-width: 800px; margin: auto; border: 2px solid #eee; padding: 30px; border-radius: 10px; }
-                    .header { display: flex; justify-between; align-items: center; border-bottom: 2px solid #3b82f6; padding-bottom: 20px; margin-bottom: 20px; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #3b82f6; padding-bottom: 20px; margin-bottom: 20px; }
                     .company-info h1 { margin: 0; color: #1e40af; font-size: 24px; }
                     .invoice-details { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
                     .detail-item { margin-bottom: 10px; }
@@ -480,9 +491,24 @@ const CompanyManagement: React.FC = () => {
                     table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
                     th { background: #f8fafc; text-align: right; padding: 12px; border-bottom: 2px solid #e2e8f0; }
                     td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
-                    .total-section { background: #f1f5f9; padding: 20px; border-radius: 10px; }
+                    .total-section { background: #f1f5f9; padding: 20px; border-radius: 10px; position: relative; }
                     .total-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
-                    .grand-total { font-size: 20px; font-weight: black; color: #1e40af; border-top: 2px solid #cbd5e1; pt-10; margin-top: 10px; }
+                    .grand-total { font-size: 20px; font-weight: black; color: #1e40af; border-top: 2px solid #cbd5e1; padding-top: 10px; margin-top: 10px; }
+                    .paid-stamp { 
+                        position: absolute; 
+                        top: 50%; 
+                        left: 50%; 
+                        transform: translate(-50%, -50%) rotate(-15deg);
+                        border: 4px solid #10b981;
+                        color: #10b981;
+                        padding: 10px 20px;
+                        font-size: 32px;
+                        font-weight: black;
+                        text-transform: uppercase;
+                        border-radius: 10px;
+                        opacity: 0.2;
+                        pointer-events: none;
+                    }
                     .footer { margin-top: 50px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; text-align: center; font-size: 12px; }
                     .signature-box { border-top: 1px solid #ccc; padding-top: 10px; margin-top: 40px; }
                     .min-fee-label { color: #dc2626; font-weight: bold; font-size: 12px; margin-top: 5px; }
@@ -554,8 +580,9 @@ const CompanyManagement: React.FC = () => {
                     </table>
 
                     <div class="total-section">
+                        ${record.status === 'paid' ? '<div class="paid-stamp">وصول شد</div>' : ''}
                         <div class="total-row grand-total">
-                            <span>قابل پرداخت:</span>
+                            <span>${totalLabel}</span>
                             <span>${totalAmount.toLocaleString()} افغانی</span>
                         </div>
                         ${isBillingRecord && (record as CustomerBillingRecord).isMinimumFeeApplied ? `
@@ -570,12 +597,12 @@ const CompanyManagement: React.FC = () => {
 
                     <div class="footer">
                         <div class="signature-box">
-                            <strong>نام میترخوان:</strong><br/>
-                            ${isBillingRecord ? (record as CustomerBillingRecord).surveyorName || '---' : '---'}
+                            <strong>${registrarLabel}:</strong><br/>
+                            ${registrarValue || '---'}
                         </div>
                         <div class="signature-box">
-                            <strong>نام تحصیلدار:</strong><br/>
-                            ${isBillingRecord ? (record as CustomerBillingRecord).collectorName || '---' : '---'}
+                            <strong>نام وصول‌کننده:</strong><br/>
+                            ${collectorValue}
                         </div>
                         <div class="signature-box">
                             <strong>مهر و امضاء شرکت:</strong><br/>
@@ -585,7 +612,6 @@ const CompanyManagement: React.FC = () => {
                 <script>
                     window.onload = () => {
                         window.print();
-                        // window.close(); // Optional: close after printing
                     };
                 </script>
             </body>

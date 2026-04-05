@@ -2716,9 +2716,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addCustomerBillingRecord = async (recordData: Omit<CustomerBillingRecord, 'id'>) => {
+        const username = state.currentUser?.username || 'مدیر';
         const newRecord: CustomerBillingRecord = {
             ...recordData,
-            id: crypto.randomUUID()
+            id: crypto.randomUUID(),
+            surveyorName: username,
+            collectorName: recordData.status === 'paid' ? username : ''
         };
         await api.addCustomerBillingRecord(newRecord);
         setState(prev => ({ ...prev, customerBillingRecords: [...prev.customerBillingRecords, newRecord] }));
@@ -2726,10 +2729,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateCustomerBillingRecord = async (record: CustomerBillingRecord) => {
-        await api.updateCustomerBillingRecord(record);
+        const username = state.currentUser?.username || 'مدیر';
+        const updatedRecord = { ...record };
+        
+        // If status is changing to paid, set collectorName
+        const oldRecord = state.customerBillingRecords.find(r => r.id === record.id);
+        if (record.status === 'paid' && oldRecord?.status === 'unpaid') {
+            updatedRecord.collectorName = username;
+        }
+
+        await api.updateCustomerBillingRecord(updatedRecord);
         setState(prev => ({
             ...prev,
-            customerBillingRecords: prev.customerBillingRecords.map(r => r.id === record.id ? record : r)
+            customerBillingRecords: prev.customerBillingRecords.map(r => r.id === updatedRecord.id ? updatedRecord : r)
         }));
         return { success: true, message: 'قبض بروزرسانی شد.' };
     };
@@ -2744,9 +2756,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     const addManagedCompanyInvoice = async (invoiceData: Omit<ManagedCompanyInvoice, 'id'>) => {
+        const username = state.currentUser?.username || 'مدیر';
         const newInvoice: ManagedCompanyInvoice = {
             ...invoiceData,
-            id: crypto.randomUUID()
+            id: crypto.randomUUID(),
+            registrarName: username,
+            collectorName: invoiceData.status === 'paid' ? username : ''
         };
         await api.addManagedCompanyInvoice(newInvoice);
         setState(prev => ({ ...prev, managedCompanyInvoices: [...prev.managedCompanyInvoices, newInvoice] }));
@@ -2754,10 +2769,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateManagedCompanyInvoice = async (invoice: ManagedCompanyInvoice) => {
-        await api.updateManagedCompanyInvoice(invoice);
+        const username = state.currentUser?.username || 'مدیر';
+        const updatedInvoice = { ...invoice };
+        
+        // If status is changing to paid, set collectorName
+        const oldInvoice = state.managedCompanyInvoices.find(i => i.id === invoice.id);
+        if (invoice.status === 'paid' && oldInvoice?.status === 'unpaid') {
+            updatedInvoice.collectorName = username;
+        }
+
+        await api.updateManagedCompanyInvoice(updatedInvoice);
         setState(prev => ({
             ...prev,
-            managedCompanyInvoices: prev.managedCompanyInvoices.map(i => i.id === invoice.id ? invoice : i)
+            managedCompanyInvoices: prev.managedCompanyInvoices.map(i => i.id === updatedInvoice.id ? updatedInvoice : i)
         }));
         return { success: true, message: 'فاکتور بروزرسانی شد.' };
     };
