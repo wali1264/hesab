@@ -285,7 +285,10 @@ const CompanyManagement: React.FC = () => {
         const invoices = managedCompanyInvoices.filter(inv => inv.customerId === customer.id && inv.status === 'unpaid');
         const unpaidTotal = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
         
-        return initialAdjusted + unpaidTotal;
+        const billingRecords = customerBillingRecords.filter(r => r.customerId === customer.id && r.status === 'unpaid');
+        const unpaidBillingTotal = billingRecords.reduce((sum, r) => sum + r.amount, 0);
+        
+        return initialAdjusted + unpaidTotal + unpaidBillingTotal;
     };
 
     const handleMarkAsPaid = async (record: CustomerBillingRecord) => {
@@ -756,9 +759,10 @@ const CompanyManagement: React.FC = () => {
         return { expenses, waterRevenue, equipmentRevenue, totalExpenses, totalWater, totalEquipment };
     }, [selectedCompanyId, selectedCompany, managedCompanyLedger]);
 
-    if (selectedCompanyId && selectedCompany) {
-        return (
-            <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+    return (
+        <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+            {selectedCompanyId && selectedCompany ? (
+                <>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                         <button 
@@ -1112,6 +1116,7 @@ const CompanyManagement: React.FC = () => {
                                             <div>
                                                 <h3 className="font-bold text-slate-800">{customer.name}</h3>
                                                 <p className="text-xs text-slate-500">فرزند: {customer.fatherName}</p>
+                                                <p className="text-xs text-slate-500">موبایل: {customer.phone}</p>
                                             </div>
                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {hasPermission('company_customer:edit') && (
@@ -1178,6 +1183,8 @@ const CompanyManagement: React.FC = () => {
                                                             setEditingInvoice(null);
                                                             setSelectedCustomerIdForInvoice(customer.id);
                                                             setInvoiceDate(new Date().toISOString().split('T')[0]);
+                                                            setInvoiceUnits(0);
+                                                            setInvoicePricePerUnit(selectedCompany?.unitPrice || 0);
                                                             setIsInvoiceModalOpen(true); 
                                                         }}
                                                         className="flex-grow flex items-center justify-center gap-2 bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold hover:bg-blue-600 hover:text-white transition-all"
@@ -1229,7 +1236,14 @@ const CompanyManagement: React.FC = () => {
                                     <EyeIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                                 </div>
                                 <button 
-                                    onClick={() => { setEditingInvoice(null); setSelectedCustomerIdForInvoice(null); setInvoiceDate(new Date().toISOString().split('T')[0]); setIsInvoiceModalOpen(true); }}
+                                    onClick={() => { 
+                                        setEditingInvoice(null); 
+                                        setSelectedCustomerIdForInvoice(null); 
+                                        setInvoiceDate(new Date().toISOString().split('T')[0]); 
+                                        setInvoiceUnits(0);
+                                        setInvoicePricePerUnit(selectedCompany?.unitPrice || 0);
+                                        setIsInvoiceModalOpen(true); 
+                                    }}
                                     className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
                                 >
                                     <PlusIcon className="w-5 h-5" />
@@ -1288,7 +1302,13 @@ const CompanyManagement: React.FC = () => {
                                                                     </button>
                                                                 )}
                                                                 <button 
-                                                                    onClick={() => { setEditingInvoice(invoice); setInvoiceDate(invoice.date); setIsInvoiceModalOpen(true); }}
+                                                                    onClick={() => { 
+                                                                        setEditingInvoice(invoice); 
+                                                                        setInvoiceDate(invoice.date); 
+                                                                        setInvoiceUnits(invoice.units);
+                                                                        setInvoicePricePerUnit(invoice.pricePerUnit);
+                                                                        setIsInvoiceModalOpen(true); 
+                                                                    }}
                                                                     className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
                                                                 >
                                                                     <EditIcon className="w-4 h-4" />
@@ -1520,292 +1540,9 @@ const CompanyManagement: React.FC = () => {
                         </div>
                     </div>
                 )}
-
-                {isAddLedgerModalOpen && (
-                    <Modal 
-                        title={editingLedgerEntry ? 'ویرایش رکورد' : 'ثبت رکورد جدید'} 
-                        onClose={() => setIsAddLedgerModalOpen(false)}
-                    >
-                        <form onSubmit={handleAddLedgerEntry} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">نوع رکورد</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <button 
-                                        type="button"
-                                        onClick={() => setLedgerEntryType('expense')}
-                                        className={`p-2 text-xs rounded-xl border transition-all ${ledgerEntryType === 'expense' ? 'bg-red-50 border-red-200 text-red-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}
-                                    >
-                                        هزینه
-                                    </button>
-                                    <button 
-                                        type="button"
-                                        onClick={() => setLedgerEntryType('water_revenue')}
-                                        className={`p-2 text-xs rounded-xl border transition-all ${ledgerEntryType === 'water_revenue' ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}
-                                    >
-                                        عواید آب
-                                    </button>
-                                    <button 
-                                        type="button"
-                                        onClick={() => setLedgerEntryType('equipment_revenue')}
-                                        className={`p-2 text-xs rounded-xl border transition-all ${ledgerEntryType === 'equipment_revenue' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}
-                                    >
-                                        عواید تجهیزات
-                                    </button>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">مبلغ (افغانی)</label>
-                                <input 
-                                    name="amount" 
-                                    type="number" 
-                                    required 
-                                    defaultValue={editingLedgerEntry?.amount}
-                                    onChange={(e) => setAmountInWords(numberToPersianWords(Number(e.target.value)))}
-                                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-                                    placeholder="0"
-                                />
-                                {amountInWords && <p className="text-xs text-blue-600 mt-1 font-bold">{amountInWords} افغانی</p>}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ</label>
-                                <JalaliDateInput 
-                                    value={ledgerDate} 
-                                    onChange={(val) => setLedgerDate(val)} 
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">توضیحات</label>
-                                <textarea 
-                                    name="description" 
-                                    required 
-                                    defaultValue={editingLedgerEntry?.description}
-                                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all h-24" 
-                                    placeholder="شرح تراکنش..."
-                                />
-                            </div>
-                            <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20">
-                                {editingLedgerEntry ? 'بروزرسانی رکورد' : 'ثبت رکورد'}
-                            </button>
-                        </form>
-                    </Modal>
-                )}
-
-                {isAddCustomerModalOpen && (
-                    <Modal 
-                        title={editingCustomer ? 'ویرایش اطلاعات مشتری' : 'ثبت مشتری جدید'} 
-                        onClose={() => setIsAddCustomerModalOpen(false)}
-                    >
-                        <form onSubmit={handleAddCustomer} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">نام مشتری</label>
-                                    <input name="name" required defaultValue={editingCustomer?.name} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">نام پدر</label>
-                                    <input name="fatherName" required defaultValue={editingCustomer?.fatherName} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">آدرس</label>
-                                <input name="address" required defaultValue={editingCustomer?.address} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                {selectedCompany?.type === CompanyType.WATER ? (
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">شماره میتر</label>
-                                        <input name="meterNumber" required defaultValue={editingCustomer?.meterNumber} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                                    </div>
-                                ) : (
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">نوع تراز (باقی سابق)</label>
-                                        <select name="initialBalanceType" required defaultValue={editingCustomer?.initialBalanceType || 'we_request'} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500">
-                                            <option value="we_request">ما طلبکاریم (بدهی مشتری)</option>
-                                            <option value="they_request">آن‌ها طلبکارند (طلب مشتری)</option>
-                                        </select>
-                                    </div>
-                                )}
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">شماره تماس</label>
-                                    <input name="phone" required defaultValue={editingCustomer?.phone} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                                </div>
-                            </div>
-                            {selectedCompany?.type === CompanyType.WATER ? (
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">قراءت اولیه میتر</label>
-                                    <input name="initialReading" type="number" required defaultValue={editingCustomer?.initialReading} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
-                                </div>
-                            ) : (
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">باقی سابق (افغانی)</label>
-                                    <input name="initialBalance" type="number" required defaultValue={editingCustomer?.initialBalance || 0} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" />
-                                </div>
-                            )}
-                            <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
-                                {editingCustomer ? 'بروزرسانی اطلاعات' : 'ثبت مشتری'}
-                            </button>
-                        </form>
-                    </Modal>
-                )}
-
-                {isBillingModalOpen && selectedCustomerForBilling && (
-                    <Modal 
-                        title={`ثبت میترخوانی - ${selectedCustomerForBilling.name}`} 
-                        onClose={() => setIsBillingModalOpen(false)}
-                        headerActions={
-                            <button 
-                                onClick={() => {
-                                    setSelectedCustomerForHistory(selectedCustomerForBilling);
-                                    setIsHistoryModalOpen(true);
-                                }}
-                                className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-all"
-                                title="تاریخچه بل‌ها"
-                            >
-                                <HistoryIcon className="w-5 h-5" />
-                            </button>
-                        }
-                    >
-                        <form onSubmit={handleAddBillingRecord} className="space-y-4">
-                            {(() => {
-                                const lastRecord = [...currentCompanyBillingRecords]
-                                    .filter(r => r.customerId === selectedCustomerForBilling.id)
-                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-                                const prevReading = lastRecord ? lastRecord.currentReading : selectedCustomerForBilling.initialReading;
-                                
-                                // Calculate current arrears
-                                const unpaidRecords = currentCompanyBillingRecords.filter(r => r.customerId === selectedCustomerForBilling.id && r.status === 'unpaid');
-                                const arrears = unpaidRecords.reduce((sum, r) => sum + r.amount, 0);
-                                
-                                return (
-                                    <>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">قراءت قبلی</label>
-                                                <input name="previousReading" type="number" readOnly value={prevReading} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 text-slate-500 outline-none" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">قراءت فعلی</label>
-                                                <input name="currentReading" type="number" required defaultValue={editingBillingRecord?.currentReading} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" autoFocus />
-                                            </div>
-                                        </div>
-                                        <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-blue-700">قیمت فی واحد:</span>
-                                                <span className="font-bold text-blue-800">{formatCurrency(selectedCompany?.unitPrice || 0, storeSettings, 'AFN')}</span>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ قراءت</label>
-                                            <JalaliDateInput value={billingDate} onChange={setBillingDate} />
-                                        </div>
-                                        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                                            <input type="checkbox" name="isPaid" id="isPaid" defaultChecked={editingBillingRecord?.isPaid} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
-                                            <label htmlFor="isPaid" className="text-sm font-bold text-slate-700 cursor-pointer">مبلغ پرداخت شده است</label>
-                                        </div>
-                                        <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
-                                            ثبت و محاسبه بل
-                                        </button>
-                                    </>
-                                );
-                            })()}
-                        </form>
-                    </Modal>
-                )}
-
-                {isHistoryModalOpen && selectedCustomerForHistory && (
-                    <Modal 
-                        title={`تاریخچه بل‌های ${selectedCustomerForHistory.name}`} 
-                        onClose={() => setIsHistoryModalOpen(false)}
-                    >
-                        <div className="space-y-4">
-                            <div className="relative">
-                                <input 
-                                    type="text"
-                                    placeholder="جستجو در تاریخچه (تاریخ یا مبلغ)..."
-                                    value={historySearchQuery}
-                                    onChange={(e) => setHistorySearchQuery(e.target.value)}
-                                    className="w-full p-3 pr-10 rounded-xl border border-slate-200 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                                </div>
-                            </div>
-
-                            <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1">
-                                {customerBillingRecords
-                                    .filter(r => r.customerId === selectedCustomerForHistory.id)
-                                    .filter(r => 
-                                        r.date.includes(historySearchQuery) || 
-                                        r.amount.toString().includes(historySearchQuery)
-                                    )
-                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                    .map(record => (
-                                        <div key={record.id} className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-blue-100 transition-all shadow-sm">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {formatJalaliDate(record.date)}</div>
-                                                    <div className="text-sm font-black text-slate-800">{formatCurrency(record.amount, storeSettings, 'AFN')}</div>
-                                                </div>
-                                                <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                                    {record.status === 'paid' ? 'پرداخت شده' : 'بدهکار'}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="grid grid-cols-2 gap-4 mb-4 text-[11px]">
-                                                <div className="bg-slate-50 p-2 rounded-lg">
-                                                    <span className="text-slate-400 block mb-1">میتر قبلی</span>
-                                                    <span className="font-bold text-slate-700">{record.previousReading}</span>
-                                                </div>
-                                                <div className="bg-slate-50 p-2 rounded-lg">
-                                                    <span className="text-slate-400 block mb-1">میتر فعلی</span>
-                                                    <span className="font-bold text-slate-700">{record.currentReading}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex gap-2">
-                                                {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
-                                                    <button 
-                                                        onClick={() => handleMarkAsPaid(record)}
-                                                        className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
-                                                    >
-                                                        وصول شد
-                                                    </button>
-                                                )}
-                                                <button 
-                                                    onClick={() => handlePrintInvoice(record)}
-                                                    className="px-3 py-1 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 transition-all"
-                                                >
-                                                    چاپ مجدد
-                                                </button>
-                                                {hasPermission('company_billing:edit') && (
-                                                    <button 
-                                                        onClick={() => {
-                                                            setEditingBillingRecord(record);
-                                                            setSelectedCustomerForBilling(selectedCustomerForHistory);
-                                                            setBillingDate(record.date);
-                                                            setIsBillingModalOpen(true);
-                                                        }}
-                                                        className="px-3 py-1 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-all"
-                                                    >
-                                                        ویرایش
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                {customerBillingRecords.filter(r => r.customerId === selectedCustomerForHistory.id).length === 0 && (
-                                    <div className="text-center py-8 text-slate-400 text-sm">هیچ تاریخچه‌ای یافت نشد.</div>
-                                )}
-                            </div>
-                        </div>
-                    </Modal>
-                )}
-            </div>
-        );
-    }
-
-    return (
-        <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+                </>
+            ) : (
+                <>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
@@ -2334,6 +2071,8 @@ const CompanyManagement: React.FC = () => {
                     </div>
                 </div>
             )}
+                </>
+            )}
 
             {isCategoryModalOpen && (
                 <Modal 
@@ -2598,7 +2337,7 @@ const CompanyManagement: React.FC = () => {
                                         </div>
                                         {shareholders.length > 1 && (
                                             <button 
-                                                type="button"
+                                                type="button" 
                                                 onClick={() => removeShareholder(index)}
                                                 className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                             >
@@ -2622,231 +2361,425 @@ const CompanyManagement: React.FC = () => {
                     </form>
                 </Modal>
             )}
-                {isHistoryModalOpen && selectedCustomerForHistory && (
-                    <Modal 
-                        title={`تاریخچه بل‌های ${selectedCustomerForHistory.name}`} 
-                        onClose={() => setIsHistoryModalOpen(false)}
-                    >
-                        <div className="space-y-4">
-                            <div className="relative">
-                                <input 
-                                    type="text"
-                                    placeholder="جستجو در تاریخچه (تاریخ یا مبلغ)..."
-                                    value={historySearchQuery}
-                                    onChange={(e) => setHistorySearchQuery(e.target.value)}
-                                    className="w-full p-3 pr-10 rounded-xl border border-slate-200 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                                </div>
-                            </div>
 
-                            <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1">
-                                {customerBillingRecords
-                                    .filter(r => r.customerId === selectedCustomerForHistory.id)
-                                    .filter(r => 
-                                        r.date.includes(historySearchQuery) || 
-                                        r.amount.toString().includes(historySearchQuery)
-                                    )
-                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                    .map(record => (
-                                        <div key={record.id} className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-blue-100 transition-all shadow-sm">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {formatJalaliDate(record.date)}</div>
-                                                    <div className="text-sm font-black text-slate-800">{formatCurrency(record.amount, storeSettings, 'AFN')}</div>
-                                                </div>
-                                                <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                                    {record.status === 'paid' ? 'پرداخت شده' : 'بدهکار'}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="grid grid-cols-2 gap-4 mb-4 text-[11px]">
-                                                <div className="bg-slate-50 p-2 rounded-lg">
-                                                    <span className="text-slate-400 block mb-1">میتر قبلی</span>
-                                                    <span className="font-bold text-slate-700">{record.previousReading}</span>
-                                                </div>
-                                                <div className="bg-slate-50 p-2 rounded-lg">
-                                                    <span className="text-slate-400 block mb-1">میتر فعلی</span>
-                                                    <span className="font-bold text-slate-700">{record.currentReading}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex gap-2">
-                                                {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
-                                                    <button 
-                                                        onClick={() => handleMarkAsPaid(record)}
-                                                        className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
-                                                    >
-                                                        وصول شد
-                                                    </button>
-                                                )}
-                                                <button 
-                                                    onClick={() => handlePrintInvoice(record)}
-                                                    className="px-3 py-1 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 transition-all"
-                                                >
-                                                    چاپ مجدد
-                                                </button>
-                                                {hasPermission('company_billing:edit') && (
-                                                    <button 
-                                                        onClick={() => {
-                                                            setEditingBillingRecord(record);
-                                                            setSelectedCustomerForBilling(selectedCustomerForHistory);
-                                                            setBillingDate(record.date);
-                                                            setIsBillingModalOpen(true);
-                                                        }}
-                                                        className="px-3 py-1 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-all"
-                                                    >
-                                                        ویرایش
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                {customerBillingRecords.filter(r => r.customerId === selectedCustomerForHistory.id).length === 0 && (
-                                    <div className="text-center py-8 text-slate-400 text-sm">هیچ تاریخچه‌ای یافت نشد.</div>
-                                )}
+            {isHistoryModalOpen && selectedCustomerForHistory && (
+                <Modal 
+                    title={`تاریخچه بل‌های ${selectedCustomerForHistory.name}`} 
+                    onClose={() => setIsHistoryModalOpen(false)}
+                >
+                    <div className="space-y-4">
+                        <div className="relative">
+                            <input 
+                                type="text"
+                                placeholder="جستجو در تاریخچه (تاریخ یا مبلغ)..."
+                                value={historySearchQuery}
+                                onChange={(e) => setHistorySearchQuery(e.target.value)}
+                                className="w-full p-3 pr-10 rounded-xl border border-slate-200 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                             </div>
                         </div>
-                    </Modal>
-                )}
 
-                {isInvoiceModalOpen && (
-                    <Modal 
-                        title={editingInvoice ? 'ویرایش فاکتور' : 'ثبت فاکتور جدید'} 
-                        onClose={() => setIsInvoiceModalOpen(false)}
-                    >
-                        <form onSubmit={handleAddInvoice} className="space-y-4">
-                            {!selectedCustomerIdForInvoice && (
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">مشتری</label>
-                                    <select 
-                                        name="customerId" 
-                                        required 
-                                        defaultValue={editingInvoice?.customerId || selectedCustomerIdForInvoice || ''}
-                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="">انتخاب مشتری...</option>
-                                        {managedCompanyCustomers
-                                            .filter(c => c.companyId === selectedCompanyId)
-                                            .map(c => (
-                                                <option key={c.id} value={c.id}>{c.name}</option>
-                                            ))}
-                                    </select>
-                                </div>
+                        <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1">
+                            {customerBillingRecords
+                                .filter(r => r.customerId === selectedCustomerForHistory.id)
+                                .filter(r => 
+                                    r.date.includes(historySearchQuery) || 
+                                    r.amount.toString().includes(historySearchQuery)
+                                )
+                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                .map(record => (
+                                    <div key={record.id} className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-blue-100 transition-all shadow-sm">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div>
+                                                <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">تاریخ ثبت: {formatJalaliDate(record.date)}</div>
+                                                <div className="text-sm font-black text-slate-800">{formatCurrency(record.amount, storeSettings, 'AFN')}</div>
+                                            </div>
+                                            <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                {record.status === 'paid' ? 'پرداخت شده' : 'بدهکار'}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 gap-4 mb-4 text-[11px]">
+                                            <div className="bg-slate-50 p-2 rounded-lg">
+                                                <span className="text-slate-400 block mb-1">میتر قبلی</span>
+                                                <span className="font-bold text-slate-700">{record.previousReading}</span>
+                                            </div>
+                                            <div className="bg-slate-50 p-2 rounded-lg">
+                                                <span className="text-slate-400 block mb-1">میتر فعلی</span>
+                                                <span className="font-bold text-slate-700">{record.currentReading}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            {record.status === 'unpaid' && hasPermission('company_billing:settle') && (
+                                                <button 
+                                                    onClick={() => handleMarkAsPaid(record)}
+                                                    className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
+                                                >
+                                                    وصول شد
+                                                </button>
+                                            )}
+                                            <button 
+                                                onClick={() => handlePrintInvoice(record)}
+                                                className="px-3 py-1 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 transition-all"
+                                            >
+                                                چاپ مجدد
+                                            </button>
+                                            {hasPermission('company_billing:edit') && (
+                                                <button 
+                                                    onClick={() => {
+                                                        setEditingBillingRecord(record);
+                                                        setSelectedCustomerForBilling(selectedCustomerForHistory);
+                                                        setBillingDate(record.date);
+                                                        setIsBillingModalOpen(true);
+                                                    }}
+                                                    className="px-3 py-1 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-all"
+                                                >
+                                                    ویرایش
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            {customerBillingRecords.filter(r => r.customerId === selectedCustomerForHistory.id).length === 0 && (
+                                <div className="text-center py-8 text-slate-400 text-sm">هیچ تاریخچه‌ای یافت نشد.</div>
                             )}
-                            {selectedCustomerIdForInvoice && (
-                                <input type="hidden" name="customerId" value={selectedCustomerIdForInvoice} />
-                            )}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ</label>
-                                    <JalaliDateInput value={invoiceDate} onChange={setInvoiceDate} />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">وضعیت پرداخت</label>
-                                    <select 
-                                        name="status" 
-                                        required 
-                                        defaultValue={editingInvoice?.status || 'unpaid'}
-                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="paid">نقد</option>
-                                        <option value="unpaid">قرض</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">{selectedCompany?.unitName || 'تعداد/مقدار'}</label>
-                                    <input 
-                                        name="units" 
-                                        type="number" 
-                                        required 
-                                        value={invoiceUnits}
-                                        onChange={(e) => setInvoiceUnits(Number(e.target.value))}
-                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">قیمت فی واحد</label>
-                                    <input 
-                                        name="pricePerUnit" 
-                                        type="number" 
-                                        required 
-                                        value={invoicePricePerUnit}
-                                        onChange={(e) => setInvoicePricePerUnit(Number(e.target.value))}
-                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
-                                    />
-                                </div>
-                            </div>
-                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
-                                <span className="text-sm text-blue-700 font-bold">مبلغ کل فاکتور:</span>
-                                <span className="text-xl font-black text-blue-800">{formatCurrency(invoiceUnits * invoicePricePerUnit, storeSettings, 'AFN')}</span>
-                            </div>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {isInvoiceModalOpen && (
+                <Modal 
+                    title={editingInvoice ? 'ویرایش فاکتور' : 'ثبت فاکتور جدید'} 
+                    onClose={() => setIsInvoiceModalOpen(false)}
+                >
+                    <form onSubmit={handleAddInvoice} className="space-y-4">
+                        {!selectedCustomerIdForInvoice && (
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">توضیحات</label>
-                                <textarea 
-                                    name="description" 
-                                    defaultValue={editingInvoice?.description}
-                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 h-20" 
-                                    placeholder="توضیحات اختیاری..."
-                                />
+                                <label className="block text-sm font-medium text-slate-700 mb-1">مشتری</label>
+                                <select 
+                                    name="customerId" 
+                                    required 
+                                    defaultValue={editingInvoice?.customerId || selectedCustomerIdForInvoice || ''}
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">انتخاب مشتری...</option>
+                                    {managedCompanyCustomers
+                                        .filter(c => c.companyId === selectedCompanyId)
+                                        .map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                </select>
                             </div>
-                            <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
-                                {editingInvoice ? 'بروزرسانی فاکتور' : 'ثبت فاکتور'}
-                            </button>
-                        </form>
-                    </Modal>
-                )}
-
-                {isProductionModalOpen && (
-                    <Modal 
-                        title={editingProductionLog ? 'ویرایش رکورد تولید' : 'ثبت تولید جدید'} 
-                        onClose={() => setIsProductionModalOpen(false)}
-                    >
-                        <form onSubmit={handleAddProductionLog} className="space-y-4">
+                        )}
+                        {selectedCustomerIdForInvoice && (
+                            <input type="hidden" name="customerId" value={selectedCustomerIdForInvoice} />
+                        )}
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ</label>
-                                <JalaliDateInput value={productionDate} onChange={setProductionDate} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">تعداد تولید شده</label>
-                                    <input 
-                                        name="producedUnits" 
-                                        type="number" 
-                                        required 
-                                        defaultValue={editingProductionLog?.producedUnits}
-                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">ضایعات/بازگشتی</label>
-                                    <input 
-                                        name="spoilageUnits" 
-                                        type="number" 
-                                        required 
-                                        defaultValue={editingProductionLog?.spoilageUnits || 0}
-                                        className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
-                                    />
-                                </div>
+                                <JalaliDateInput value={invoiceDate} onChange={setInvoiceDate} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">توضیحات</label>
-                                <textarea 
-                                    name="description" 
-                                    defaultValue={editingProductionLog?.description}
-                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 h-20" 
-                                    placeholder="توضیحات اختیاری..."
+                                <label className="block text-sm font-medium text-slate-700 mb-1">وضعیت پرداخت</label>
+                                <select 
+                                    name="status" 
+                                    required 
+                                    defaultValue={editingInvoice?.status || 'unpaid'}
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="paid">نقد</option>
+                                    <option value="unpaid">قرض</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{selectedCompany?.unitName || 'تعداد/مقدار'}</label>
+                                <input 
+                                    name="units" 
+                                    type="number" 
+                                    required 
+                                    value={invoiceUnits || ''}
+                                    onChange={(e) => setInvoiceUnits(e.target.value === '' ? 0 : Number(e.target.value))}
+                                    placeholder="0"
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
                                 />
                             </div>
-                            <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
-                                {editingProductionLog ? 'بروزرسانی رکورد' : 'ثبت رکورد تولید'}
-                            </button>
-                        </form>
-                    </Modal>
-                )}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">قیمت فی واحد</label>
+                                <input 
+                                    name="pricePerUnit" 
+                                    type="number" 
+                                    required 
+                                    value={invoicePricePerUnit || ''}
+                                    onChange={(e) => setInvoicePricePerUnit(e.target.value === '' ? 0 : Number(e.target.value))}
+                                    placeholder="0"
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                />
+                            </div>
+                        </div>
+                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
+                            <span className="text-sm text-blue-700 font-bold">مبلغ کل فاکتور:</span>
+                            <span className="text-xl font-black text-blue-800">{formatCurrency(invoiceUnits * invoicePricePerUnit, storeSettings, 'AFN')}</span>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">توضیحات</label>
+                            <textarea 
+                                name="description" 
+                                defaultValue={editingInvoice?.description}
+                                className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 h-20" 
+                                placeholder="توضیحات اختیاری..."
+                            />
+                        </div>
+                        <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
+                            {editingInvoice ? 'بروزرسانی فاکتور' : 'ثبت فاکتور'}
+                        </button>
+                    </form>
+                </Modal>
+            )}
+
+            {isProductionModalOpen && (
+                <Modal 
+                    title={editingProductionLog ? 'ویرایش رکورد تولید' : 'ثبت تولید جدید'} 
+                    onClose={() => setIsProductionModalOpen(false)}
+                >
+                    <form onSubmit={handleAddProductionLog} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ</label>
+                            <JalaliDateInput value={productionDate} onChange={setProductionDate} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">تعداد تولید شده</label>
+                                <input 
+                                    name="producedUnits" 
+                                    type="number" 
+                                    required 
+                                    defaultValue={editingProductionLog?.producedUnits}
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">ضایعات/بازگشتی</label>
+                                <input 
+                                    name="spoilageUnits" 
+                                    type="number" 
+                                    required 
+                                    defaultValue={editingProductionLog?.spoilageUnits || 0}
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">توضیحات</label>
+                            <textarea 
+                                name="description" 
+                                defaultValue={editingProductionLog?.description}
+                                className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 h-20" 
+                                placeholder="توضیحات اختیاری..."
+                            />
+                        </div>
+                        <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
+                            {editingProductionLog ? 'بروزرسانی رکورد' : 'ثبت رکورد تولید'}
+                        </button>
+                    </form>
+                </Modal>
+            )}
+
+            {isAddLedgerModalOpen && (
+                <Modal 
+                    title={editingLedgerEntry ? 'ویرایش رکورد' : 'ثبت رکورد جدید'} 
+                    onClose={() => setIsAddLedgerModalOpen(false)}
+                >
+                    <form onSubmit={handleAddLedgerEntry} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">نوع رکورد</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <button 
+                                    type="button"
+                                    onClick={() => setLedgerEntryType('expense')}
+                                    className={`p-2 text-xs rounded-xl border transition-all ${ledgerEntryType === 'expense' ? 'bg-red-50 border-red-200 text-red-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}
+                                >
+                                    هزینه
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => setLedgerEntryType('water_revenue')}
+                                    className={`p-2 text-xs rounded-xl border transition-all ${ledgerEntryType === 'water_revenue' ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}
+                                >
+                                    عواید آب
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => setLedgerEntryType('equipment_revenue')}
+                                    className={`p-2 text-xs rounded-xl border transition-all ${ledgerEntryType === 'equipment_revenue' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}
+                                >
+                                    عواید تجهیزات
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">مبلغ (افغانی)</label>
+                            <input 
+                                name="amount" 
+                                type="number" 
+                                required 
+                                defaultValue={editingLedgerEntry?.amount}
+                                onChange={(e) => setAmountInWords(numberToPersianWords(Number(e.target.value)))}
+                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                placeholder="0"
+                            />
+                            {amountInWords && <p className="text-xs text-blue-600 mt-1 font-bold">{amountInWords} افغانی</p>}
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ</label>
+                            <JalaliDateInput 
+                                value={ledgerDate} 
+                                onChange={(val) => setLedgerDate(val)} 
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">توضیحات</label>
+                            <textarea 
+                                name="description" 
+                                required 
+                                defaultValue={editingLedgerEntry?.description}
+                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all h-24" 
+                                placeholder="شرح تراکنش..."
+                            />
+                        </div>
+                        <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20">
+                            {editingLedgerEntry ? 'بروزرسانی رکورد' : 'ثبت رکورد'}
+                        </button>
+                    </form>
+                </Modal>
+            )}
+
+            {isAddCustomerModalOpen && (
+                <Modal 
+                    title={editingCustomer ? 'ویرایش اطلاعات مشتری' : 'ثبت مشتری جدید'} 
+                    onClose={() => setIsAddCustomerModalOpen(false)}
+                >
+                    <form onSubmit={handleAddCustomer} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">نام مشتری</label>
+                                <input name="name" required defaultValue={editingCustomer?.name} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">نام پدر</label>
+                                <input name="fatherName" required defaultValue={editingCustomer?.fatherName} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">آدرس</label>
+                            <input name="address" required defaultValue={editingCustomer?.address} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            {selectedCompany?.type === CompanyType.WATER ? (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">شماره میتر</label>
+                                    <input name="meterNumber" required defaultValue={editingCustomer?.meterNumber} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">نوع تراز (باقی سابق)</label>
+                                    <select name="initialBalanceType" required defaultValue={editingCustomer?.initialBalanceType || 'we_request'} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="we_request">ما طلبکاریم (بدهی مشتری)</option>
+                                        <option value="they_request">آن‌ها طلبکارند (طلب مشتری)</option>
+                                    </select>
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">شماره تماس</label>
+                                <input name="phone" required defaultValue={editingCustomer?.phone} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                        </div>
+                        {selectedCompany?.type === CompanyType.WATER ? (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">قراءت اولیه میتر</label>
+                                <input name="initialReading" type="number" required defaultValue={editingCustomer?.initialReading} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                        ) : (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">باقی سابق (افغانی)</label>
+                                <input name="initialBalance" type="number" required defaultValue={editingCustomer?.initialBalance || 0} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" />
+                            </div>
+                        )}
+                        <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
+                            {editingCustomer ? 'بروزرسانی اطلاعات' : 'ثبت مشتری'}
+                        </button>
+                    </form>
+                </Modal>
+            )}
+
+            {isBillingModalOpen && selectedCustomerForBilling && (
+                <Modal 
+                    title={`ثبت میترخوانی - ${selectedCustomerForBilling.name} (موبایل: ${selectedCustomerForBilling.phone} | میتر: ${selectedCustomerForBilling.meterNumber})`} 
+                    onClose={() => setIsBillingModalOpen(false)}
+                    headerActions={
+                        <button 
+                            onClick={() => {
+                                setSelectedCustomerForHistory(selectedCustomerForBilling);
+                                setIsHistoryModalOpen(true);
+                            }}
+                            className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-all"
+                            title="تاریخچه بل‌ها"
+                        >
+                            <HistoryIcon className="w-5 h-5" />
+                        </button>
+                    }
+                >
+                    <form onSubmit={handleAddBillingRecord} className="space-y-4">
+                        {(() => {
+                            const lastRecord = [...currentCompanyBillingRecords]
+                                .filter(r => r.customerId === selectedCustomerForBilling.id)
+                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                            const prevReading = lastRecord ? lastRecord.currentReading : selectedCustomerForBilling.initialReading;
+                            
+                            // Calculate current arrears
+                            const unpaidRecords = currentCompanyBillingRecords.filter(r => r.customerId === selectedCustomerForBilling.id && r.status === 'unpaid');
+                            const arrears = unpaidRecords.reduce((sum, r) => sum + r.amount, 0);
+                            
+                            return (
+                                <>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">قراءت قبلی</label>
+                                            <input name="previousReading" type="number" readOnly value={prevReading} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 text-slate-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">قراءت فعلی</label>
+                                            <input name="currentReading" type="number" required defaultValue={editingBillingRecord?.currentReading} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" autoFocus />
+                                        </div>
+                                    </div>
+                                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-blue-700">قیمت فی واحد:</span>
+                                            <span className="font-bold text-blue-800">{formatCurrency(selectedCompany?.unitPrice || 0, storeSettings, 'AFN')}</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">تاریخ قراءت</label>
+                                        <JalaliDateInput value={billingDate} onChange={setBillingDate} />
+                                    </div>
+                                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                        <input type="checkbox" name="isPaid" id="isPaid" defaultChecked={editingBillingRecord?.isPaid} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                                        <label htmlFor="isPaid" className="text-sm font-bold text-slate-700 cursor-pointer">مبلغ پرداخت شده است</label>
+                                    </div>
+                                    <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
+                                        ثبت و محاسبه بل
+                                    </button>
+                                </>
+                            );
+                        })()}
+                    </form>
+                </Modal>
+            )}
         </div>
     );
 };
