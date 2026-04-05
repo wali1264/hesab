@@ -30,9 +30,9 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-4 no-print modal-animate">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-slate-50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-4 modal-animate print:bg-white print:p-0">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:shadow-none print:rounded-none print:w-full print:max-w-none">
+                <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-slate-50 no-print">
                     <div className="flex items-center gap-2">
                         <PrintIcon className="w-5 h-5 text-blue-600" />
                         <h2 className="text-lg font-bold text-slate-800">پیش‌نمایش چاپ</h2>
@@ -42,9 +42,9 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-8 bg-slate-100/50">
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-100/50 print:p-0 print:bg-white print:overflow-visible">
                     {/* Printable Area */}
-                    <div className="printable-area bg-white shadow-lg mx-auto p-8 border border-slate-200 rounded-sm min-h-[29.7cm] w-full max-w-[21cm] text-slate-900" dir="rtl">
+                    <div className="printable-area bg-white shadow-lg mx-auto p-8 border border-slate-200 rounded-sm min-h-[29.7cm] w-full max-w-[21cm] text-slate-900 print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:max-w-none print:min-h-0" dir="rtl">
                         <div className="flex justify-between items-start border-b-2 border-blue-600 pb-6 mb-8">
                             <div className="space-y-1">
                                 <h1 className="text-2xl font-black text-blue-800">{company.name}</h1>
