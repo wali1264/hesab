@@ -47,17 +47,17 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                         <div className="printable-area bg-white mx-auto p-[2mm] rounded-sm w-full max-w-[21cm] text-slate-900 print:p-[2mm] print:m-0 print:w-full print:max-w-none print:min-h-0 font-sans text-center" dir="rtl" style={{ aspectRatio: '3/4' }}>
                             
                             {/* Company Header - Large & Centered */}
-                            <div className="mb-6">
-                                <h1 className="text-4xl font-black tracking-tight mb-2">{company.name}</h1>
+                            <div className="mb-2">
+                                <h1 className="text-4xl font-black tracking-tight mb-1">{company.name}</h1>
                                 <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">
                                     {isBillingRecord ? 'مدیریت آبرسانی و خدمات فنی' : 'تولید و توزیع محصولات'}
                                 </p>
                             </div>
 
                             {/* Title & Metadata - Centered */}
-                            <div className="mb-8 space-y-2">
-                                <h2 className="text-2xl font-black border-y-2 border-slate-900 py-2 inline-block px-10">{headerTitle}</h2>
-                                <div className="text-sm font-bold space-y-1 mt-4">
+                            <div className="mb-2 space-y-1">
+                                <h2 className="text-2xl font-black border-y-2 border-slate-900 py-1 inline-block px-10">{headerTitle}</h2>
+                                <div className="text-sm font-bold space-y-0 mt-2">
                                     <p>تاریخ: <span className="font-mono text-base">{new Date(record.date).toLocaleDateString('fa-IR')}</span></p>
                                     <p>ساعت: <span className="font-mono text-base">{new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span></p>
                                     <p>شماره فاکتور: <span className="font-mono text-base">{record.id.slice(-6).toUpperCase()}</span></p>
@@ -65,17 +65,17 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             </div>
 
                             {/* Customer Info - Large & Centered */}
-                            <div className="mb-8">
-                                <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">نام مشتری / مشترک</p>
+                            <div className="mb-2">
+                                <p className="text-[10px] font-black text-slate-400 mb-0 uppercase tracking-widest">نام مشتری / مشترک</p>
                                 <h3 className="text-3xl font-black">{customer.name} {customer.fatherName ? `فرزند ${customer.fatherName}` : ''}</h3>
                                 {isBillingRecord && (
-                                    <p className="text-base font-mono font-black mt-2">کد اشتراک: {customer.meterNumber || '---'}</p>
+                                    <p className="text-base font-mono font-black mt-1">کد اشتراک: {customer.meterNumber || '---'}</p>
                                 )}
                             </div>
 
                             {/* Items Section - Excel-like without lines, Centered */}
-                            <div className="mb-10 space-y-6">
-                                <div className="space-y-3">
+                            <div className="mb-4 space-y-2">
+                                <div className="space-y-1">
                                     <div className="text-2xl font-black">
                                         {isBillingRecord ? 'مصرف آب دوره' : (record as ManagedCompanyInvoice).description || 'فروش محصول'}
                                     </div>
@@ -93,9 +93,9 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             </div>
 
                             {/* Total Amount - Largest & Centered */}
-                            <div className="mb-10">
-                                <p className="text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">مبلغ قابل پرداخت</p>
-                                <div className="text-7xl font-black font-mono mb-2 leading-none" dir="ltr">
+                            <div className="mb-4">
+                                <p className="text-sm font-black text-slate-500 mb-1 uppercase tracking-widest">مبلغ قابل پرداخت</p>
+                                <div className="text-5xl font-black font-mono mb-1 leading-none" dir="ltr">
                                     {totalAmount.toLocaleString('fa-IR')}
                                 </div>
                                 <div className="text-base font-black text-slate-800">
@@ -105,26 +105,26 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
 
                             {/* Status - Centered */}
                             {record.status === 'paid' && (
-                                <div className="mb-10">
-                                    <span className="text-4xl font-black border-4 border-slate-900 px-12 py-2 rounded-2xl inline-block rotate-[-2deg]">وصول شد</span>
+                                <div className="mb-4">
+                                    <span className="text-4xl font-black border-4 border-slate-900 px-12 py-1 rounded-2xl inline-block rotate-[-2deg]">وصول شد</span>
                                 </div>
                             )}
 
                             {/* Users Info - Centered */}
-                            <div className="mb-10 space-y-4 border-t-2 border-slate-900 pt-8">
+                            <div className="mb-4 space-y-2 border-t-2 border-slate-900 pt-4">
                                 <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1">ثبت‌کننده فاکتور</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-0">ثبت‌کننده فاکتور</p>
                                     <p className="text-base font-black">{registrarValue || '---'}</p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1">مسئول وصول وجه</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-0">مسئول وصول وجه</p>
                                     <p className="text-base font-black">{collectorValue}</p>
                                 </div>
                             </div>
 
                             {/* Footer - Centered */}
-                            <div className="pt-8 border-t border-dashed border-slate-300">
-                                <p className="text-base font-black mb-4 italic">"با تشکر از انتخاب و اعتماد شما؛ رضایت شما سرمایه ماست."</p>
+                            <div className="pt-4 border-t border-dashed border-slate-300">
+                                <p className="text-base font-black mb-2 italic">"با تشکر از انتخاب و اعتماد شما؛ رضایت شما سرمایه ماست."</p>
                                 <div className="flex justify-center items-center gap-10 text-sm font-black text-slate-600">
                                     <p>پشتیبانی: <span className="font-mono">{company.phone || storeSettings.phone}</span></p>
                                     {company.managerName && <p>مدیریت: <span>{company.managerName}</span></p>}
