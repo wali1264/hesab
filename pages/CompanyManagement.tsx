@@ -685,15 +685,36 @@ const CompanyManagement: React.FC = () => {
         return managedCompanies
             .filter(company => hasCompanyAccess(company.slotNumber))
             .map(company => {
-                const entries = managedCompanyLedger.filter(e => e.companyId === company.id);
+                const ledgerEntries = managedCompanyLedger.filter(e => e.companyId === company.id);
+                const invoices = managedCompanyInvoices.filter(inv => inv.companyId === company.id);
+                const billingRecords = customerBillingRecords.filter(r => r.companyId === company.id);
                 
                 const chartData = dates.map(date => {
-                    const dayEntries = entries.filter(e => e.date === date);
-                    const income = dayEntries.filter(e => e.type === 'water_revenue' || e.type === 'equipment_revenue').reduce((sum, e) => sum + e.amount, 0);
-                    const expense = dayEntries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+                    const dayLedger = ledgerEntries.filter(e => e.date === date);
+                    const dayInvoices = invoices.filter(inv => inv.date === date);
+                    const dayBilling = billingRecords.filter(r => r.date === date);
+
+                    // Income from ledger (manual entries) - excluding establishment costs
+                    const ledgerIncome = dayLedger
+                        .filter(e => (e.type === 'water_revenue' || e.type === 'equipment_revenue' || e.type === 'revenue') && 
+                                     !e.description.includes('تأسیس') && !e.description.includes('تاسیس'))
+                        .reduce((sum, e) => sum + e.amount, 0);
+                    
+                    // Expenses from ledger - excluding establishment costs
+                    const ledgerExpense = dayLedger
+                        .filter(e => e.type === 'expense' && 
+                                     !e.description.includes('تأسیس') && !e.description.includes('تاسیس'))
+                        .reduce((sum, e) => sum + e.amount, 0);
+
+                    // Income from invoices (Sales/Receivables)
+                    const invoiceIncome = dayInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+
+                    // Income from billing records (Water bills/Receivables)
+                    const billingIncome = dayBilling.reduce((sum, r) => sum + r.amount, 0);
+
                     return {
                         date,
-                        profit: income - expense
+                        profit: (ledgerIncome + invoiceIncome + billingIncome) - ledgerExpense
                     };
                 });
 
@@ -706,7 +727,7 @@ const CompanyManagement: React.FC = () => {
                     totalProfit
                 };
             });
-    }, [managedCompanies, managedCompanyLedger, chartsTimeRange]);
+    }, [managedCompanies, managedCompanyLedger, managedCompanyInvoices, customerBillingRecords, chartsTimeRange]);
 
     const calculateCustomerBalance = (customer: ManagedCompanyCustomer) => {
         const initial = customer.initialBalance || 0;
