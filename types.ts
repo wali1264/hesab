@@ -341,6 +341,8 @@ export interface ManagedCompanyCustomer {
     initialBalanceType?: 'we_request' | 'they_request';
     customerType: 'metered' | 'invoiced';
     createdAt: string;
+    latitude?: number;
+    longitude?: number;
 }
 
 export interface CustomerBillingRecord {

@@ -3,6 +3,7 @@
   "description": "سیستم جامع و هوشمند مدیریت کسب و کار، انبارداری و حسابداری Vendura.",
   "requestFramePermissions": [
     "microphone",
-    "camera"
+    "camera",
+    "geolocation"
   ]
 }

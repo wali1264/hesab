@@ -3,11 +3,189 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType, Shareholder, ManagedCompanyInvoice } from '../types';
 import { CompanyType } from '../types';
-import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon, ExclamationCircleIcon } from '../components/icons';
+import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon, ExclamationCircleIcon, MapIcon, MapPinIcon, ArrowPathIcon } from '../components/icons';
 import { formatCurrency, numberToPersianWords } from '../utils/formatters';
 import { formatJalaliDate } from '../utils/jalali';
 import JalaliDateInput from '../components/JalaliDateInput';
 import CompanyPrintModal from '../components/CompanyPrintModal';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
+
+// Fix for default marker icon
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+const RegisterLocationModal: React.FC<{ 
+    customer: ManagedCompanyCustomer, 
+    onClose: () => void, 
+    onSave: (lat: number, lng: number) => void 
+}> = ({ customer, onClose, onSave }) => {
+    const [coords, setCoords] = useState<{ lat: number, lng: number } | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [countdown, setCountdown] = useState(5);
+
+    useEffect(() => {
+        if (!navigator.geolocation) {
+            setError("مرورگر شما از قابلیت مکان‌یابی پشتیبانی نمی‌کند.");
+            setLoading(false);
+            return;
+        }
+
+        const watchId = navigator.geolocation.watchPosition(
+            (position) => {
+                setCoords({
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude
+                });
+                setLoading(false);
+            },
+            (err) => {
+                setError("خطا در دریافت موقعیت مکانی. لطفاً دسترسی GPS را بررسی کنید.");
+                setLoading(false);
+            },
+            { enableHighAccuracy: true }
+        );
+
+        const timer = setInterval(() => {
+            setCountdown(prev => (prev > 0 ? prev - 1 : 0));
+        }, 1000);
+
+        return () => {
+            navigator.geolocation.clearWatch(watchId);
+            clearInterval(timer);
+        };
+    }, []);
+
+    return (
+        <Modal title={`ثبت موقعیت مکانی: ${customer.name}`} onClose={onClose}>
+            <div className="space-y-6 text-center">
+                {loading ? (
+                    <div className="flex flex-col items-center gap-4 py-8">
+                        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-slate-600 font-bold">در حال دریافت سیگنال GPS...</p>
+                    </div>
+                ) : error ? (
+                    <div className="bg-red-50 p-4 rounded-2xl border border-red-100 text-red-700">
+                        <ExclamationCircleIcon className="w-12 h-12 mx-auto mb-2" />
+                        <p className="font-bold">{error}</p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
+                            <MapPinIcon className="w-16 h-16 text-blue-600 mx-auto mb-4 animate-bounce" />
+                            <div className="space-y-1">
+                                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">مختصات فعلی</p>
+                                <p className="text-xl font-black text-slate-800 dir-ltr">
+                                    {coords?.lat.toFixed(6)}, {coords?.lng.toFixed(6)}
+                                </p>
+                            </div>
+                        </div>
+
+                        {countdown > 0 ? (
+                            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-amber-700 text-sm font-bold">
+                                لطفاً {countdown} ثانیه صبر کنید تا دقت مختصات بیشتر شود...
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => coords && onSave(coords.lat, coords.lng)}
+                                className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-600/30 hover:bg-blue-700 transition-all transform active:scale-95"
+                            >
+                                تایید و ثبت نهایی موقعیت
+                            </button>
+                        )}
+                    </div>
+                )}
+                <p className="text-[10px] text-slate-400">
+                    نکته: برای دقت بیشتر، در فضای باز قرار بگیرید.
+                </p>
+            </div>
+        </Modal>
+    );
+};
+
+const TrackCustomerModal: React.FC<{ 
+    customer: ManagedCompanyCustomer, 
+    onClose: () => void 
+}> = ({ customer, onClose }) => {
+    const [userCoords, setUserCoords] = useState<{ lat: number, lng: number } | null>(null);
+
+    useEffect(() => {
+        const watchId = navigator.geolocation.watchPosition(
+            (position) => {
+                setUserCoords({
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude
+                });
+            },
+            null,
+            { enableHighAccuracy: true }
+        );
+        return () => navigator.geolocation.clearWatch(watchId);
+    }, []);
+
+    const MapUpdater = ({ center }: { center: [number, number] }) => {
+        const map = useMap();
+        useEffect(() => {
+            map.setView(center);
+        }, [center, map]);
+        return null;
+    };
+
+    if (!customer.latitude || !customer.longitude) return null;
+
+    const customerPos: [number, number] = [customer.latitude, customer.longitude];
+    const userPos: [number, number] | null = userCoords ? [userCoords.lat, userCoords.lng] : null;
+
+    return (
+        <Modal title={`ردیابی مشتری: ${customer.name}`} onClose={onClose}>
+            <div className="h-[60vh] md:h-[500px] w-full rounded-2xl overflow-hidden border border-slate-200 relative">
+                <MapContainer center={customerPos} zoom={15} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    />
+                    <Marker position={customerPos}>
+                        <Popup>
+                            <div className="text-right font-bold">مکان مشتری: {customer.name}</div>
+                        </Popup>
+                    </Marker>
+                    {userPos && (
+                        <>
+                            <Marker position={userPos} icon={L.divIcon({
+                                className: 'custom-div-icon',
+                                html: `<div style="background-color: #22c55e; width: 15px; height: 15px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
+                                iconSize: [15, 15],
+                                iconAnchor: [7, 7]
+                            })}>
+                                <Popup>
+                                    <div className="text-right font-bold">مکان شما</div>
+                                </Popup>
+                            </Marker>
+                            <MapUpdater center={userPos} />
+                        </>
+                    )}
+                </MapContainer>
+                <div className="absolute bottom-4 left-4 right-4 z-[1000] flex flex-col gap-2">
+                    <div className="bg-white/90 backdrop-blur p-3 rounded-xl shadow-lg border border-slate-200 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                            <span className="text-[10px] font-bold text-slate-600">مکان شما (سبز)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+                            <span className="text-[10px] font-bold text-slate-600">مکان مشتری (آبی)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Modal>
+    );
+};
 
 const Modal: React.FC<{ title: string, onClose: () => void, children: React.ReactNode, headerActions?: React.ReactNode }> = ({ title, onClose, children, headerActions }) => (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-[100] p-4 pt-12 md:pt-20 overflow-y-auto modal-animate">
@@ -123,11 +301,17 @@ const CompanyManagement: React.FC = () => {
     const [invoiceUnits, setInvoiceUnits] = useState<number>(0);
     const [invoicePricePerUnit, setInvoicePricePerUnit] = useState<number>(0);
     const [selectedCustomerIdForInvoice, setSelectedCustomerIdForInvoice] = useState<string | null>(null);
+    const [tempInvoiceCustomerId, setTempInvoiceCustomerId] = useState<string>('guest');
     const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
     const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+    const [invoiceStatus, setInvoiceStatus] = useState<'paid' | 'unpaid'>('unpaid');
 
     const [isProductionModalOpen, setIsProductionModalOpen] = useState(false);
     const [editingProductionLog, setEditingProductionLog] = useState<any | null>(null);
+
+    const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+    const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
+    const [selectedCustomerForLocation, setSelectedCustomerForLocation] = useState<ManagedCompanyCustomer | null>(null);
     const [productionDate, setProductionDate] = useState(new Date().toISOString().split('T')[0]);
 
     // Owner Dashboard States
@@ -372,7 +556,8 @@ const CompanyManagement: React.FC = () => {
         if (invoiceSearchQuery) {
             filtered = filtered.filter(inv => {
                 const customer = managedCompanyCustomers.find(c => c.id === inv.customerId);
-                return customer?.name.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) || inv.id.includes(invoiceSearchQuery);
+                const customerName = customer?.name || 'مشتری گذری';
+                return customerName.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) || inv.id.includes(invoiceSearchQuery);
             });
         }
 
@@ -648,10 +833,44 @@ const CompanyManagement: React.FC = () => {
         setEditingCustomer(null);
     };
 
+    const handleSaveLocation = async (lat: number, lng: number) => {
+        if (!selectedCustomerForLocation) return;
+        const updatedCustomer = {
+            ...selectedCustomerForLocation,
+            latitude: lat,
+            longitude: lng
+        };
+        const result = await updateManagedCompanyCustomer(updatedCustomer);
+        if (result.success) {
+            showToast("موقعیت مکانی مشتری با موفقیت ثبت شد.");
+            setIsLocationModalOpen(false);
+            setSelectedCustomerForLocation(null);
+        } else {
+            showToast(result.message);
+        }
+    };
+
     const handlePrintInvoice = (record: CustomerBillingRecord | ManagedCompanyInvoice) => {
-        const customer = managedCompanyCustomers.find(c => c.id === record.customerId);
         const company = managedCompanies.find(c => c.id === record.companyId);
-        if (!customer || !company) return;
+        if (!company) return;
+        
+        let customer: ManagedCompanyCustomer | undefined;
+        if (record.customerId === 'guest') {
+            customer = {
+                id: 'guest',
+                name: 'مشتری گذری',
+                companyId: record.companyId,
+                fatherName: '',
+                phone: '',
+                address: '',
+                customerType: 'invoiced',
+                createdAt: new Date().toISOString()
+            };
+        } else {
+            customer = managedCompanyCustomers.find(c => c.id === record.customerId);
+        }
+        
+        if (!customer) return;
         setPrintRecord({ record, company, customer });
     };
 
@@ -709,12 +928,12 @@ const CompanyManagement: React.FC = () => {
         const formData = new FormData(e.currentTarget);
         const invoiceData = {
             companyId: selectedCompanyId,
-            customerId: formData.get('customerId') as string,
+            customerId: tempInvoiceCustomerId,
             date: invoiceDate,
             units: Number(formData.get('units')),
             pricePerUnit: Number(formData.get('pricePerUnit')),
             totalAmount: Number(formData.get('units')) * Number(formData.get('pricePerUnit')),
-            status: formData.get('status') as 'paid' | 'unpaid',
+            status: invoiceStatus,
             description: formData.get('description') as string,
         };
 
@@ -1252,7 +1471,9 @@ const CompanyManagement: React.FC = () => {
                                                         onClick={() => { 
                                                             setEditingInvoice(null);
                                                             setSelectedCustomerIdForInvoice(customer.id);
+                                                            setTempInvoiceCustomerId(customer.id);
                                                             setInvoiceDate(new Date().toISOString().split('T')[0]);
+                                                            setInvoiceStatus('unpaid');
                                                             setInvoiceUnits(0);
                                                             setInvoicePricePerUnit(selectedCompany?.unitPrice || 0);
                                                             setIsInvoiceModalOpen(true); 
@@ -1274,6 +1495,28 @@ const CompanyManagement: React.FC = () => {
                                             >
                                                 <HistoryIcon className="w-5 h-5" />
                                             </button>
+                                            <button 
+                                                onClick={() => { 
+                                                    setSelectedCustomerForLocation(customer); 
+                                                    setIsLocationModalOpen(true); 
+                                                }}
+                                                className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all"
+                                                title="ثبت موقعیت مکانی"
+                                            >
+                                                <MapPinIcon className="w-5 h-5" />
+                                            </button>
+                                            {customer.latitude && customer.longitude && (
+                                                <button 
+                                                    onClick={() => { 
+                                                        setSelectedCustomerForLocation(customer); 
+                                                        setIsTrackModalOpen(true); 
+                                                    }}
+                                                    className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all"
+                                                    title="ردیابی روی نقشه"
+                                                >
+                                                    <MapIcon className="w-5 h-5" />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -1309,7 +1552,9 @@ const CompanyManagement: React.FC = () => {
                                     onClick={() => { 
                                         setEditingInvoice(null); 
                                         setSelectedCustomerIdForInvoice(null); 
+                                        setTempInvoiceCustomerId('guest');
                                         setInvoiceDate(new Date().toISOString().split('T')[0]); 
+                                        setInvoiceStatus('paid');
                                         setInvoiceUnits(0);
                                         setInvoicePricePerUnit(selectedCompany?.unitPrice || 0);
                                         setIsInvoiceModalOpen(true); 
@@ -2846,7 +3091,9 @@ const CompanyManagement: React.FC = () => {
                                                     <button 
                                                         onClick={() => { 
                                                             setEditingInvoice(record as any); 
+                                                            setTempInvoiceCustomerId((record as any).customerId);
                                                             setInvoiceDate(record.date); 
+                                                            setInvoiceStatus((record as any).status);
                                                             setInvoiceUnits((record as any).units);
                                                             setInvoicePricePerUnit((record as any).pricePerUnit);
                                                             setIsInvoiceModalOpen(true); 
@@ -2878,10 +3125,19 @@ const CompanyManagement: React.FC = () => {
                                 <select 
                                     name="customerId" 
                                     required 
-                                    defaultValue={editingInvoice?.customerId || selectedCustomerIdForInvoice || ''}
+                                    value={tempInvoiceCustomerId}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setTempInvoiceCustomerId(val);
+                                        if (val === 'guest') {
+                                            setInvoiceStatus('paid');
+                                        } else {
+                                            setInvoiceStatus('unpaid');
+                                        }
+                                    }}
                                     className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
                                 >
-                                    <option value="">انتخاب مشتری...</option>
+                                    <option value="guest">مشتری گذری (بدون حساب)</option>
                                     {managedCompanyCustomers
                                         .filter(c => c.companyId === selectedCompanyId)
                                         .map(c => (
@@ -2903,12 +3159,17 @@ const CompanyManagement: React.FC = () => {
                                 <select 
                                     name="status" 
                                     required 
-                                    defaultValue={editingInvoice?.status || 'unpaid'}
-                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={invoiceStatus}
+                                    onChange={(e) => setInvoiceStatus(e.target.value as 'paid' | 'unpaid')}
+                                    disabled={tempInvoiceCustomerId === 'guest'}
+                                    className={`w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 ${tempInvoiceCustomerId === 'guest' ? 'bg-slate-50 text-slate-500' : ''}`}
                                 >
                                     <option value="paid">نقد</option>
                                     <option value="unpaid">قرض</option>
                                 </select>
+                                {tempInvoiceCustomerId === 'guest' && (
+                                    <p className="text-[10px] text-blue-600 mt-1 font-bold">فروش به مشتری گذری فقط نقدی است.</p>
+                                )}
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -3219,6 +3480,21 @@ const CompanyManagement: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {isLocationModalOpen && selectedCustomerForLocation && (
+                <RegisterLocationModal 
+                    customer={selectedCustomerForLocation}
+                    onClose={() => { setIsLocationModalOpen(false); setSelectedCustomerForLocation(null); }}
+                    onSave={handleSaveLocation}
+                />
+            )}
+
+            {isTrackModalOpen && selectedCustomerForLocation && (
+                <TrackCustomerModal 
+                    customer={selectedCustomerForLocation}
+                    onClose={() => { setIsTrackModalOpen(false); setSelectedCustomerForLocation(null); }}
+                />
             )}
 
             {printRecord && (
