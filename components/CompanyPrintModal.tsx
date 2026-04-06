@@ -43,48 +43,48 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 bg-slate-100/50 print:p-0 print:bg-white print:overflow-visible">
-                        {/* Simple Global Standard Frame (3:4 Aspect Ratio) */}
-                        <div className="printable-area bg-white mx-auto p-[2mm] rounded-sm w-full max-w-[21cm] text-slate-900 print:p-[2mm] print:m-0 print:w-full print:max-w-none print:min-h-0 font-sans text-center" dir="rtl" style={{ aspectRatio: '3/4' }}>
+                        {/* Global Standard Frame - Flexible Height for Printing */}
+                        <div className="printable-area bg-white mx-auto p-[2mm] rounded-sm w-full max-w-[21cm] text-slate-900 print:p-[2mm] print:m-0 print:w-full print:max-w-none print:min-h-0 font-sans text-center" dir="rtl" style={{ minHeight: '100%' }}>
                             
-                            {/* Company Header - Large & Centered */}
-                            <div className="mb-2">
-                                <h1 className="text-4xl font-black tracking-tight mb-1">{company.name}</h1>
-                                <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">
+                            {/* Company Header - Reduced Size & Centered */}
+                            <div className="mb-1">
+                                <h1 className="text-2xl font-black tracking-tight mb-0">{company.name}</h1>
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                     {isBillingRecord ? 'مدیریت آبرسانی و خدمات فنی' : 'تولید و توزیع محصولات'}
                                 </p>
                             </div>
 
                             {/* Title & Metadata - Centered */}
-                            <div className="mb-2 space-y-1">
-                                <h2 className="text-2xl font-black border-y-2 border-slate-900 py-1 inline-block px-10">{headerTitle}</h2>
-                                <div className="text-sm font-bold space-y-0 mt-2">
-                                    <p>تاریخ: <span className="font-mono text-base">{new Date(record.date).toLocaleDateString('fa-IR')}</span></p>
-                                    <p>ساعت: <span className="font-mono text-base">{new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span></p>
-                                    <p>شماره فاکتور: <span className="font-mono text-base">{record.id.slice(-6).toUpperCase()}</span></p>
+                            <div className="mb-1 space-y-0">
+                                <h2 className="text-lg font-black border-y border-slate-900 py-1 inline-block px-8">{headerTitle}</h2>
+                                <div className="text-[10px] font-bold space-y-0 mt-1">
+                                    <p>تاریخ: <span className="font-mono text-xs">{new Date(record.date).toLocaleDateString('fa-IR')}</span></p>
+                                    <p>ساعت: <span className="font-mono text-xs">{new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span></p>
+                                    <p>شماره فاکتور: <span className="font-mono text-xs">{record.id.slice(-6).toUpperCase()}</span></p>
                                 </div>
                             </div>
 
-                            {/* Customer Info - Large & Centered */}
-                            <div className="mb-2">
-                                <p className="text-[10px] font-black text-slate-400 mb-0 uppercase tracking-widest">نام مشتری / مشترک</p>
-                                <h3 className="text-3xl font-black">{customer.name} {customer.fatherName ? `فرزند ${customer.fatherName}` : ''}</h3>
+                            {/* Customer Info - Reduced Size & Centered */}
+                            <div className="mb-1">
+                                <p className="text-[8px] font-black text-slate-400 mb-0 uppercase tracking-widest">نام مشتری / مشترک</p>
+                                <h3 className="text-xl font-black">{customer.name} {customer.fatherName ? `فرزند ${customer.fatherName}` : ''}</h3>
                                 {isBillingRecord && (
-                                    <p className="text-base font-mono font-black mt-1">کد اشتراک: {customer.meterNumber || '---'}</p>
+                                    <p className="text-sm font-mono font-black mt-0">کد اشتراک: {customer.meterNumber || '---'}</p>
                                 )}
                             </div>
 
-                            {/* Items Section - Excel-like without lines, Centered */}
-                            <div className="mb-4 space-y-2">
-                                <div className="space-y-1">
-                                    <div className="text-2xl font-black">
+                            {/* Items Section - Centered */}
+                            <div className="mb-2 space-y-1">
+                                <div className="space-y-0">
+                                    <div className="text-lg font-black">
                                         {isBillingRecord ? 'مصرف آب دوره' : (record as ManagedCompanyInvoice).description || 'فروش محصول'}
                                     </div>
                                     {isBillingRecord && (
-                                        <div className="text-base text-slate-500 font-mono">
+                                        <div className="text-xs text-slate-500 font-mono">
                                             قراءت: {(record as CustomerBillingRecord).previousReading} الی {(record as CustomerBillingRecord).currentReading}
                                         </div>
                                     )}
-                                    <div className="text-xl font-mono font-black text-slate-700">
+                                    <div className="text-base font-mono font-black text-slate-700">
                                         {isBillingRecord ? (record as CustomerBillingRecord).consumption : (record as ManagedCompanyInvoice).units} 
                                         {' '} × {' '}
                                         {(isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('fa-IR')}
@@ -92,40 +92,42 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                                 </div>
                             </div>
 
-                            {/* Total Amount - Largest & Centered */}
-                            <div className="mb-4">
-                                <p className="text-sm font-black text-slate-500 mb-1 uppercase tracking-widest">مبلغ قابل پرداخت</p>
-                                <div className="text-5xl font-black font-mono mb-1 leading-none" dir="ltr">
+                            {/* Total Amount - Optimized Size & Centered */}
+                            <div className="mb-2">
+                                <p className="text-xs font-black text-slate-500 mb-0 uppercase tracking-widest">مبلغ قابل پرداخت</p>
+                                <div className="text-4xl font-black font-mono mb-0 leading-none" dir="ltr">
                                     {totalAmount.toLocaleString('fa-IR')}
                                 </div>
-                                <div className="text-base font-black text-slate-800">
+                                <div className="text-sm font-black text-slate-800">
                                     {numberToPersianWords(totalAmount)} افغانی
                                 </div>
                             </div>
 
                             {/* Status - Centered */}
                             {record.status === 'paid' && (
-                                <div className="mb-4">
-                                    <span className="text-4xl font-black border-4 border-slate-900 px-12 py-1 rounded-2xl inline-block rotate-[-2deg]">وصول شد</span>
+                                <div className="mb-2">
+                                    <span className="text-2xl font-black border-2 border-slate-900 px-8 py-1 rounded-xl inline-block rotate-[-2deg]">وصول شد</span>
                                 </div>
                             )}
 
                             {/* Users Info - Centered */}
-                            <div className="mb-4 space-y-2 border-t-2 border-slate-900 pt-4">
-                                <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-0">ثبت‌کننده فاکتور</p>
-                                    <p className="text-base font-black">{registrarValue || '---'}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-0">مسئول وصول وجه</p>
-                                    <p className="text-base font-black">{collectorValue}</p>
+                            <div className="mb-2 space-y-1 border-t border-slate-900 pt-2">
+                                <div className="flex justify-center gap-8">
+                                    <div>
+                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0">ثبت‌کننده</p>
+                                        <p className="text-xs font-black">{registrarValue || '---'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0">وصول‌کننده</p>
+                                        <p className="text-xs font-black">{collectorValue}</p>
+                                    </div>
                                 </div>
                             </div>
 
                             {/* Footer - Centered */}
-                            <div className="pt-4 border-t border-dashed border-slate-300">
-                                <p className="text-base font-black mb-2 italic">"با تشکر از انتخاب و اعتماد شما؛ رضایت شما سرمایه ماست."</p>
-                                <div className="flex justify-center items-center gap-10 text-sm font-black text-slate-600">
+                            <div className="pt-2 border-t border-dashed border-slate-300">
+                                <p className="text-xs font-black mb-1 italic">"با تشکر از انتخاب و اعتماد شما؛ رضایت شما سرمایه ماست."</p>
+                                <div className="flex justify-center items-center gap-6 text-[10px] font-black text-slate-600">
                                     <p>پشتیبانی: <span className="font-mono">{company.phone || storeSettings.phone}</span></p>
                                     {company.managerName && <p>مدیریت: <span>{company.managerName}</span></p>}
                                 </div>
