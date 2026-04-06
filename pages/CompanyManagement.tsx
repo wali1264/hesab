@@ -3,13 +3,25 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType, Shareholder, ManagedCompanyInvoice } from '../types';
 import { CompanyType } from '../types';
-import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon, ExclamationCircleIcon, MapIcon, MapPinIcon, ArrowPathIcon } from '../components/icons';
+import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon, ExclamationCircleIcon, MapIcon, MapPinIcon, ArrowPathIcon, LocateIcon } from '../components/icons';
 import { formatCurrency, numberToPersianWords } from '../utils/formatters';
 import { formatJalaliDate } from '../utils/jalali';
 import JalaliDateInput from '../components/JalaliDateInput';
 import CompanyPrintModal from '../components/CompanyPrintModal';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
+import { 
+    ResponsiveContainer, 
+    LineChart, 
+    Line, 
+    XAxis, 
+    YAxis, 
+    CartesianGrid, 
+    Tooltip as RechartsTooltip, 
+    Area, 
+    AreaChart,
+    ReferenceLine
+} from 'recharts';
 
 // Fix for default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -19,15 +31,32 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // Earth radius in meters
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // in meters
+};
+
 const RegisterLocationModal: React.FC<{ 
     customer: ManagedCompanyCustomer, 
     onClose: () => void, 
     onSave: (lat: number, lng: number) => void 
 }> = ({ customer, onClose, onSave }) => {
     const [coords, setCoords] = useState<{ lat: number, lng: number } | null>(null);
+    const [accuracy, setAccuracy] = useState<number | null>(null);
+    const [samples, setSamples] = useState<{ lat: number, lng: number, acc: number }[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-    const [countdown, setCountdown] = useState(5);
+    const [countdown, setCountdown] = useState(10); // Increased for better averaging
 
     useEffect(() => {
         if (!navigator.geolocation) {
@@ -38,17 +67,48 @@ const RegisterLocationModal: React.FC<{
 
         const watchId = navigator.geolocation.watchPosition(
             (position) => {
-                setCoords({
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude
-                });
+                const newLat = position.coords.latitude;
+                const newLng = position.coords.longitude;
+                const newAcc = position.coords.accuracy;
+
+                setAccuracy(newAcc);
+
+                // Filter out low accuracy readings (e.g., > 100m)
+                if (newAcc < 100) {
+                    setSamples(prev => {
+                        const newSamples = [...prev, { lat: newLat, lng: newLng, acc: newAcc }].slice(-20); // Keep last 20
+                        
+                        // Calculate weighted average (more weight to higher accuracy)
+                        let totalWeight = 0;
+                        let weightedLat = 0;
+                        let weightedLng = 0;
+
+                        newSamples.forEach(s => {
+                            const weight = 1 / (s.acc + 1); // Avoid division by zero
+                            totalWeight += weight;
+                            weightedLat += s.lat * weight;
+                            weightedLng += s.lng * weight;
+                        });
+
+                        setCoords({
+                            lat: weightedLat / totalWeight,
+                            lng: weightedLng / totalWeight
+                        });
+
+                        return newSamples;
+                    });
+                } else if (samples.length === 0) {
+                    // Still show current coords even if accuracy is low initially
+                    setCoords({ lat: newLat, lng: newLng });
+                }
+
                 setLoading(false);
             },
             (err) => {
                 setError("خطا در دریافت موقعیت مکانی. لطفاً دسترسی GPS را بررسی کنید.");
                 setLoading(false);
             },
-            { enableHighAccuracy: true }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
 
         const timer = setInterval(() => {
@@ -79,16 +139,28 @@ const RegisterLocationModal: React.FC<{
                         <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
                             <MapPinIcon className="w-16 h-16 text-blue-600 mx-auto mb-4 animate-bounce" />
                             <div className="space-y-1">
-                                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">مختصات فعلی</p>
+                                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">مختصات میانگین‌گیری شده</p>
                                 <p className="text-xl font-black text-slate-800 dir-ltr">
                                     {coords?.lat.toFixed(6)}, {coords?.lng.toFixed(6)}
                                 </p>
+                                <div className="flex justify-center gap-4 mt-2">
+                                    <div className="text-[10px] bg-white/50 px-2 py-1 rounded-lg">
+                                        <span className="text-slate-400">دقت:</span>
+                                        <span className={`font-bold ml-1 ${accuracy && accuracy < 20 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                            {accuracy?.toFixed(1)} متر
+                                        </span>
+                                    </div>
+                                    <div className="text-[10px] bg-white/50 px-2 py-1 rounded-lg">
+                                        <span className="text-slate-400">نمونه‌ها:</span>
+                                        <span className="font-bold ml-1 text-blue-600">{samples.length}</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         {countdown > 0 ? (
                             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-amber-700 text-sm font-bold">
-                                لطفاً {countdown} ثانیه صبر کنید تا دقت مختصات بیشتر شود...
+                                لطفاً {countdown} ثانیه صبر کنید تا میانگین‌گیری دقیق‌تر شود...
                             </div>
                         ) : (
                             <button 
@@ -101,7 +173,7 @@ const RegisterLocationModal: React.FC<{
                     </div>
                 )}
                 <p className="text-[10px] text-slate-400">
-                    نکته: برای دقت بیشتر، در فضای باز قرار بگیرید.
+                    نکته: برای دقت بیشتر، در فضای باز قرار بگیرید و چند لحظه ثابت بمانید.
                 </p>
             </div>
         </Modal>
@@ -113,6 +185,8 @@ const TrackCustomerModal: React.FC<{
     onClose: () => void 
 }> = ({ customer, onClose }) => {
     const [userCoords, setUserCoords] = useState<{ lat: number, lng: number } | null>(null);
+    const [showDistance, setShowDistance] = useState(true);
+    const [followUser, setFollowUser] = useState(true);
 
     useEffect(() => {
         const watchId = navigator.geolocation.watchPosition(
@@ -123,15 +197,25 @@ const TrackCustomerModal: React.FC<{
                 });
             },
             null,
-            { enableHighAccuracy: true }
+            { enableHighAccuracy: true, maximumAge: 0 }
         );
         return () => navigator.geolocation.clearWatch(watchId);
     }, []);
 
+    const MapEvents = () => {
+        useMapEvents({
+            dragstart: () => setFollowUser(false),
+            zoomstart: () => setFollowUser(false),
+        });
+        return null;
+    };
+
     const MapUpdater = ({ center }: { center: [number, number] }) => {
         const map = useMap();
         useEffect(() => {
-            map.setView(center);
+            if (followUser) {
+                map.setView(center);
+            }
         }, [center, map]);
         return null;
     };
@@ -140,6 +224,7 @@ const TrackCustomerModal: React.FC<{
 
     const customerPos: [number, number] = [customer.latitude, customer.longitude];
     const userPos: [number, number] | null = userCoords ? [userCoords.lat, userCoords.lng] : null;
+    const distance = userCoords ? calculateDistance(userCoords.lat, userCoords.lng, customer.latitude, customer.longitude) : null;
 
     return (
         <Modal title={`ردیابی مشتری: ${customer.name}`} onClose={onClose}>
@@ -149,6 +234,7 @@ const TrackCustomerModal: React.FC<{
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     />
+                    <MapEvents />
                     <Marker position={customerPos}>
                         <Popup>
                             <div className="text-right font-bold">مکان مشتری: {customer.name}</div>
@@ -170,7 +256,40 @@ const TrackCustomerModal: React.FC<{
                         </>
                     )}
                 </MapContainer>
+                
+                {/* Overlay Controls */}
+                <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+                    <button 
+                        onClick={() => {
+                            setFollowUser(true);
+                            if (userPos) {
+                                // Force center if userPos exists
+                                // map.setView is handled by MapUpdater when followUser is true
+                            }
+                        }}
+                        className={`p-3 rounded-xl shadow-lg border transition-all ${followUser ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-600 border-slate-200'}`}
+                        title="موقعیت من"
+                    >
+                        <LocateIcon className="w-6 h-6" />
+                    </button>
+                    <button 
+                        onClick={() => setShowDistance(!showDistance)}
+                        className={`p-3 rounded-xl shadow-lg border transition-all ${showDistance ? 'bg-emerald-600 text-white border-emerald-700' : 'bg-white text-slate-600 border-slate-200'}`}
+                        title="نمایش فاصله"
+                    >
+                        <TrendingUpIcon className="w-6 h-6" />
+                    </button>
+                </div>
+
                 <div className="absolute bottom-4 left-4 right-4 z-[1000] flex flex-col gap-2">
+                    {showDistance && distance !== null && (
+                        <div className="bg-emerald-600 text-white p-3 rounded-xl shadow-lg flex items-center justify-between animate-in fade-in slide-in-from-bottom-2">
+                            <span className="text-xs font-bold">فاصله تا مشتری:</span>
+                            <span className="font-black text-lg">
+                                {distance > 1000 ? `${(distance / 1000).toFixed(2)} کیلومتر` : `${Math.round(distance)} متر`}
+                            </span>
+                        </div>
+                    )}
                     <div className="bg-white/90 backdrop-blur p-3 rounded-xl shadow-lg border border-slate-200 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
@@ -218,10 +337,44 @@ const CompanyManagement: React.FC = () => {
         showToast, storeSettings, hasPermission, hasCompanyAccess, currentUser, logActivity
     } = useAppContext();
     
-    const [activeTab, setActiveTab] = useState<'companies' | 'dashboard' | 'activities'>('companies');
+    const [activeTab, setActiveTab] = useState<'companies' | 'dashboard' | 'activities' | 'charts'>('companies');
     const [companyDetailTab, setCompanyDetailTab] = useState<'ledger' | 'customers' | 'collections' | 'invoices' | 'production'>('ledger');
     const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
     const selectedCompany = useMemo(() => managedCompanies.find(c => c.id === selectedCompanyId), [managedCompanies, selectedCompanyId]);
+
+    const redIcon = useMemo(() => new L.Icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+    }), []);
+
+    const debtorsWithCoords = useMemo(() => {
+        if (!selectedCompanyId) return [];
+        const companyCustomers = managedCompanyCustomers.filter(c => c.companyId === selectedCompanyId && c.latitude && c.longitude);
+        const companyBilling = customerBillingRecords.filter(r => r.companyId === selectedCompanyId && r.status === 'unpaid');
+        const companyInvoices = managedCompanyInvoices.filter(i => i.companyId === selectedCompanyId && i.status === 'unpaid');
+        
+        return companyCustomers.map(customer => {
+            const unpaidBilling = companyBilling.filter(r => r.customerId === customer.id);
+            const unpaidInvoices = companyInvoices.filter(i => i.customerId === customer.id);
+            
+            const totalUnpaidCount = unpaidBilling.length + unpaidInvoices.length;
+            if (totalUnpaidCount === 0) return null;
+            
+            const totalDebt = unpaidBilling.reduce((sum, r) => sum + r.amount, 0) + 
+                              unpaidInvoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+            
+            return {
+                ...customer,
+                unpaidCount: totalUnpaidCount,
+                totalDebt
+            };
+        }).filter(Boolean) as (ManagedCompanyCustomer & { unpaidCount: number, totalDebt: number })[];
+    }, [managedCompanyCustomers, customerBillingRecords, managedCompanyInvoices, selectedCompanyId]);
+
     const [customerSearchQuery, setCustomerSearchQuery] = useState('');
     const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
     const [historySearchQuery, setHistorySearchQuery] = useState('');
@@ -250,13 +403,15 @@ const CompanyManagement: React.FC = () => {
     const [productionEndDate, setProductionEndDate] = useState('');
 
     // Sales Dashboard States
-    const [salesSubTab, setSalesSubTab] = useState<'list' | 'dashboard'>('list');
-    const [collectionSubTab, setCollectionSubTab] = useState<'list' | 'dashboard'>('list');
+    const [salesSubTab, setSalesSubTab] = useState<'list' | 'dashboard' | 'map'>('list');
+    const [collectionSubTab, setCollectionSubTab] = useState<'list' | 'dashboard' | 'map'>('list');
     const [salesDateFilter, setSalesDateFilter] = useState<'today' | 'yesterday' | 'week' | 'month' | 'year' | 'all' | 'custom'>('today');
     const [salesStartDate, setSalesStartDate] = useState('');
     const [salesEndDate, setSalesEndDate] = useState('');
     const [salesEmployeeFilter, setSalesEmployeeFilter] = useState<string>('all');
 
+    const [chartsTimeRange, setChartsTimeRange] = useState<'30days' | '6months' | 'year'>('30days');
+    
     // Handle default tab selection based on permissions
     useEffect(() => {
         if (selectedCompanyId && selectedCompany) {
@@ -313,6 +468,24 @@ const CompanyManagement: React.FC = () => {
     const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
     const [selectedCustomerForLocation, setSelectedCustomerForLocation] = useState<ManagedCompanyCustomer | null>(null);
     const [productionDate, setProductionDate] = useState(new Date().toISOString().split('T')[0]);
+
+    const MapController = () => {
+        const map = useMap();
+        return (
+            <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+                <button 
+                    onClick={() => {
+                        map.locate({ setView: true, maxZoom: 16 });
+                    }}
+                    className="p-3 bg-white text-slate-600 rounded-xl shadow-lg border border-slate-200 hover:bg-slate-50 transition-all"
+                    title="موقعیت من"
+                    type="button"
+                >
+                    <LocateIcon className="w-6 h-6" />
+                </button>
+            </div>
+        );
+    };
 
     // Owner Dashboard States
     const [isOwnerTxModalOpen, setIsOwnerTxModalOpen] = useState(false);
@@ -497,6 +670,43 @@ const CompanyManagement: React.FC = () => {
             };
         });
     }, [managedCompanies, managedCompanyLedger, customerBillingRecords]);
+    
+    const companyChartsData = useMemo(() => {
+        const now = new Date();
+        const days = chartsTimeRange === '30days' ? 30 : chartsTimeRange === '6months' ? 180 : 365;
+        
+        const dates: string[] = [];
+        for (let i = days - 1; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - i);
+            dates.push(d.toISOString().split('T')[0]);
+        }
+
+        return managedCompanies
+            .filter(company => hasCompanyAccess(company.slotNumber))
+            .map(company => {
+                const entries = managedCompanyLedger.filter(e => e.companyId === company.id);
+                
+                const chartData = dates.map(date => {
+                    const dayEntries = entries.filter(e => e.date === date);
+                    const income = dayEntries.filter(e => e.type === 'water_revenue' || e.type === 'equipment_revenue').reduce((sum, e) => sum + e.amount, 0);
+                    const expense = dayEntries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+                    return {
+                        date,
+                        profit: income - expense
+                    };
+                });
+
+                const totalProfit = chartData.reduce((sum, d) => sum + d.profit, 0);
+                
+                return {
+                    id: company.id,
+                    name: company.name,
+                    data: chartData,
+                    totalProfit
+                };
+            });
+    }, [managedCompanies, managedCompanyLedger, chartsTimeRange]);
 
     const calculateCustomerBalance = (customer: ManagedCompanyCustomer) => {
         const initial = customer.initialBalance || 0;
@@ -1546,6 +1756,12 @@ const CompanyManagement: React.FC = () => {
                                 >
                                     گزارش فروش و وصولی
                                 </button>
+                                <button 
+                                    onClick={() => setSalesSubTab('map')}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${salesSubTab === 'map' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    ردیابی طلبکاران
+                                </button>
                             </div>
                             {salesSubTab === 'list' && (
                                 <button 
@@ -1567,7 +1783,42 @@ const CompanyManagement: React.FC = () => {
                             )}
                         </div>
 
-                        {salesSubTab === 'dashboard' ? (
+                        {salesSubTab === 'map' ? (
+                            <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-[600px] relative">
+                                <MapContainer 
+                                    center={debtorsWithCoords.length > 0 ? [debtorsWithCoords[0].latitude!, debtorsWithCoords[0].longitude!] : [34.5553, 69.2075]} 
+                                    zoom={13} 
+                                    style={{ height: '100%', width: '100%', borderRadius: '1.5rem' }}
+                                >
+                                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                    <MapController />
+                                    {debtorsWithCoords.map(debtor => (
+                                        <Marker 
+                                            key={debtor.id} 
+                                            position={[debtor.latitude!, debtor.longitude!]}
+                                            icon={redIcon}
+                                        >
+                                            <Popup>
+                                                <div className="text-right font-sans">
+                                                    <h3 className="font-bold text-slate-800 mb-1">{debtor.name}</h3>
+                                                    <p className="text-xs text-slate-500 mb-2">{debtor.address || 'بدون آدرس'}</p>
+                                                    <div className="flex justify-between items-center gap-4 bg-red-50 p-2 rounded-lg">
+                                                        <span className="text-[10px] font-bold text-red-600 uppercase">بدهی معوق</span>
+                                                        <span className="text-sm font-black text-red-700">{formatCurrency(debtor.totalDebt, storeSettings, 'AFN')}</span>
+                                                    </div>
+                                                    <div className="mt-3 flex flex-col gap-1">
+                                                        <div className="flex justify-between text-[10px]">
+                                                            <span className="text-slate-400">تلفن:</span>
+                                                            <span className="text-slate-600 font-bold">{debtor.phone || '-'}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </Popup>
+                                        </Marker>
+                                    ))}
+                                </MapContainer>
+                            </div>
+                        ) : salesSubTab === 'dashboard' ? (
                             <div className="space-y-6">
                                 {/* Sales Dashboard Cards */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1948,6 +2199,12 @@ const CompanyManagement: React.FC = () => {
                                 >
                                     گزارش وصولی و طلبات
                                 </button>
+                                <button 
+                                    onClick={() => setCollectionSubTab('map')}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${collectionSubTab === 'map' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    ردیابی طلبکاران
+                                </button>
                             </div>
                             <div className="flex gap-2 w-full md:w-auto">
                                 <div className="relative flex-grow md:w-64">
@@ -2048,6 +2305,58 @@ const CompanyManagement: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
+                            </div>
+                        ) : collectionSubTab === 'map' ? (
+                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-[600px] relative">
+                                <MapContainer 
+                                    center={debtorsWithCoords.length > 0 ? [debtorsWithCoords[0].latitude!, debtorsWithCoords[0].longitude!] : [34.5553, 69.2075]} 
+                                    zoom={13} 
+                                    style={{ height: '100%', width: '100%' }}
+                                >
+                                    <TileLayer
+                                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                    />
+                                    {debtorsWithCoords.map(debtor => (
+                                        <Marker 
+                                            key={debtor.id} 
+                                            position={[debtor.latitude!, debtor.longitude!]} 
+                                            icon={redIcon}
+                                        >
+                                            <Popup>
+                                                <div className="text-right space-y-2 p-1">
+                                                    <div className="font-black text-slate-900 border-b border-slate-100 pb-1">{debtor.name}</div>
+                                                    <div className="flex justify-between items-center gap-4">
+                                                        <span className="text-[10px] text-slate-500">تعداد فاکتورهای معوق:</span>
+                                                        <span className="text-xs font-bold text-red-600">{debtor.unpaidCount}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center gap-4">
+                                                        <span className="text-[10px] text-slate-500">مجموع مبلغ بدهی:</span>
+                                                        <span className="text-sm font-black text-slate-900">{formatCurrency(debtor.totalDebt, storeSettings, 'AFN')}</span>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setSelectedCustomerForLocation(debtor);
+                                                            setIsTrackModalOpen(true);
+                                                        }}
+                                                        className="w-full mt-2 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold hover:bg-blue-700 transition-all"
+                                                    >
+                                                        مسیریابی و ردیابی
+                                                    </button>
+                                                </div>
+                                            </Popup>
+                                        </Marker>
+                                    ))}
+                                    <MapController />
+                                </MapContainer>
+                                {debtorsWithCoords.length === 0 && (
+                                    <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center z-[1000]">
+                                        <div className="text-center p-8 bg-white rounded-3xl shadow-xl border border-slate-100">
+                                            <MapIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                                            <p className="text-slate-500 font-bold">هیچ بدهکاری با موقعیت ثبت شده یافت نشد.</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -2174,6 +2483,12 @@ const CompanyManagement: React.FC = () => {
                             گزارش فعالیت‌ها
                         </button>
                     )}
+                    <button 
+                        onClick={() => setActiveTab('charts')}
+                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'charts' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        نمودارها
+                    </button>
                 </div>
             </div>
 
@@ -2671,6 +2986,169 @@ const CompanyManagement: React.FC = () => {
                             </table>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {activeTab === 'charts' && (
+                <div className="space-y-8">
+                    {/* Charts Header & Filters */}
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h2 className="text-2xl font-black text-slate-800">نبض بازار و سلامت مالی شرکت‌ها</h2>
+                            <p className="text-slate-500 mt-1">تحلیل بصری سود و زیان خالص تمامی مجموعه‌ها</p>
+                        </div>
+                        <div className="flex bg-slate-200/50 p-1 rounded-2xl">
+                            <button 
+                                onClick={() => setChartsTimeRange('30days')}
+                                className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${chartsTimeRange === '30days' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                ۳۰ روز اخیر
+                            </button>
+                            <button 
+                                onClick={() => setChartsTimeRange('6months')}
+                                className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${chartsTimeRange === '6months' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                ۶ ماه اخیر
+                            </button>
+                            <button 
+                                onClick={() => setChartsTimeRange('year')}
+                                className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${chartsTimeRange === 'year' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                یک سال اخیر
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Hero Card: Top Performer */}
+                    {companyChartsData.length > 0 && companyChartsData.some(c => c.totalProfit > 0) && (
+                        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-blue-200 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+                            <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-400/20 rounded-full -ml-32 -mb-32 blur-3xl"></div>
+                            
+                            <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-8">
+                                <div className="flex-grow text-center md:text-right">
+                                    <div className="inline-flex items-center gap-2 bg-white/20 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-4">
+                                        <TrendingUpIcon className="w-4 h-4" />
+                                        برترین عملکرد مالی
+                                    </div>
+                                    <h3 className="text-4xl font-black mb-2">
+                                        {companyChartsData.reduce((prev, current) => (prev.totalProfit > current.totalProfit) ? prev : current).name}
+                                    </h3>
+                                    <p className="text-blue-100 text-lg">
+                                        سود خالص در بازه انتخابی: 
+                                        <span className="font-black mr-2 text-white">
+                                            {formatCurrency(companyChartsData.reduce((prev, current) => (prev.totalProfit > current.totalProfit) ? prev : current).totalProfit, storeSettings, 'AFN')}
+                                        </span>
+                                    </p>
+                                </div>
+                                <div className="w-full md:w-1/2 h-48">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={companyChartsData.reduce((prev, current) => (prev.totalProfit > current.totalProfit) ? prev : current).data}>
+                                            <defs>
+                                                <linearGradient id="colorProfitHero" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#fff" stopOpacity={0.3}/>
+                                                    <stop offset="95%" stopColor="#fff" stopOpacity={0}/>
+                                                </linearGradient>
+                                            </defs>
+                                            <RechartsTooltip 
+                                                contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '12px', color: '#fff' }}
+                                                itemStyle={{ color: '#fff' }}
+                                                formatter={(value: number) => [formatCurrency(value, storeSettings, 'AFN'), 'سود']}
+                                                labelFormatter={(label) => `تاریخ: ${label}`}
+                                            />
+                                            <Area 
+                                                type="monotone" 
+                                                dataKey="profit" 
+                                                stroke="#fff" 
+                                                strokeWidth={4}
+                                                fillOpacity={1} 
+                                                fill="url(#colorProfitHero)" 
+                                            />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* All Companies Charts List */}
+                    <div className="grid grid-cols-1 gap-6">
+                        {companyChartsData.sort((a, b) => b.totalProfit - a.totalProfit).map((company, index) => (
+                            <div key={company.id} className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all group">
+                                <div className="flex flex-col md:flex-row items-center gap-8">
+                                    <div className="flex items-center gap-4 min-w-[250px]">
+                                        <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 font-black text-lg">
+                                            {index + 1}
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xl font-bold text-slate-800">{company.name}</h4>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className={`text-xs font-black ${company.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                    {formatCurrency(company.totalProfit, storeSettings, 'AFN')}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 uppercase font-bold">سود خالص</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex-grow h-24 w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={company.data}>
+                                                <defs>
+                                                    <linearGradient id={`colorProfit-${company.id}`} x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor={company.totalProfit >= 0 ? "#10b981" : "#ef4444"} stopOpacity={0.1}/>
+                                                        <stop offset="95%" stopColor={company.totalProfit >= 0 ? "#10b981" : "#ef4444"} stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <RechartsTooltip 
+                                                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                                    formatter={(value: number) => [formatCurrency(value, storeSettings, 'AFN'), 'سود']}
+                                                    labelFormatter={(label) => `تاریخ: ${label}`}
+                                                />
+                                                <Area 
+                                                    type="monotone" 
+                                                    dataKey="profit" 
+                                                    stroke={company.totalProfit >= 0 ? "#10b981" : "#ef4444"} 
+                                                    strokeWidth={3}
+                                                    fillOpacity={1} 
+                                                    fill={`url(#colorProfit-${company.id})`} 
+                                                />
+                                                <ReferenceLine y={0} stroke="#e2e8f0" strokeDasharray="3 3" />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    <div className="flex flex-col items-center md:items-end gap-2 min-w-[120px]">
+                                        {company.totalProfit >= 0 ? (
+                                            <div className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full text-xs font-black">
+                                                <TrendingUpIcon className="w-4 h-4" />
+                                                سودآور
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 text-red-600 bg-red-50 px-3 py-1 rounded-full text-xs font-black">
+                                                <TrendingDownIcon className="w-4 h-4" />
+                                                زیان‌ده
+                                            </div>
+                                        )}
+                                        <button 
+                                            onClick={() => setSelectedCompanyId(company.id)}
+                                            className="text-blue-600 text-xs font-bold hover:underline"
+                                        >
+                                            مشاهده جزئیات
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {companyChartsData.length === 0 && (
+                        <div className="text-center py-20 bg-white rounded-[3rem] border border-dashed border-slate-300">
+                            <ChartBarIcon className="w-20 h-20 text-slate-200 mx-auto mb-4" />
+                            <h3 className="text-xl font-bold text-slate-400">داده‌ای برای نمایش نمودار وجود ندارد.</h3>
+                            <p className="text-slate-400 text-sm mt-2">ابتدا تراکنش‌های مالی شرکت‌ها را در دفتر کل ثبت کنید.</p>
+                        </div>
+                    )}
                 </div>
             )}
                 </>

@@ -365,6 +365,13 @@ export const MapPinIcon = ({ className = 'w-6 h-6' }) => (
     </svg>
 );
 
+export const LocateIcon = ({ className = 'w-6 h-6' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 2.25V4.5m0 15v2.25m9.75-9.75H19.5m-15 0H2.25m15.454-6.454l-1.591 1.591m-10.126 10.126l-1.591 1.591m10.126 0l1.591 1.591M6.454 6.454l1.591 1.591M18 12a6 6 0 11-12 0 6 6 0 0112 0z" />
+    </svg>
+);
+
 export const ArrowPathIcon = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
