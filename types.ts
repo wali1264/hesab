@@ -509,6 +509,7 @@ export interface User {
     password?: string; // Should be hashed in a real app
     roleId: string;
     current_device_id?: string;
+    is_approved?: boolean;
 }
 
 export interface AppState {
