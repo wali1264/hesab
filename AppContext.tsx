@@ -377,7 +377,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const savedUser = localStorage.getItem('app_session_user');
             if (savedUser) {
                 try {
-                    const user = JSON.parse(savedUser);
+                    let user = JSON.parse(savedUser);
+                    // Normalize role_id to roleId
+                    if (user.role_id && !user.roleId) {
+                        user.roleId = user.role_id;
+                    }
                     setState(prev => ({ ...prev, isAuthenticated: true, currentUser: user }));
                     await fetchData();
                 } catch (e) {
@@ -449,8 +453,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setIsLoading(false);
                 return { success: false, message: 'نام کاربری یا رمز عبور اشتباه است.' };
             }
+
+            // Normalize role_id to roleId
+            if (user.role_id && !user.roleId) {
+                user.roleId = user.role_id;
+            }
             
-            if (!user.is_approved) {
+            if (user.is_approved === false) {
                 setIsLoading(false);
                 return { success: false, message: 'حساب در انتظار تایید است.' };
             }
@@ -466,6 +475,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
 
             localStorage.setItem('app_session_user', JSON.stringify(user));
+            
+            // If admin logs in, ensure shop is active
+            if (user.roleId === 'admin-role' || user.roleId === SYSTEM_SUPER_OWNER_ID) {
+                localStorage.setItem('kasebyar_shop_active', 'true');
+                setIsShopActive(true);
+            }
+
             setState(prev => ({ ...prev, isAuthenticated: true, currentUser: user }));
             await fetchData();
             return { success: true, message: `✅ خوش آمدید ${user.username}` };
@@ -491,19 +507,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const hasPermission = useCallback((permission: Permission): boolean => {
         if (!state.currentUser) return false;
-        if (state.currentUser.roleId === SYSTEM_SUPER_OWNER_ID) return true;
-        const userRole = state.roles.find(r => r.id === state.currentUser!.roleId);
+        const roleId = state.currentUser.roleId || (state.currentUser as any).role_id;
+        if (roleId === SYSTEM_SUPER_OWNER_ID) return true;
+        if (roleId === 'admin-role') return true;
+        const userRole = state.roles.find(r => r.id === roleId);
         if (!userRole || !userRole.permissions) return false;
-        if (userRole.id === 'admin-role') return true;
         return userRole.permissions.includes(permission);
     }, [state.currentUser, state.roles]);
 
     const hasCompanyAccess = useCallback((slotNumber: number): boolean => {
         if (!state.currentUser) return false;
-        if (state.currentUser.roleId === SYSTEM_SUPER_OWNER_ID) return true;
-        const userRole = state.roles.find(r => r.id === state.currentUser!.roleId);
+        const roleId = state.currentUser.roleId || (state.currentUser as any).role_id;
+        if (roleId === SYSTEM_SUPER_OWNER_ID) return true;
+        if (roleId === 'admin-role') return true;
+        const userRole = state.roles.find(r => r.id === roleId);
         if (!userRole) return false;
-        if (userRole.id === 'admin-role') return true;
         if (!userRole.companyAccess) return false;
         return userRole.companyAccess.includes(slotNumber);
     }, [state.currentUser, state.roles]);

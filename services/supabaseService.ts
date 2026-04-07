@@ -30,7 +30,7 @@ export const api = {
             console.error("Login Error:", error);
             return null;
         }
-        return data;
+        return Array.isArray(data) ? data[0] : data;
     },
 
     // --- SETTINGS ---
