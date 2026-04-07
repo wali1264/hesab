@@ -378,10 +378,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (savedUser) {
                 try {
                     let user = JSON.parse(savedUser);
-                    // Normalize role_id to roleId
-                    if (user.role_id && !user.roleId) {
-                        user.roleId = user.role_id;
-                    }
                     setState(prev => ({ ...prev, isAuthenticated: true, currentUser: user }));
                     await fetchData();
                 } catch (e) {
@@ -399,7 +395,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             const { data: user, error } = await supabase.from('users').select('*, role:roles(*)').eq('id', state.currentUser.id).maybeSingle();
             
-            if (user && user.is_approved === true) {
+            if (user && user.isApproved === true) {
                 authRetryCount.current = 0;
                 return;
             }
@@ -454,24 +450,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 return { success: false, message: 'نام کاربری یا رمز عبور اشتباه است.' };
             }
 
-            // Normalize role_id to roleId
-            if (user.role_id && !user.roleId) {
-                user.roleId = user.role_id;
-            }
-            
-            if (user.is_approved === false) {
+            if (user.isApproved === false) {
                 setIsLoading(false);
                 return { success: false, message: 'حساب در انتظار تایید است.' };
             }
 
             const deviceId = getDeviceId();
-            if (user.current_device_id && user.current_device_id !== deviceId) {
+            if (user.currentDeviceId && user.currentDeviceId !== deviceId) {
                 setIsLoading(false);
                 return { success: false, message: 'این حساب در دستگاه دیگری فعال است.', locked: true };
             }
 
-            if (!user.current_device_id) {
-                await api.updateUser({ id: user.id, current_device_id: deviceId });
+            if (!user.currentDeviceId) {
+                await api.updateUser({ id: user.id, currentDeviceId: deviceId });
             }
 
             localStorage.setItem('app_session_user', JSON.stringify(user));
@@ -495,7 +486,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsLoggingOut(true);
         try {
             if (state.currentUser) {
-                await api.updateUser({ id: state.currentUser.id, current_device_id: null });
+                await api.updateUser({ id: state.currentUser.id, currentDeviceId: null });
             }
         } catch (e) {}
         
@@ -507,7 +498,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const hasPermission = useCallback((permission: Permission): boolean => {
         if (!state.currentUser) return false;
-        const roleId = state.currentUser.roleId || (state.currentUser as any).role_id;
+        const roleId = state.currentUser.roleId;
         if (roleId === SYSTEM_SUPER_OWNER_ID) return true;
         if (roleId === 'admin-role') return true;
         const userRole = state.roles.find(r => r.id === roleId);
@@ -517,7 +508,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const hasCompanyAccess = useCallback((slotNumber: number): boolean => {
         if (!state.currentUser) return false;
-        const roleId = state.currentUser.roleId || (state.currentUser as any).role_id;
+        const roleId = state.currentUser.roleId;
         if (roleId === SYSTEM_SUPER_OWNER_ID) return true;
         if (roleId === 'admin-role') return true;
         const userRole = state.roles.find(r => r.id === roleId);
