@@ -22,9 +22,8 @@ interface AppContextType extends AppState {
     isShopActive: boolean;
     
     // Auth
-    login: (identifier: string, password: string, type: 'admin' | 'staff') => Promise<{ success: boolean; message: string; pending?: boolean; locked?: boolean }>;
-    signup: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
-    logout: (type: 'full' | 'switch') => Promise<{ success: boolean; message: string }>;
+    login: (username: string, password: string) => Promise<{ success: boolean; message: string; locked?: boolean }>;
+    logout: () => Promise<{ success: boolean; message: string }>;
     hasPermission: (permission: Permission) => boolean;
     hasCompanyAccess: (slotNumber: number) => boolean;
     
@@ -265,7 +264,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const fetchData = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const [settings, users, roles, products, services, entities, transactions, invoices, activity, wastageRecords, orders, managedCompanies, managedLedger, managedCustomers, managedInvoices, managedProductionLogs, billingRecords, ownerTransactions, ownerExpenseCategories, companyEmployees, salaryRecords, salaryPayments] = await Promise.all([
+            const [settings, users, roles, products, services, entities, transactions, invoices, activity, wastageRecords, orders, managedCompanies, managedLedger, managedCustomers, managedInvoices, managedProductionLogs, billingRecords, ownerTransactions, ownerExpenseCategories, companyEmployees, salaryRecords, salaryPayments, legalRecords] = await Promise.all([
                 api.getSettings().catch(() => ({})),
                 api.getUsers().catch(() => []),
                 api.getRoles().catch(() => []),
@@ -287,89 +286,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 api.getOwnerExpenseCategories().catch(() => []),
                 api.getCompanyEmployees().catch(() => []),
                 api.getSalaryRecords().catch(() => []),
-                api.getSalaryPayments().catch(() => [])
-            ]);
-
-            const isSessionLocked = localStorage.getItem('kasebyar_session_locked') === 'true';
-            const cachedOwner = localStorage.getItem('kasebyar_user_identity');
-            let ownerIdentity = null;
-            if (cachedOwner) {
-                try { ownerIdentity = JSON.parse(cachedOwner); } catch(e) { console.error("Identity cache corruption", e); }
-            }
-
-            const shopStatus = !!ownerIdentity;
-            localStorage.setItem('kasebyar_shop_active', String(shopStatus));
-            setIsShopActive(shopStatus);
-
-            let isAuth = false;
-            let restoredUser = null;
-
-            if (!isSessionLocked) {
-                const localStaff = localStorage.getItem('kasebyar_staff_user');
-                if (localStaff && shopStatus) {
-                    try {
-                        const parsedStaff = JSON.parse(localStaff) as User;
-                        const dbUser = users.find(u => u.id === parsedStaff.id);
-                        if (dbUser) { isAuth = true; restoredUser = dbUser; }
-                    } catch(e) {}
-                }
-                if (!restoredUser && ownerIdentity) {
-                    isAuth = true;
-                    restoredUser = { id: ownerIdentity.id, username: ownerIdentity.email || 'Owner', roleId: SYSTEM_SUPER_OWNER_ID };
-                }
-                if (!restoredUser && navigator.onLine) {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.user) {
-                        const profile = await api.getProfile(session.user.id);
-                        if (profile?.is_approved) {
-                            localStorage.setItem('kasebyar_user_identity', JSON.stringify(profile));
-                            isAuth = true;
-                            restoredUser = { id: session.user.id, username: session.user.email || 'Owner', roleId: SYSTEM_SUPER_OWNER_ID };
-                            setIsShopActive(true);
-                            localStorage.setItem('kasebyar_shop_active', 'true');
-                        }
-                    }
-                }
-            }
-
-            // Patch admin-role if it exists but is missing new permissions
-            const adminRoleIndex = roles.findIndex(r => r.id === 'admin-role');
-            if (adminRoleIndex !== -1) {
-                const adminRole = roles[adminRoleIndex];
-                const newPermissions = ['page:orders', 'orders:create', 'orders:edit', 'orders:delete', 'orders:add_payment', 'page:special_reports'];
-                const missingPermissions = newPermissions.filter(p => !adminRole.permissions.includes(p));
-                
-                if (missingPermissions.length > 0) {
-                    const updatedAdminRole = {
-                        ...adminRole,
-                        permissions: [...adminRole.permissions, ...missingPermissions]
-                    };
-                    roles[adminRoleIndex] = updatedAdminRole;
-                    // Save the patched role back to DB in the background
-                    api.updateRole(updatedAdminRole).catch(console.error);
-                }
-            }
-
-            // One-time seed for the new employee requested by user (55 AFN salary)
-            // Removed as per user request to avoid test data
+                api.getSalaryPayments().catch(() => []),
+                api.getLegalRecords().catch(() => [])
+            ]) as any[];
 
             setState(prev => {
-                const mergedSettings = (settings as StoreSettings).storeName ? { ...prev.storeSettings, ...settings } : prev.storeSettings;
+                const mergedSettings = (settings as StoreSettings)?.storeName ? { ...prev.storeSettings, ...settings } : prev.storeSettings;
                 
-                // --- Data Migration & Patching Section ---
-                // Ensure critical settings exist for backward compatibility
-                if (!mergedSettings.currencyConfigs) {
-                    mergedSettings.currencyConfigs = prev.storeSettings.currencyConfigs;
-                }
-                if (!mergedSettings.baseCurrency) {
-                    mergedSettings.baseCurrency = prev.storeSettings.baseCurrency;
-                }
-                if (!mergedSettings.expenseCategories || mergedSettings.expenseCategories.length === 0) {
-                    mergedSettings.expenseCategories = prev.storeSettings.expenseCategories;
-                }
-
-                // Patch products if needed (e.g., ensure new fields exist)
-                const patchedProducts = products.map((p: any) => ({
+                // Patch products if needed
+                const patchedProducts = (products || []).map((p: any) => ({
                     ...p,
                     minStock: p.minStock ?? 0,
                     isArchived: p.isArchived ?? false,
@@ -377,7 +302,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     salePrice: p.salePrice ?? 0
                 }));
 
-                // Patch employees (ensure isActive and currency fields exist)
+                // Patch employees
                 const patchedEmployees = (entities.employees || []).map((e: any) => ({
                     ...e,
                     isActive: e.isActive ?? true,
@@ -404,40 +329,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 return {
                     ...prev,
                     storeSettings: mergedSettings,
-                    users,
-                    roles: roles.length > 0 ? roles : [{ id: 'admin-role', name: 'Admin', permissions: ['page:dashboard', 'page:inventory', 'page:pos', 'page:purchases', 'page:accounting', 'page:reports', 'page:settings', 'page:in_transit', 'page:deposits', 'page:orders', 'orders:create', 'orders:edit', 'orders:delete', 'orders:add_payment', 'page:special_reports'] }],
+                    users: users || [],
+                    roles: (roles && roles.length > 0) ? roles : [{ id: 'admin-role', name: 'Admin', permissions: ['page:dashboard', 'page:inventory', 'page:pos', 'page:purchases', 'page:accounting', 'page:reports', 'page:settings', 'page:in_transit', 'page:deposits', 'page:orders', 'orders:create', 'orders:edit', 'orders:delete', 'orders:add_payment', 'page:special_reports'] }],
                     products: patchedProducts, 
-                    services, 
+                    services: services || [], 
                     customers: patchedCustomers, 
                     suppliers: patchedSuppliers,
                     employees: patchedEmployees, 
-                    expenses: entities.expenses,
-                    depositHolders: entities.depositHolders, 
-                    depositTransactions: transactions.depositTransactions,
-                    customerTransactions: transactions.customerTransactions,
-                    supplierTransactions: transactions.supplierTransactions,
-                    payrollTransactions: transactions.payrollTransactions,
-                    saleInvoices: invoices.saleInvoices, 
-                    purchaseInvoices: invoices.purchaseInvoices,
-                    inTransitInvoices: invoices.inTransitInvoices,
-                    activities: activity,
-                    wastageRecords: wastageRecords,
-                    orders: orders,
+                    expenses: entities.expenses || [],
+                    depositHolders: entities.depositHolders || [], 
+                    depositTransactions: transactions.depositTransactions || [],
+                    customerTransactions: transactions.customerTransactions || [],
+                    supplierTransactions: transactions.supplierTransactions || [],
+                    payrollTransactions: transactions.payrollTransactions || [],
+                    saleInvoices: invoices.saleInvoices || [], 
+                    purchaseInvoices: invoices.purchaseInvoices || [],
+                    inTransitInvoices: invoices.inTransitInvoices || [],
+                    activities: activity || [],
+                    wastageRecords: wastageRecords || [],
+                    orders: orders || [],
                     companies: entities.companies || [],
-                    managedCompanies: managedCompanies,
-                    managedCompanyLedger: managedLedger,
-                    managedCompanyCustomers: managedCustomers,
-                    managedCompanyInvoices: managedInvoices,
-                    managedCompanyProductionLogs: managedProductionLogs,
-                    customerBillingRecords: billingRecords,
-                    ownerTransactions: ownerTransactions,
-                    ownerExpenseCategories: ownerExpenseCategories,
+                    managedCompanies: managedCompanies || [],
+                    managedCompanyLedger: managedLedger || [],
+                    managedCompanyCustomers: managedCustomers || [],
+                    managedCompanyInvoices: managedInvoices || [],
+                    managedCompanyProductionLogs: managedProductionLogs || [],
+                    customerBillingRecords: billingRecords || [],
+                    ownerTransactions: ownerTransactions || [],
+                    ownerExpenseCategories: ownerExpenseCategories || [],
                     partners: entities.partners || [],
-                    companyEmployees: companyEmployees,
-                    salaryRecords: salaryRecords,
-                    salaryPayments: salaryPayments,
-                    isAuthenticated: isAuth,
-                    currentUser: restoredUser
+                    companyEmployees: companyEmployees || [],
+                    salaryRecords: salaryRecords || [],
+                    salaryPayments: salaryPayments || [],
+                    legalRecords: legalRecords || []
                 };
             });
         } catch (error) {
@@ -448,53 +372,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [showToast]);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    useEffect(() => {
+        const checkSession = async () => {
+            const savedUser = localStorage.getItem('app_session_user');
+            if (savedUser) {
+                try {
+                    const user = JSON.parse(savedUser);
+                    setState(prev => ({ ...prev, isAuthenticated: true, currentUser: user }));
+                    await fetchData();
+                } catch (e) {
+                    localStorage.removeItem('app_session_user');
+                }
+            }
+            setIsLoading(false);
+        };
+        checkSession();
+    }, [fetchData]);
 
     const checkAuthorization = useCallback(async () => {
-        if (!navigator.onLine) return;
-
-        const cachedOwner = localStorage.getItem('kasebyar_user_identity');
-        if (!cachedOwner) return;
+        if (!navigator.onLine || !state.currentUser) return;
 
         try {
-            const ownerIdentity = JSON.parse(cachedOwner);
-            const profile = await api.getProfile(ownerIdentity.id);
+            const { data: user, error } = await supabase.from('users').select('*, role:roles(*)').eq('id', state.currentUser.id).maybeSingle();
             
-            if (profile && profile.is_approved === true) {
+            if (user && user.is_approved === true) {
                 authRetryCount.current = 0;
                 return;
             }
 
-            // If profile is null or is_approved is false
             authRetryCount.current += 1;
-            console.warn(`Authorization check failed. Attempt ${authRetryCount.current}/3`);
-
             if (authRetryCount.current >= 3) {
-                console.error("Authorization revoked after 3 attempts. Logging out...");
-                
-                if (state.currentUser?.roleId === SYSTEM_SUPER_OWNER_ID) {
-                    localStorage.setItem('kasebyar_pending_approval', 'true');
-                }
-                
-                localStorage.removeItem('kasebyar_user_identity');
-                localStorage.removeItem('kasebyar_offline_auth');
-                localStorage.removeItem('kasebyar_staff_user');
-                localStorage.setItem('kasebyar_shop_active', 'false');
-                localStorage.setItem('kasebyar_session_locked', 'true');
-                
-                setIsShopActive(false);
+                localStorage.removeItem('app_session_user');
                 setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
-                
-                supabase.auth.signOut().catch(() => {});
                 authRetryCount.current = 0;
-            } else {
-                // Retry in 60 seconds
-                setTimeout(checkAuthorization, 60000);
             }
         } catch (e) {
-            console.error("Auth check encountered an error (likely network). Session preserved.", e);
+            console.error("Auth check error:", e);
         }
-    }, [state.currentUser, setIsShopActive]);
+    }, [state.currentUser]);
 
     useEffect(() => {
         let interval: any;
@@ -525,78 +440,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try { await api.addActivity(newActivity); } catch (e) {}
     }, [state.currentUser]);
 
-    const login = async (identifier: string, password: string, type: 'admin' | 'staff'): Promise<{ success: boolean; message: string; pending?: boolean; locked?: boolean }> => {
-        if (type === 'admin') {
-            try {
-                const { data, error } = await supabase.auth.signInWithPassword({ email: identifier, password });
-                if (error) return { success: false, message: 'ایمیل یا رمز عبور اشتباه است.' };
-                const profile = await api.getProfile(data.user.id);
-                if (!profile) return { success: false, message: 'پروفایل یافت نشد.' };
-                if (!profile.is_approved) return { success: false, message: 'حساب در انتظار تایید است.', pending: true };
-                const deviceId = getDeviceId();
-                if (profile.current_device_id && profile.current_device_id !== deviceId) return { success: false, message: 'این حساب در دستگاه دیگری فعال است.', locked: true };
-                if (!profile.current_device_id) await api.updateProfile(data.user.id, { current_device_id: deviceId });
-                localStorage.setItem('kasebyar_user_identity', JSON.stringify(profile));
-                localStorage.setItem('kasebyar_offline_auth', 'true');
-                localStorage.setItem('kasebyar_shop_active', 'true');
-                localStorage.setItem('kasebyar_session_locked', 'false');
-                setIsShopActive(true);
-                await fetchData();
-                return { success: true, message: '✅ ورود موفق و بازگشایی فروشگاه' };
-            } catch (e) { return { success: false, message: '❌ خطا در اتصال به سرور جهت تایید اولیه.' }; }
-        } else {
-            if (localStorage.getItem('kasebyar_shop_active') !== 'true') return { success: false, message: '❌ فروشگاه قفل است. مدیر باید ابتدا وارد شود.' };
-            const user = await api.verifyStaffCredentials(identifier, password);
-            if (user) {
-                localStorage.setItem('kasebyar_staff_user', JSON.stringify(user));
-                localStorage.setItem('kasebyar_session_locked', 'false');
-                await fetchData();
-                return { success: true, message: `✅ خوش آمدید ${user.username}` };
-            } else return { success: false, message: 'نام کاربری یا رمز عبور اشتباه است.' };
+    const login = async (username: string, password: string): Promise<{ success: boolean; message: string; locked?: boolean }> => {
+        setIsLoading(true);
+        try {
+            const user = await api.verifyUserLogin(username, password);
+            
+            if (!user) {
+                setIsLoading(false);
+                return { success: false, message: 'نام کاربری یا رمز عبور اشتباه است.' };
+            }
+            
+            if (!user.is_approved) {
+                setIsLoading(false);
+                return { success: false, message: 'حساب در انتظار تایید است.' };
+            }
+
+            const deviceId = getDeviceId();
+            if (user.current_device_id && user.current_device_id !== deviceId) {
+                setIsLoading(false);
+                return { success: false, message: 'این حساب در دستگاه دیگری فعال است.', locked: true };
+            }
+
+            if (!user.current_device_id) {
+                await api.updateUser({ id: user.id, current_device_id: deviceId });
+            }
+
+            localStorage.setItem('app_session_user', JSON.stringify(user));
+            setState(prev => ({ ...prev, isAuthenticated: true, currentUser: user }));
+            await fetchData();
+            return { success: true, message: `✅ خوش آمدید ${user.username}` };
+        } catch (e) {
+            setIsLoading(false);
+            return { success: false, message: '❌ خطا در اتصال به سرور.' };
         }
     };
 
-    const logout = async (type: 'full' | 'switch'): Promise<{ success: boolean; message: string }> => {
+    const logout = async (): Promise<{ success: boolean; message: string }> => {
         setIsLoggingOut(true);
-        
-        if (type === 'full') {
-            if (!navigator.onLine) {
-                setIsLoggingOut(false);
-                return { success: false, message: '⚠️ خروج کامل نیاز به اینترنت دارد.' };
+        try {
+            if (state.currentUser) {
+                await api.updateUser({ id: state.currentUser.id, current_device_id: null });
             }
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    // Attempt to clear the session on the server first
-                    const success = await api.updateProfile(user.id, { current_device_id: null });
-                    if (!success) {
-                        setIsLoggingOut(false);
-                        return { success: false, message: '❌ خطا در آزادسازی نشست از سرور. مجدد تلاش کنید.' };
-                    }
-                }
-                await supabase.auth.signOut();
-                
-                // Only clear local storage if server-side operations succeeded
-                localStorage.removeItem('kasebyar_user_identity');
-                localStorage.removeItem('kasebyar_offline_auth');
-                localStorage.setItem('kasebyar_shop_active', 'false');
-                setIsShopActive(false);
-            } catch (e) {
-                setIsLoggingOut(false);
-                return { success: false, message: '❌ خطا در فرآیند خروج. اتصال را بررسی کنید.' };
-            }
-        }
+        } catch (e) {}
         
-        localStorage.removeItem('kasebyar_staff_user');
-        localStorage.setItem('kasebyar_session_locked', 'true');
-        
-        // Short delay for smooth transition
-        setTimeout(() => { 
-            setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null })); 
-            setIsLoggingOut(false); 
-        }, 500);
-        
-        return { success: true, message: type === 'full' ? '✅ خروج کامل و قفل فروشگاه انجام شد.' : '✅ نشست شما بسته شد. فروشگاه باز است.' };
+        localStorage.removeItem('app_session_user');
+        setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
+        setIsLoggingOut(false);
+        return { success: true, message: '✅ از سیستم خارج شدید.' };
     };
 
     const hasPermission = useCallback((permission: Permission): boolean => {
@@ -658,14 +548,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (roleId === 'admin-role') return;
         await api.deleteRole(roleId);
         setState(prev => ({ ...prev, roles: prev.roles.filter(r => r.id !== roleId) }));
-    };
-
-    const signup = async (email: string, password: string) => {
-        try {
-            const { error } = await supabase.auth.signUp({ email, password });
-            if (error) return { success: false, message: error.message };
-            return { success: true, message: '✅ ثبت‌نام انجام شد.' };
-        } catch (e) { return { success: false, message: '❌ خطا در ثبت‌نام.' }; }
     };
 
     const exportData = () => {
@@ -1004,13 +886,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         // 1. Virtual Inventory Restoration for FIFO Calculation
         const virtualProducts = JSON.parse(JSON.stringify(products)) as Product[];
+        const stockRestores: any[] = [];
         if (oldInv) {
             oldInv.items.forEach(item => {
                 if (item.type === 'product' && item.batchDeductions) {
                     item.batchDeductions.forEach(d => {
                         const vp = virtualProducts.find(p => p.batches.some(b => b.id === d.batchId));
                         const vb = vp?.batches.find(b => b.id === d.batchId);
-                        if (vb) vb.stock += d.quantity;
+                        if (vb) {
+                            vb.stock += d.quantity;
+                            stockRestores.push({ batchId: d.batchId, quantity: d.quantity });
+                        }
                     });
                 }
             });
@@ -1022,7 +908,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (item.type === 'product') {
                 const p = virtualProducts.find(x => x.id === item.id);
                 if (p && item.batchDeductions) {
-                    // Re-verify deductions against virtual stock (critical for Edit mode)
                     let remainingToDeduct = item.quantity;
                     const finalDeductions: { batchId: string, quantity: number }[] = [];
                     const sortedBatches = [...p.batches].sort((a,b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
@@ -1048,22 +933,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return item;
         });
 
-        // 3. Financial Totals (Dynamic Logic)
+        // 3. Financial Totals
         const totalBaseAmount = cart.reduce((t, i) => {
             const price = (i.finalPrice !== undefined) ? i.finalPrice : (i.type === 'product' ? i.salePrice : i.price);
             return (price * i.quantity) + t;
         }, 0);
 
-        // Transactional amount calculation based on the user's dynamic rules:
         const config = state.storeSettings.currencyConfigs[currency];
         const totalTransactional = currency === state.storeSettings.baseCurrency 
             ? totalBaseAmount 
             : (config.method === 'multiply' ? totalBaseAmount * exchangeRate : totalBaseAmount / exchangeRate);
-
-        // Calculate received amount in base currency
-        const receivedAmountBase = currency === state.storeSettings.baseCurrency
-            ? receivedAmount
-            : (config.method === 'multiply' ? receivedAmount / exchangeRate : receivedAmount * exchangeRate);
 
         const invId = editingSaleInvoiceId || generateNextId('F', saleInvoices.map(i => i.id));
         
@@ -1073,7 +952,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             items: itemsWithBatches, 
             subtotal: totalTransactional, 
             totalAmount: totalTransactional, 
-            totalAmountAFN: totalBaseAmount, // This field name is legacy, it stores the base amount
+            totalAmountAFN: totalBaseAmount, 
             totalDiscount: 0, 
             timestamp: new Date().toISOString(), 
             cashier, 
@@ -1081,245 +960,90 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             supplierIntermediaryId,
             currency, 
             exchangeRate,
-            receivedAmount // Store the received amount
+            receivedAmount
         };
 
         // 4. Atomic Balance Update
-        const customerUpdates: {id: string, newBalances: {AFN: number, USD: number, IRT: number, Total: number}}[] = [];
-        const supplierUpdates: {id: string, newBalances: {AFN: number, USD: number, IRT: number, Total: number}}[] = [];
+        const customerUpdates: any[] = [];
+        const supplierUpdates: any[] = [];
+        const customerTxs: any[] = [];
+        const supplierTxs: any[] = [];
         
-        // Revert Old Customer
-        if (oldInv && oldInv.customerId) {
-            const oc = customers.find(c => c.id === oldInv.customerId);
-            if (oc) {
-                let balAFN = oc.balanceAFN, balUSD = oc.balanceUSD, balIRT = oc.balanceIRT, balTotal = oc.balance;
-                if (oldInv.currency === 'USD') balUSD -= oldInv.totalAmount;
-                else if (oldInv.currency === 'IRT') balIRT -= oldInv.totalAmount;
-                else balAFN -= oldInv.totalAmount;
-                balTotal -= oldInv.totalAmountAFN;
-
-                // Revert old received amount
-                if (oldInv.receivedAmount && oldInv.receivedAmount > 0) {
-                    const oldReceivedBase = oldInv.currency === state.storeSettings.baseCurrency
-                        ? oldInv.receivedAmount
-                        : (state.storeSettings.currencyConfigs[oldInv.currency].method === 'multiply' ? oldInv.receivedAmount / oldInv.exchangeRate : oldInv.receivedAmount * oldInv.exchangeRate);
-                    
-                    if (oldInv.currency === 'USD') balUSD += oldInv.receivedAmount;
-                    else if (oldInv.currency === 'IRT') balIRT += oldInv.receivedAmount;
-                    else balAFN += oldInv.receivedAmount;
-                    balTotal += oldReceivedBase;
-                }
-
-                customerUpdates.push({ id: oc.id, newBalances: { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal } });
-            }
-        }
-
-        // Revert Old Supplier Intermediary
-        if (oldInv && oldInv.supplierIntermediaryId) {
-            const os = suppliers.find(s => s.id === oldInv.supplierIntermediaryId);
-            if (os) {
-                let balAFN = os.balanceAFN, balUSD = os.balanceUSD, balIRT = os.balanceIRT, balTotal = os.balance;
-                // Debit was added (negative impact on supplier credit), so we add it back (credit)
-                if (oldInv.currency === 'USD') balUSD += oldInv.totalAmount;
-                else if (oldInv.currency === 'IRT') balIRT += oldInv.totalAmount;
-                else balAFN += oldInv.totalAmount;
-                balTotal += oldInv.totalAmountAFN;
-
-                // Revert old received amount impact on supplier
-                if (oldInv.receivedAmount && oldInv.receivedAmount > 0) {
-                    const oldReceivedBase = oldInv.currency === state.storeSettings.baseCurrency
-                        ? oldInv.receivedAmount
-                        : (state.storeSettings.currencyConfigs[oldInv.currency].method === 'multiply' ? oldInv.receivedAmount / oldInv.exchangeRate : oldInv.receivedAmount * oldInv.exchangeRate);
-                    
-                    if (oldInv.currency === 'USD') balUSD -= oldInv.receivedAmount;
-                    else if (oldInv.currency === 'IRT') balIRT -= oldInv.receivedAmount;
-                    else balAFN -= oldInv.receivedAmount;
-                    balTotal -= oldReceivedBase;
-                }
-
-                supplierUpdates.push({ id: os.id, newBalances: { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal } });
-            }
-        }
-
-        // Apply New Customer
         if (customerId) {
-            const nc = customers.find(c => c.id === customerId);
-            if (nc) {
-                const prevUpdate = customerUpdates.find(u => u.id === customerId);
-                let balAFN = prevUpdate ? prevUpdate.newBalances.AFN : nc.balanceAFN;
-                let balUSD = prevUpdate ? prevUpdate.newBalances.USD : nc.balanceUSD;
-                let balIRT = prevUpdate ? prevUpdate.newBalances.IRT : nc.balanceIRT;
-                let balTotal = prevUpdate ? prevUpdate.newBalances.Total : nc.balance;
-
-                // Invoice Debit
-                if (currency === 'USD') balUSD += totalTransactional;
-                else if (currency === 'IRT') balIRT += totalTransactional;
-                else balAFN += totalTransactional;
-                balTotal += totalBaseAmount;
-
-                // Payment Credit
-                if (receivedAmount > 0) {
-                    if (currency === 'USD') balUSD -= receivedAmount;
-                    else if (currency === 'IRT') balIRT -= receivedAmount;
-                    else balAFN -= receivedAmount;
-                    balTotal -= receivedAmountBase;
+            const c = customers.find(x => x.id === customerId);
+            if (c) {
+                let bAFN = c.balanceAFN, bUSD = c.balanceUSD, bIRT = c.balanceIRT, bTotal = c.balance;
+                if (oldInv && oldInv.customerId === customerId) {
+                    if (oldInv.currency === 'USD') bUSD -= oldInv.totalAmount;
+                    else if (oldInv.currency === 'IRT') bIRT -= oldInv.totalAmount;
+                    else bAFN -= oldInv.totalAmount;
+                    bTotal -= oldInv.totalAmountAFN;
+                    if (oldInv.receivedAmount > 0) {
+                        if (oldInv.currency === 'USD') bUSD += oldInv.receivedAmount;
+                        else if (oldInv.currency === 'IRT') bIRT += oldInv.receivedAmount;
+                        else bAFN += oldInv.receivedAmount;
+                    }
                 }
-                
-                const finalBal = { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal };
-                if (prevUpdate) prevUpdate.newBalances = finalBal;
-                else customerUpdates.push({ id: nc.id, newBalances: finalBal });
+                if (currency === 'USD') bUSD += totalTransactional;
+                else if (currency === 'IRT') bIRT += totalTransactional;
+                else bAFN += totalTransactional;
+                bTotal += totalBaseAmount;
+                if (receivedAmount > 0) {
+                    if (currency === 'USD') bUSD -= receivedAmount;
+                    else if (currency === 'IRT') bIRT -= receivedAmount;
+                    else bAFN -= receivedAmount;
+                }
+                customerUpdates.push({ id: customerId, balanceAFN: bAFN, balanceUSD: bUSD, balanceIRT: bIRT, balance: bTotal });
+                customerTxs.push({ id: crypto.randomUUID(), customerId, type: 'credit_sale', amount: totalTransactional, date: finalInv.timestamp, description: `فاکتور #${invId}`, invoiceId: invId, currency, isCash: false });
+                if (receivedAmount > 0) customerTxs.push({ id: crypto.randomUUID(), customerId, type: 'payment', amount: receivedAmount, date: finalInv.timestamp, description: `پرداخت فاکتور #${invId}`, invoiceId: invId, currency, isCash: true });
             }
         }
 
-        // Apply New Supplier Intermediary
         if (supplierIntermediaryId) {
-            const ns = suppliers.find(s => s.id === supplierIntermediaryId);
-            if (ns) {
-                const prevUpdate = supplierUpdates.find(u => u.id === supplierIntermediaryId);
-                let balAFN = prevUpdate ? prevUpdate.newBalances.AFN : ns.balanceAFN;
-                let balUSD = prevUpdate ? prevUpdate.newBalances.USD : ns.balanceUSD;
-                let balIRT = prevUpdate ? prevUpdate.newBalances.IRT : ns.balanceIRT;
-                let balTotal = prevUpdate ? prevUpdate.newBalances.Total : ns.balance;
-
-                // Supplier account is debited (they owe us more or we owe them less)
-                if (currency === 'USD') balUSD -= totalTransactional;
-                else if (currency === 'IRT') balIRT -= totalTransactional;
-                else balAFN -= totalTransactional;
-                balTotal -= totalBaseAmount;
-
-                // Payment impact on supplier (they owe us less or we owe them more)
-                if (receivedAmount > 0) {
-                    if (currency === 'USD') balUSD += receivedAmount;
-                    else if (currency === 'IRT') balIRT += receivedAmount;
-                    else balAFN += receivedAmount;
-                    balTotal += receivedAmountBase;
+            const s = suppliers.find(x => x.id === supplierIntermediaryId);
+            if (s) {
+                let bAFN = s.balanceAFN, bUSD = s.balanceUSD, bIRT = s.balanceIRT, bTotal = s.balance;
+                if (oldInv && oldInv.supplierIntermediaryId === supplierIntermediaryId) {
+                    if (oldInv.currency === 'USD') bUSD += oldInv.totalAmount;
+                    else if (oldInv.currency === 'IRT') bIRT += oldInv.totalAmount;
+                    else bAFN += oldInv.totalAmount;
+                    bTotal += oldInv.totalAmountAFN;
+                    if (oldInv.receivedAmount > 0) {
+                        if (oldInv.currency === 'USD') bUSD -= oldInv.receivedAmount;
+                        else if (oldInv.currency === 'IRT') bIRT -= oldInv.receivedAmount;
+                        else bAFN -= oldInv.receivedAmount;
+                    }
                 }
-
-                const finalBal = { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal };
-                if (prevUpdate) prevUpdate.newBalances = finalBal;
-                else supplierUpdates.push({ id: ns.id, newBalances: finalBal });
+                if (currency === 'USD') bUSD -= totalTransactional;
+                else if (currency === 'IRT') bIRT -= totalTransactional;
+                else bAFN -= totalTransactional;
+                bTotal -= totalBaseAmount;
+                if (receivedAmount > 0) {
+                    if (currency === 'USD') bUSD += receivedAmount;
+                    else if (currency === 'IRT') bIRT += receivedAmount;
+                    else bAFN += receivedAmount;
+                }
+                supplierUpdates.push({ id: supplierIntermediaryId, balanceAFN: bAFN, balanceUSD: bUSD, balanceIRT: bIRT, balance: bTotal });
+                supplierTxs.push({ id: crypto.randomUUID(), supplierId: supplierIntermediaryId, type: 'payment', amount: totalTransactional, date: finalInv.timestamp, description: `فروش واسطه #${invId}`, invoiceId: invId, currency, isCash: false });
+                if (receivedAmount > 0) supplierTxs.push({ id: crypto.randomUUID(), supplierId: supplierIntermediaryId, type: 'receipt', amount: receivedAmount, date: finalInv.timestamp, description: `دریافت واسطه #${invId}`, invoiceId: invId, currency, isCash: true });
             }
-        }
-
-        const customerTxs: CustomerTransaction[] = [
-            { id: crypto.randomUUID(), customerId: customerId || '', type: 'credit_sale', amount: totalTransactional, date: finalInv.timestamp, description: `فاکتور #${invId}`, invoiceId: invId, currency, isCash: !customerId }
-        ];
-        if (receivedAmount > 0 && customerId) {
-            const isFullPayment = receivedAmount >= totalTransactional;
-            customerTxs.push({
-                id: crypto.randomUUID(),
-                customerId: customerId,
-                type: 'payment',
-                amount: receivedAmount,
-                date: finalInv.timestamp,
-                description: isFullPayment ? `تسویه کامل فاکتور #${invId}` : `پیش‌پرداخت فاکتور #${invId}`,
-                invoiceId: invId,
-                currency,
-                isCash: true
-            });
-        }
-
-        const supplierTxs: SupplierTransaction[] = [
-            { id: crypto.randomUUID(), supplierId: supplierIntermediaryId || '', type: 'payment', amount: totalTransactional, date: finalInv.timestamp, description: `فروش کالا (واسطه) - فاکتور #${invId}`, invoiceId: invId, currency, isCash: false }
-        ];
-        if (receivedAmount > 0 && supplierIntermediaryId) {
-            const isFullPayment = receivedAmount >= totalTransactional;
-            supplierTxs.push({
-                id: crypto.randomUUID(),
-                supplierId: supplierIntermediaryId,
-                type: 'receipt',
-                amount: receivedAmount,
-                date: finalInv.timestamp,
-                description: isFullPayment ? `دریافت وجه (واسطه) - تسویه فاکتور #${invId}` : `دریافت وجه (واسطه) - پیش‌پرداخت فاکتور #${invId}`,
-                invoiceId: invId,
-                currency,
-                isCash: true
-            });
         }
 
         try {
-            // --- Activity Feature Logic ---
-            if (customerId && enableActivity) {
-                const customer = state.customers.find(c => c.id === customerId);
-                if (customer?.activityConfig) {
-                    const { depositHolderId, companyShares } = customer.activityConfig;
-                    
-                    let sharesToApply = companyShares;
-                    if (editingSaleInvoiceId) {
-                        // Use historical shares if available
-                        if (oldInv?.appliedShares) {
-                            sharesToApply = oldInv.appliedShares;
-                        }
-                        
-                        // Delete previous activity deposit if it exists
-                        if (oldInv?.activityDepositId) {
-                            await deleteDepositTransaction(oldInv.activityDepositId);
-                        }
-                    }
-
-                    let totalActivityShare = 0;
-                    finalInv.items.forEach(item => {
-                        if (item.type === 'product') {
-                            const product = state.products.find(p => p.id === item.id);
-                            const companyId = product?.companyId;
-                            if (companyId && sharesToApply[companyId] !== undefined) {
-                                const sharePercentage = sharesToApply[companyId];
-                                const itemTotalTransactional = (item.finalPrice !== undefined ? item.finalPrice : item.salePrice) * item.quantity;
-                                totalActivityShare += (itemTotalTransactional * sharePercentage) / 100;
-                            }
-                        }
-                    });
-
-                    if (totalActivityShare > 0) {
-                        const result = await processDepositTransaction(
-                            depositHolderId,
-                            'deposit',
-                            totalActivityShare,
-                            currency,
-                            `اکتیویتی - فاکتور فروش #${invId}`,
-                            exchangeRate,
-                            false
-                        );
-                        if (result.success && result.id) {
-                            finalInv.activityDepositId = result.id;
-                            finalInv.appliedShares = sharesToApply;
-                        }
-                    }
-                }
-            }
-            // ------------------------------
-
             if (editingSaleInvoiceId) {
-                const stockRestores: {batchId: string, quantity: number}[] = [];
-                oldInv?.items.forEach(it => {
-                    if (it.type === 'product' && it.batchDeductions) {
-                        it.batchDeductions.forEach(d => stockRestores.push(d));
-                    }
-                });
-                await api.updateSale(
-                    editingSaleInvoiceId, 
-                    finalInv, 
-                    stockRestores, 
-                    stockUpdates, 
-                    customerUpdates, 
-                    customerTxs,
-                    supplierUpdates,
-                    supplierIntermediaryId ? supplierTxs : []
-                );
+                await api.updateSale(editingSaleInvoiceId, finalInv, stockRestores, stockUpdates, customerUpdates, customerTxs, supplierUpdates, supplierTxs);
             } else {
-                await api.createSale(
-                    finalInv, 
-                    stockUpdates, 
-                    customerUpdates[0] ? { ...customerUpdates[0], transactions: customerTxs } : undefined,
-                    supplierUpdates[0] ? { ...supplierUpdates[0], transactions: supplierTxs } : undefined
-                );
+                await api.createSale(finalInv, stockUpdates, customerUpdates[0] ? { ...customerUpdates[0], transactions: customerTxs } : undefined, supplierUpdates[0] ? { ...supplierUpdates[0], transactions: supplierTxs } : undefined);
             }
             
             await fetchData(true);
             setState(prev => ({ ...prev, cart: [], editingSaleInvoiceId: null }));
-            logActivity('sale', `${editingSaleInvoiceId ? 'ویرایش' : 'ثبت'} فاکتور فروش: ${invId}`, invId, 'saleInvoice');
+            if (enableActivity) logActivity('sale', `${editingSaleInvoiceId ? 'ویرایش' : 'ثبت'} فاکتور فروش: ${invId}`, invId, 'saleInvoice');
             return { success: true, invoice: finalInv, message: 'فاکتور با موفقیت ثبت شد.' };
-        } catch (e) { return { success: false, message: 'خطا در ثبت نهایی فاکتور.' }; }
+        } catch (e) { 
+            console.error("Sale Error:", e);
+            return { success: false, message: 'خطا در ثبت نهایی فاکتور.' }; 
+        }
     };
 
     // --- Standardized POS Logic: Sale Returns with Inventory Referencing ---
@@ -1508,12 +1232,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             ? totalCurrencyAmount 
             : (config.method === 'multiply' ? totalCurrencyAmount / rate : totalCurrencyAmount * rate);
         
-        // Calculate additional cost distribution in base currency
         const additionalCostBase = data.additionalCost 
             ? (data.currency === state.storeSettings.baseCurrency ? data.additionalCost : (config.method === 'multiply' ? data.additionalCost / rate : data.additionalCost * rate)) 
             : 0;
         
-        // Proportional distribution by value
         const totalInvoiceValueBase = data.items.reduce((s: number, it: any) => {
             const itemPriceBase = (data.currency === state.storeSettings.baseCurrency ? it.purchasePrice : (config.method === 'multiply' ? it.purchasePrice / rate : it.purchasePrice * rate));
             return s + (itemPriceBase * it.quantity);
@@ -1535,7 +1257,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const supplierUpdate = {
             id: data.supplierId,
-            newBalances: { AFN: newBalances.balanceAFN, USD: newBalances.balanceUSD, IRT: newBalances.balanceIRT, Total: newBalances.balance },
+            balanceAFN: newBalances.balanceAFN,
+            balanceUSD: newBalances.balanceUSD,
+            balanceIRT: newBalances.balanceIRT,
+            balance: newBalances.balance,
             transaction: { id: crypto.randomUUID(), supplierId: data.supplierId, type: 'purchase', amount: totalCurrencyAmount, date: data.timestamp, description: `خرید فاکتور #${data.invoiceNumber || id}`, invoiceId: id, currency: data.currency } as SupplierTransaction
         };
 
@@ -1559,7 +1284,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             await api.createPurchase(invoice, supplierUpdate, newBatches);
             
-            // Automatically record as expense if there's additional cost
             if (data.additionalCost > 0) {
                 const expense: Omit<Expense, 'id'> = {
                     category: 'logistics',
@@ -1576,7 +1300,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             await fetchData(true);
             logActivity('purchase', `خرید جدید ثبت شد: ${id}`, id, 'purchaseInvoice');
             return { success: true, message: 'خرید با موفقیت ثبت و به انبار اضافه شد.' };
-        } catch (e) { return { success: false, message: 'خطا در ثبت خرید.' }; }
+        } catch (e) { 
+            console.error("Purchase Error:", e);
+            return { success: false, message: 'خطا در ثبت خرید.' }; 
+        }
     };
 
     const beginEditPurchase = (id: string) => {
@@ -1625,7 +1352,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const supplierUpdate = {
             id: invoiceData.supplierId,
-            newBalances: { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal }
+            balanceAFN: balAFN,
+            balanceUSD: balUSD,
+            balanceIRT: balIRT,
+            balance: balTotal
         };
 
         const newInvoice: PurchaseInvoice = {
@@ -1667,7 +1397,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setState(prev => ({ ...prev, editingPurchaseInvoiceId: null }));
             logActivity('purchase', `ویرایش فاکتور خرید: ${newInvoice.id}`, newInvoice.id, 'purchaseInvoice');
             return { success: true, message: 'فاکتور با موفقیت بروزرسانی شد.' };
-        } catch (e) { return { success: false, message: 'خطا در ویرایش فاکتور.' }; }
+        } catch (e) { 
+            console.error("Update Purchase Error:", e);
+            return { success: false, message: 'خطا در ویرایش فاکتور.' }; 
+        }
     };
 
     const addPurchaseReturn = async (originalInvoiceId: string, returnItems: { productId: string; lotNumber: string, quantity: number }[]) => {
@@ -2988,7 +2721,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (isLoading) return <div className="flex items-center justify-center h-screen text-xl font-bold text-blue-600">در حال دریافت اطلاعات...</div>;
 
     return <AppContext.Provider value={{
-        ...state, showToast, isLoading, isLoggingOut, isShopActive, login, signup, logout, hasPermission, hasCompanyAccess, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, exportData, importData,
+        ...state, showToast, isLoading, isLoggingOut, isShopActive, login, logout, hasPermission, hasCompanyAccess, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, exportData, importData,
         cloudBackup, cloudRestore, autoBackupEnabled, setAutoBackupEnabled,
         addProduct, updateProduct, deleteProduct, registerWastage, addOrder, updateOrderStatus, updateOrder, deleteOrder, addOrderPayment, addToCart, updateCartItemQuantity, updateCartItemFinalPrice, removeFromCart, completeSale,
         beginEditSale, cancelEditSale, deleteSaleInvoice, addSaleReturn, addPurchaseInvoice, beginEditPurchase, cancelEditPurchase, updatePurchaseInvoice, addPurchaseReturn,

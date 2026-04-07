@@ -508,6 +508,7 @@ export interface User {
     username: string;
     password?: string; // Should be hashed in a real app
     roleId: string;
+    current_device_id?: string;
 }
 
 export interface AppState {

@@ -652,12 +652,13 @@ const CompanyManagement: React.FC = () => {
             const expenses = entries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
             const waterRevenue = entries.filter(e => e.type === 'water_revenue').reduce((sum, e) => sum + e.amount, 0);
             const equipmentRevenue = entries.filter(e => e.type === 'equipment_revenue').reduce((sum, e) => sum + e.amount, 0);
+            const generalRevenue = entries.filter(e => e.type === 'revenue').reduce((sum, e) => sum + e.amount, 0);
             
             // Total debt from unpaid bills (Keep as statistic only)
             const totalDebt = billingRecords.filter(r => r.status === 'unpaid').reduce((sum, r) => sum + r.amount, 0);
 
-            // Total income now ONLY includes manually registered ledger entries
-            const totalIncome = waterRevenue + equipmentRevenue;
+            // Total income now ONLY includes manually registered ledger entries (water, equipment, and general revenue)
+            const totalIncome = waterRevenue + equipmentRevenue + generalRevenue;
             const profit = totalIncome - expenses;
             const investmentRecovery = totalIncome - (expenses + (company.establishmentCost || 0));
             return {
@@ -1263,20 +1264,22 @@ const CompanyManagement: React.FC = () => {
     }, [ownerTransactions, myFinancialShare]);
 
     const { 
-        expenses, waterRevenue, equipmentRevenue, totalExpenses, totalWater, totalEquipment 
+        expenses, waterRevenue, equipmentRevenue, generalRevenue, totalExpenses, totalWater, totalEquipment, totalGeneralRevenue 
     } = useMemo(() => {
         if (!selectedCompanyId || !selectedCompany) {
-            return { expenses: [], waterRevenue: [], equipmentRevenue: [], totalExpenses: 0, totalWater: 0, totalEquipment: 0 };
+            return { expenses: [], waterRevenue: [], equipmentRevenue: [], generalRevenue: [], totalExpenses: 0, totalWater: 0, totalEquipment: 0, totalGeneralRevenue: 0 };
         }
         const expenses = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'expense').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const waterRevenue = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'water_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const equipmentRevenue = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'equipment_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const generalRevenue = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
         const totalWater = waterRevenue.reduce((sum, e) => sum + e.amount, 0);
         const totalEquipment = equipmentRevenue.reduce((sum, e) => sum + e.amount, 0);
+        const totalGeneralRevenue = generalRevenue.reduce((sum, e) => sum + e.amount, 0);
         
-        return { expenses, waterRevenue, equipmentRevenue, totalExpenses, totalWater, totalEquipment };
+        return { expenses, waterRevenue, equipmentRevenue, generalRevenue, totalExpenses, totalWater, totalEquipment, totalGeneralRevenue };
     }, [selectedCompanyId, selectedCompany, managedCompanyLedger]);
 
     return (
@@ -1363,18 +1366,18 @@ const CompanyManagement: React.FC = () => {
                                 </div>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">سود/ضرر نهایی</span>
-                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (selectedCompany?.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + totalGeneralRevenue - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                                         {formatCurrency(
-                                            totalWater + totalEquipment + (selectedCompany?.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses, 
+                                            totalWater + totalEquipment + totalGeneralRevenue - totalExpenses, 
                                             storeSettings, 'AFN'
                                         )}
                                     </span>
                                 </div>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">وضعیت بازگشت سرمایه</span>
-                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + (selectedCompany?.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses - (selectedCompany?.establishmentCost || 0)) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                                    <span className={`text-lg font-black ${(totalWater + totalEquipment + totalGeneralRevenue - totalExpenses - (selectedCompany?.establishmentCost || 0)) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
                                         {formatCurrency(
-                                            totalWater + totalEquipment + (selectedCompany?.type !== CompanyType.WATER ? managedCompanyInvoices.filter(inv => inv.companyId === selectedCompanyId && inv.status === 'paid').reduce((sum, inv) => sum + inv.totalAmount, 0) : 0) - totalExpenses - (selectedCompany?.establishmentCost || 0), 
+                                            totalWater + totalEquipment + totalGeneralRevenue - totalExpenses - (selectedCompany?.establishmentCost || 0), 
                                             storeSettings, 'AFN'
                                         )}
                                     </span>

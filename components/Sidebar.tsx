@@ -60,13 +60,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, storeName,
     if(isMobileOpen) setIsMobileOpen(false);
   };
 
-  const handleLogoutAction = async (type: 'full' | 'switch') => {
+  const handleLogoutAction = async () => {
     if (isLoggingOut) return;
-    const res = await logout(type);
+    const res = await logout();
     showToast(res.message);
-    if (res.success) {
-        setShowLogoutMenu(false);
-    }
+    setShowLogoutMenu(false);
   };
 
   // Managers are identified by the 'system-super-owner' role ID
@@ -122,16 +120,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, storeName,
                       <span className={`text-[9px] px-2 py-0.5 rounded-full ${isOnline ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                           {isOnline ? 'آنلاین' : 'آفلاین'}
                       </span>
-                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                          فروشگاه باز
-                      </span>
                   </div>
               </div>
           )}
 
-          {/* Logout Button/Menu Trigger */}
+          {/* Logout Button */}
           <button
-              onClick={() => isManager ? setShowLogoutMenu(!showLogoutMenu) : handleLogoutAction('switch')}
+              onClick={handleLogoutAction}
               disabled={isLoggingOut}
               className={`w-full flex items-center rounded-xl p-3 text-lg transition-all ${isLoggingOut ? 'bg-slate-100 text-slate-400' : 'text-slate-700 hover:bg-red-50 hover:text-red-600'} ${isCollapsed ? 'justify-center' : 'space-x-2 space-x-reverse'}`}
             >
@@ -140,31 +135,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, storeName,
               ) : <LogoutIcon />}
               {!isCollapsed && <span className="font-semibold whitespace-nowrap">{isLoggingOut ? 'خروج ایمن...' : 'خروج'}</span>}
           </button>
-
-          {/* Manager Logout Submenu */}
-          {showLogoutMenu && isManager && !isCollapsed && (
-              <div className="absolute bottom-full right-0 mb-2 w-full bg-white rounded-2xl shadow-2xl border border-gray-200 p-2 z-[60] modal-animate">
-                  <div className="text-xs font-bold text-slate-400 p-2 border-b mb-1">نوع خروج مدیر:</div>
-                  <button onClick={() => handleLogoutAction('switch')} className="w-full text-right p-3 rounded-lg hover:bg-blue-50 text-blue-700 flex items-center gap-2 mb-1">
-                      <UserGroupIcon className="w-5 h-5" />
-                      <div>
-                          <p className="font-bold">تعویض کاربر</p>
-                          <p className="text-[10px] opacity-70">فروشگاه باز می‌ماند (برای کارکنان)</p>
-                      </div>
-                  </button>
-                  <button 
-                      onClick={() => handleLogoutAction('full')} 
-                      disabled={!isOnline || isLoggingOut}
-                      className={`w-full text-right p-3 rounded-lg flex items-center gap-2 transition-all ${!isOnline ? 'opacity-50 cursor-not-allowed bg-slate-50 text-slate-400' : 'hover:bg-red-50 text-red-700'}`}
-                  >
-                      <KeyIcon className="w-5 h-5" />
-                      <div>
-                          <p className="font-bold">خروج کامل و قفل {!isOnline && '(نیاز به اینترنت)'}</p>
-                          <p className="text-[10px] opacity-70">دستگاه آزاد و فروشگاه بسته می‌شود</p>
-                      </div>
-                  </button>
-              </div>
-          )}
 
           <button
               onClick={() => setIsCollapsed(prev => !prev)}

@@ -1,88 +1,541 @@
 import { supabase } from '../utils/supabaseClient';
-import * as db from '../utils/db';
 import type { 
     Product, ProductBatch, SaleInvoice, PurchaseInvoice, InTransitInvoice, Supplier, Customer, 
     Employee, Expense, Role, User, StoreSettings, ActivityLog, 
     CustomerTransaction, SupplierTransaction, PayrollTransaction, AppState, Service,
     DepositHolder, DepositTransaction, Company, Partner, ManagedCompany, CompanyLedgerEntry, 
     ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerExpenseCategory,
-    CompanyEmployee, SalaryMonthRecord, SalaryPayment, ManagedCompanyInvoice, ManagedCompanyProductionLog
+    CompanyEmployee, SalaryMonthRecord, SalaryPayment, ManagedCompanyInvoice, ManagedCompanyProductionLog,
+    Order, OrderStatus, OrderPayment, WastageRecord
 } from '../types';
 
-export interface AdminProfile {
-    id: string;
-    email: string;
-    is_approved: boolean;
-    current_device_id: string | null;
-}
-
-// DEFAULT ADMIN ROLE (Local Fallback)
-const DEFAULT_ADMIN_ROLE: Role = {
-    id: 'admin-role',
-    name: 'Admin',
-    permissions: [
-        'page:dashboard', 'page:inventory', 'page:pos', 'page:purchases', 'page:accounting', 'page:reports', 'page:settings', 'page:in_transit', 'page:deposits', 'page:orders',
-        'inventory:add_product', 'inventory:edit_product', 'inventory:delete_product',
-        'pos:create_invoice', 'pos:edit_invoice', 'pos:apply_discount', 'pos:create_credit_sale',
-        'purchase:create_invoice', 'purchase:edit_invoice',
-        'in_transit:confirm_receipt',
-        'accounting:manage_suppliers', 'accounting:manage_customers', 'accounting:manage_payroll', 'accounting:manage_expenses', 'accounting:manage_deposits',
-        'settings:manage_store', 'settings:manage_users', 'settings:manage_backup', 'settings:manage_services', 'settings:manage_alerts',
-        'orders:create', 'orders:edit', 'orders:delete', 'orders:add_payment',
-        'page:company_management'
-    ]
-};
-
-const DEFAULT_SETTINGS: StoreSettings = {
-    storeName: 'Vendura',
-    address: '',
-    phone: '',
-    lowStockThreshold: 10,
-    expiryThresholdMonths: 3,
-    currencyName: 'افغانی',
-    currencySymbol: 'AFN',
-    packageLabel: 'بسته',
-    unitLabel: 'عدد',
-    baseCurrency: 'AFN',
-    logoLeft: '',
-    logoRight: '',
-    logoLeftSize: 80,
-    logoRightSize: 80,
-    currencyConfigs: {
-        AFN: { code: 'AFN', name: 'افغانی', symbol: 'AFN', method: 'multiply' },
-        USD: { code: 'USD', name: 'دلار', symbol: '$', method: 'divide' },
-        IRT: { code: 'IRT', name: 'تومان', symbol: 'IRT', method: 'multiply' }
-    },
-    expenseCategories: ['rent', 'utilities', 'supplies', 'salary', 'other'],
-    salaryAlertDays: 3
+// Helper to handle Supabase responses
+const handleResponse = async <T>(promise: any): Promise<T | null> => {
+    const { data, error } = await promise;
+    if (error) {
+        console.error("Supabase Error:", error);
+        return null;
+    }
+    return data;
 };
 
 export const api = {
-    // --- ADMIN AUTH & PROFILES (Online Only) ---
-    getProfile: async (userId: string): Promise<AdminProfile | null> => {
-        try {
-            const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-            if (error) return null;
-            return data;
-        } catch (e) {
+    // --- AUTH (Custom RPC) ---
+    verifyUserLogin: async (username: string, password: string): Promise<any | null> => {
+        const { data, error } = await supabase.rpc('verify_user_login', { 
+            p_username: username, 
+            p_password: password 
+        });
+        if (error) {
+            console.error("Login Error:", error);
             return null;
         }
-    },
-    updateProfile: async (userId: string, updates: Partial<AdminProfile>): Promise<boolean> => {
-        try {
-            const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
-            if (error) {
-                console.error("Supabase update error:", error);
-                return false;
-            }
-            return true;
-        } catch (e) {
-            console.error("Profile update failed:", e);
-            return false;
-        }
+        return data;
     },
 
-    // --- CLOUD BACKUP ---
+    // --- SETTINGS ---
+    getSettings: async (): Promise<StoreSettings | null> => {
+        const data = await handleResponse<any>(supabase.from('store_settings').select('*').eq('id', 'current').maybeSingle());
+        return data ? data.data : null;
+    },
+    updateSettings: async (settings: StoreSettings) => {
+        await supabase.from('store_settings').upsert({ id: 'current', data: settings });
+    },
+
+    // --- USERS & ROLES ---
+    getUsers: async () => handleResponse(supabase.from('users').select('*')),
+    getRoles: async () => handleResponse(supabase.from('roles').select('*')),
+    addUser: async (user: Omit<User, 'id'>) => {
+        const { data, error } = await supabase.from('users').insert([user]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    updateUser: async (user: Partial<User> & { id: string }) => {
+        await supabase.from('users').update(user).eq('id', user.id);
+    },
+    deleteUser: async (id: string) => {
+        await supabase.from('users').delete().eq('id', id);
+    },
+    addRole: async (role: Omit<Role, 'id'>) => {
+        const { data, error } = await supabase.from('roles').insert([role]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    updateRole: async (role: Role) => {
+        await supabase.from('roles').update(role).eq('id', role.id);
+    },
+    deleteRole: async (id: string) => {
+        await supabase.from('roles').delete().eq('id', id);
+    },
+
+    // --- PRODUCTS & SERVICES ---
+    getProducts: async () => handleResponse(supabase.from('products').select('*')),
+    addProduct: async (product: Omit<Product, 'id'|'batches'>, firstBatch: Omit<ProductBatch, 'id'>) => {
+        const productId = crypto.randomUUID();
+        const batchId = crypto.randomUUID();
+        const newProduct: Product = { ...product, id: productId, batches: [{ ...firstBatch, id: batchId }] } as any;
+        const { data, error } = await supabase.from('products').insert([newProduct]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    updateProduct: async (product: Product) => {
+        await supabase.from('products').update(product).eq('id', product.id);
+    },
+    deleteProduct: async (id: string) => {
+        await supabase.from('products').delete().eq('id', id);
+    },
+    getServices: async () => handleResponse(supabase.from('services').select('*')),
+    addService: async (service: Omit<Service, 'id'>) => {
+        const { data, error } = await supabase.from('services').insert([service]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    deleteService: async (id: string) => {
+        await supabase.from('services').delete().eq('id', id);
+    },
+
+    // --- ENTITIES ---
+    getEntities: async () => {
+        const [customers, suppliers, employees, expenses, depositHolders, companies, partners] = await Promise.all([
+            handleResponse(supabase.from('customers').select('*')),
+            handleResponse(supabase.from('suppliers').select('*')),
+            handleResponse(supabase.from('employees').select('*')),
+            handleResponse(supabase.from('expenses').select('*')),
+            handleResponse(supabase.from('deposit_holders').select('*')),
+            handleResponse(supabase.from('companies').select('*')),
+            handleResponse(supabase.from('partners').select('*'))
+        ]);
+        return { 
+            customers: customers || [], 
+            suppliers: suppliers || [], 
+            employees: employees || [], 
+            expenses: expenses || [], 
+            depositHolders: depositHolders || [], 
+            companies: companies || [], 
+            partners: partners || [] 
+        };
+    },
+    addCustomer: async (c: any) => {
+        const { data, error } = await supabase.from('customers').insert([c]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    updateCustomer: async (c: Customer) => {
+        await supabase.from('customers').update(c).eq('id', c.id);
+    },
+    deleteCustomer: async (id: string) => {
+        await supabase.from('customers').delete().eq('id', id);
+    },
+    addSupplier: async (s: any) => {
+        const { data, error } = await supabase.from('suppliers').insert([s]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    updateSupplier: async (s: Supplier) => {
+        await supabase.from('suppliers').update(s).eq('id', s.id);
+    },
+    deleteSupplier: async (id: string) => {
+        await supabase.from('suppliers').delete().eq('id', id);
+    },
+    addEmployee: async (e: any) => {
+        const { data, error } = await supabase.from('employees').insert([e]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    updateEmployee: async (e: Employee) => {
+        await supabase.from('employees').update(e).eq('id', e.id);
+    },
+    deleteEmployee: async (id: string) => {
+        await supabase.from('employees').delete().eq('id', id);
+    },
+    addExpense: async (e: any) => {
+        const { data, error } = await supabase.from('expenses').insert([e]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    updateExpense: async (e: Expense) => {
+        await supabase.from('expenses').update(e).eq('id', e.id);
+    },
+    deleteExpense: async (id: string) => {
+        await supabase.from('expenses').delete().eq('id', id);
+    },
+
+    // --- DEPOSITS ---
+    addDepositHolder: async (holder: any) => {
+        const { data, error } = await supabase.from('deposit_holders').insert([holder]).select().single();
+        if (error) throw error;
+        return data;
+    },
+    updateDepositHolder: async (holder: DepositHolder) => {
+        await supabase.from('deposit_holders').update(holder).eq('id', holder.id);
+    },
+    deleteDepositHolder: async (id: string) => {
+        await supabase.from('deposit_holders').delete().eq('id', id);
+    },
+    addDepositTransaction: async (tx: DepositTransaction) => {
+        await supabase.from('deposit_transactions').insert([tx]);
+    },
+    deleteDepositTransaction: async (id: string) => {
+        await supabase.from('deposit_transactions').delete().eq('id', id);
+    },
+
+    // --- TRANSACTIONS ---
+    getTransactions: async () => {
+        const [customerTransactions, supplierTransactions, payrollTransactions, depositTransactions] = await Promise.all([
+            handleResponse(supabase.from('customer_transactions').select('*')),
+            handleResponse(supabase.from('supplier_transactions').select('*')),
+            handleResponse(supabase.from('payroll_transactions').select('*')),
+            handleResponse(supabase.from('deposit_transactions').select('*'))
+        ]);
+        return { 
+            customerTransactions: customerTransactions || [], 
+            supplierTransactions: supplierTransactions || [], 
+            payrollTransactions: payrollTransactions || [], 
+            depositTransactions: depositTransactions || [] 
+        };
+    },
+
+    // --- INVOICES ---
+    getInvoices: async () => {
+        const [saleInvoices, purchaseInvoices, inTransitInvoices] = await Promise.all([
+            handleResponse(supabase.from('sale_invoices').select('*').order('timestamp', { ascending: false })),
+            handleResponse(supabase.from('purchase_invoices').select('*').order('timestamp', { ascending: false })),
+            handleResponse(supabase.from('in_transit_invoices').select('*').order('timestamp', { ascending: false }))
+        ]);
+        return { 
+            saleInvoices: saleInvoices || [], 
+            purchaseInvoices: purchaseInvoices || [], 
+            inTransitInvoices: inTransitInvoices || [] 
+        };
+    },
+
+    // --- ACTIVITY LOGS ---
+    getActivities: async () => {
+        return handleResponse(supabase.from('activity_logs').select('*').order('timestamp', { ascending: false }).limit(100));
+    },
+    addActivity: async (log: ActivityLog) => {
+        await supabase.from('activity_logs').insert([log]);
+    },
+
+    // --- WASTAGE ---
+    getWastageRecords: async () => {
+        return handleResponse(supabase.from('wastage_records').select('*').order('timestamp', { ascending: false }));
+    },
+    addWastageRecord: async (record: any) => {
+        await supabase.from('wastage_records').insert([record]);
+    },
+
+    // --- COMPANIES & PARTNERS ---
+    getCompanies: async () => handleResponse(supabase.from('companies').select('*')),
+    addCompany: async (company: Company) => {
+        await supabase.from('companies').insert([company]);
+    },
+    updateCompany: async (company: Company) => {
+        await supabase.from('companies').update(company).eq('id', company.id);
+    },
+    deleteCompany: async (id: string) => {
+        await supabase.from('companies').delete().eq('id', id);
+    },
+    getPartners: async () => handleResponse(supabase.from('partners').select('*')),
+    addPartner: async (partner: Partner) => {
+        await supabase.from('partners').insert([partner]);
+    },
+    updatePartner: async (partner: Partner) => {
+        await supabase.from('partners').update(partner).eq('id', partner.id);
+    },
+    deletePartner: async (id: string) => {
+        await supabase.from('partners').delete().eq('id', id);
+    },
+
+    // --- MANAGED COMPANIES ---
+    getManagedCompanies: async () => handleResponse(supabase.from('managed_companies').select('*')),
+    addManagedCompany: async (company: ManagedCompany) => {
+        await supabase.from('managed_companies').insert([company]);
+    },
+    updateManagedCompany: async (company: ManagedCompany) => {
+        await supabase.from('managed_companies').update(company).eq('id', company.id);
+    },
+    deleteManagedCompany: async (id: string) => {
+        await supabase.from('managed_companies').delete().eq('id', id);
+    },
+    getManagedCompanyLedger: async () => handleResponse(supabase.from('managed_company_ledger').select('*')),
+    addManagedCompanyLedgerEntry: async (entry: CompanyLedgerEntry) => {
+        await supabase.from('managed_company_ledger').insert([entry]);
+    },
+    updateManagedCompanyLedgerEntry: async (entry: CompanyLedgerEntry) => {
+        await supabase.from('managed_company_ledger').update(entry).eq('id', entry.id);
+    },
+    deleteManagedCompanyLedgerEntry: async (id: string) => {
+        await supabase.from('managed_company_ledger').delete().eq('id', id);
+    },
+    getManagedCompanyCustomers: async () => handleResponse(supabase.from('managed_company_customers').select('*')),
+    addManagedCompanyCustomer: async (customer: ManagedCompanyCustomer) => {
+        await supabase.from('managed_company_customers').insert([customer]);
+    },
+    updateManagedCompanyCustomer: async (customer: ManagedCompanyCustomer) => {
+        await supabase.from('managed_company_customers').update(customer).eq('id', customer.id);
+    },
+    deleteManagedCompanyCustomer: async (id: string) => {
+        await supabase.from('managed_company_customers').delete().eq('id', id);
+    },
+    getCustomerBillingRecords: async () => handleResponse(supabase.from('customer_billing_records').select('*')),
+    addCustomerBillingRecord: async (record: CustomerBillingRecord) => {
+        await supabase.from('customer_billing_records').insert([record]);
+    },
+    updateCustomerBillingRecord: async (record: CustomerBillingRecord) => {
+        await supabase.from('customer_billing_records').update(record).eq('id', record.id);
+    },
+    deleteCustomerBillingRecord: async (id: string) => {
+        await supabase.from('customer_billing_records').delete().eq('id', id);
+    },
+    getManagedCompanyInvoices: async () => handleResponse(supabase.from('managed_company_invoices').select('*')),
+    addManagedCompanyInvoice: async (invoice: ManagedCompanyInvoice) => {
+        await supabase.from('managed_company_invoices').insert([invoice]);
+    },
+    updateManagedCompanyInvoice: async (invoice: ManagedCompanyInvoice) => {
+        await supabase.from('managed_company_invoices').update(invoice).eq('id', invoice.id);
+    },
+    deleteManagedCompanyInvoice: async (id: string) => {
+        await supabase.from('managed_company_invoices').delete().eq('id', id);
+    },
+    getManagedCompanyProductionLogs: async () => handleResponse(supabase.from('managed_company_production_logs').select('*')),
+    addManagedCompanyProductionLog: async (log: ManagedCompanyProductionLog) => {
+        await supabase.from('managed_company_production_logs').insert([log]);
+    },
+    updateManagedCompanyProductionLog: async (log: ManagedCompanyProductionLog) => {
+        await supabase.from('managed_company_production_logs').update(log).eq('id', log.id);
+    },
+    deleteManagedCompanyProductionLog: async (id: string) => {
+        await supabase.from('managed_company_production_logs').delete().eq('id', id);
+    },
+
+    // --- OWNER TRANSACTIONS ---
+    getOwnerTransactions: async () => handleResponse(supabase.from('owner_transactions').select('*')),
+    addOwnerTransaction: async (tx: OwnerTransaction) => {
+        await supabase.from('owner_transactions').insert([tx]);
+    },
+    updateOwnerTransaction: async (tx: OwnerTransaction) => {
+        await supabase.from('owner_transactions').update(tx).eq('id', tx.id);
+    },
+    deleteOwnerTransaction: async (id: string) => {
+        await supabase.from('owner_transactions').delete().eq('id', id);
+    },
+    getOwnerExpenseCategories: async () => handleResponse(supabase.from('owner_expense_categories').select('*')),
+    addOwnerExpenseCategory: async (c: OwnerExpenseCategory) => {
+        await supabase.from('owner_expense_categories').insert([c]);
+    },
+    updateOwnerExpenseCategory: async (c: OwnerExpenseCategory) => {
+        await supabase.from('owner_expense_categories').update(c).eq('id', c.id);
+    },
+    deleteOwnerExpenseCategory: async (id: string) => {
+        await supabase.from('owner_expense_categories').delete().eq('id', id);
+    },
+
+    // --- SALARY MANAGEMENT ---
+    getCompanyEmployees: async () => handleResponse(supabase.from('company_employees').select('*')),
+    addCompanyEmployee: async (employee: CompanyEmployee) => {
+        await supabase.from('company_employees').insert([employee]);
+    },
+    updateCompanyEmployee: async (employee: CompanyEmployee) => {
+        await supabase.from('company_employees').update(employee).eq('id', employee.id);
+    },
+    deleteCompanyEmployee: async (id: string) => {
+        await supabase.from('company_employees').delete().eq('id', id);
+    },
+    getSalaryRecords: async () => handleResponse(supabase.from('salary_records').select('*')),
+    addSalaryRecord: async (record: SalaryMonthRecord) => {
+        await supabase.from('salary_records').insert([record]);
+    },
+    updateSalaryRecord: async (record: SalaryMonthRecord) => {
+        await supabase.from('salary_records').update(record).eq('id', record.id);
+    },
+    deleteSalaryRecord: async (id: string) => {
+        await supabase.from('salary_records').delete().eq('id', id);
+    },
+    getSalaryPayments: async () => handleResponse(supabase.from('salary_payments').select('*')),
+    addSalaryPayment: async (payment: SalaryPayment) => {
+        await supabase.from('salary_payments').insert([payment]);
+    },
+    updateSalaryPayment: async (payment: SalaryPayment) => {
+        await supabase.from('salary_payments').update(payment).eq('id', payment.id);
+    },
+    deleteSalaryPayment: async (id: string) => {
+        await supabase.from('salary_payments').delete().eq('id', id);
+    },
+
+    // --- ORDERS ---
+    getOrders: async () => {
+        return handleResponse(supabase.from('orders').select('*').order('created_at', { ascending: false }));
+    },
+    addOrder: async (order: any) => {
+        await supabase.from('orders').insert([order]);
+    },
+    updateOrder: async (order: any) => {
+        await supabase.from('orders').update(order).eq('id', order.id);
+    },
+    deleteOrder: async (id: string) => {
+        await supabase.from('orders').delete().eq('id', id);
+    },
+
+    // --- LEGAL RECORDS ---
+    getLegalRecords: async () => handleResponse(supabase.from('legal_records').select('*').order('created_at', { ascending: false })),
+    addLegalRecord: async (record: any) => {
+        await supabase.from('legal_records').insert([record]);
+    },
+    updateLegalRecord: async (record: any) => {
+        await supabase.from('legal_records').update(record).eq('id', record.id);
+    },
+    deleteLegalRecord: async (id: string) => {
+        await supabase.from('legal_records').delete().eq('id', id);
+    },
+
+    // --- COMPLEX BUSINESS LOGIC (RPC) ---
+    createSale: async (p_invoice: any, p_stock_updates: any, p_customer_update: any, p_supplier_update: any) => {
+        const { error } = await supabase.rpc('create_sale_rpc', {
+            p_invoice,
+            p_stock_updates,
+            p_customer_update,
+            p_supplier_update
+        });
+        if (error) throw error;
+    },
+    updateSale: async (p_invoice_id: string, p_new_invoice: any, p_stock_restores: any, p_stock_updates: any, p_customer_updates: any, p_customer_txs: any, p_supplier_updates: any, p_supplier_txs: any) => {
+        const { error } = await supabase.rpc('update_sale_rpc', {
+            p_invoice_id,
+            p_new_invoice,
+            p_stock_restores,
+            p_stock_updates,
+            p_customer_updates,
+            p_customer_txs,
+            p_supplier_updates,
+            p_supplier_txs
+        });
+        if (error) throw error;
+    },
+    deleteSale: async (p_invoice_id: string, p_stock_restores: any, p_customer_update: any, p_supplier_update: any) => {
+        const { error } = await supabase.rpc('delete_sale_rpc', {
+            p_invoice_id,
+            p_stock_restores,
+            p_customer_update,
+            p_supplier_update
+        });
+        if (error) throw error;
+    },
+    createSaleReturn: async (p_return_invoice: any, p_stock_restores: any, p_customer_refund: any) => {
+        const { error } = await supabase.rpc('create_sale_return_rpc', {
+            p_return_invoice,
+            p_stock_restores,
+            p_customer_refund
+        });
+        if (error) throw error;
+    },
+    createPurchase: async (p_invoice: any, p_supplier_update: any, p_new_batches: any) => {
+        const { error } = await supabase.rpc('create_purchase_rpc', {
+            p_invoice,
+            p_supplier_update,
+            p_new_batches
+        });
+        if (error) throw error;
+    },
+    updatePurchase: async (p_invoice_id: string, p_new_invoice: any, p_supplier_update: any) => {
+        const { error } = await supabase.rpc('update_purchase_rpc', {
+            p_invoice_id,
+            p_new_invoice,
+            p_supplier_update
+        });
+        if (error) throw error;
+    },
+    createPurchaseReturn: async (p_return_invoice: any, p_return_items: any, p_supplier_refund: any) => {
+        const { error } = await supabase.rpc('create_purchase_return_rpc', {
+            p_return_invoice,
+            p_return_items,
+            p_supplier_refund
+        });
+        if (error) throw error;
+    },
+    createInTransit: async (p_invoice: any) => {
+        const { error } = await supabase.from('in_transit_invoices').insert([p_invoice]);
+        if (error) throw error;
+    },
+    updateInTransit: async (p_invoice: any) => {
+        const { error } = await supabase.from('in_transit_invoices').update(p_invoice).eq('id', p_invoice.id);
+        if (error) throw error;
+    },
+    deleteInTransit: async (p_id: string) => {
+        const { error } = await supabase.from('in_transit_invoices').delete().eq('id', p_id);
+        if (error) throw error;
+    },
+    moveInTransit: async (p_in_transit_id: string, p_purchase_invoice: any, p_supplier_update: any, p_new_batches: any) => {
+        const { error } = await supabase.rpc('move_in_transit_rpc', {
+            p_in_transit_id,
+            p_purchase_invoice,
+            p_supplier_update,
+            p_new_batches
+        });
+        if (error) throw error;
+    },
+    processPayment: async (p_entity_type: string, p_entity_id: string, p_new_balances: any, p_transaction: any, p_extra_fields: any = {}) => {
+        const { error } = await supabase.rpc('process_payment_rpc', {
+            p_entity_type,
+            p_entity_id,
+            p_new_balances,
+            p_transaction,
+            p_extra_fields
+        });
+        if (error) throw error;
+    },
+    deleteTransaction: async (p_entity_type: string, p_entity_id: string, p_transaction_id: string, p_new_balances: any) => {
+        const { error } = await supabase.rpc('delete_transaction_rpc', {
+            p_entity_type,
+            p_entity_id,
+            p_transaction_id,
+            p_new_balances
+        });
+        if (error) throw error;
+    },
+    processPayroll: async (p_employee_updates: any, p_payroll_txs: any, p_expense: any) => {
+        const { error } = await supabase.rpc('process_payroll_rpc', {
+            p_employee_updates,
+            p_payroll_txs,
+            p_expense
+        });
+        if (error) throw error;
+    },
+    registerWastage: async (p_product_id: string, p_updated_batches: any, p_wastage_record: any, p_activity_log: any) => {
+        const { error } = await supabase.rpc('register_wastage_rpc', {
+            p_product_id,
+            p_updated_batches,
+            p_wastage_record,
+            p_activity_log
+        });
+        if (error) throw error;
+    },
+    activateCustomerActivity: async (p_customer_id: string, p_deposit_transaction: any, p_new_balances: any) => {
+        const { error } = await supabase.rpc('activate_customer_activity_rpc', {
+            p_customer_id,
+            p_deposit_transaction,
+            p_new_balances
+        });
+        if (error) throw error;
+    },
+    updateSaleInvoice: async (p_invoice: any) => {
+        const { error } = await supabase.from('sale_invoices').update(p_invoice).eq('id', p_invoice.id);
+        if (error) throw error;
+    },
+    updateSaleInvoiceTransientName: async (p_id: string, p_name: string) => {
+        const { error } = await supabase.from('sale_invoices').update({ transientName: p_name }).eq('id', p_id);
+        if (error) throw error;
+    },
+
+    // --- SYSTEM ---
+    clearAllData: async () => {
+        const { error } = await supabase.rpc('clear_all_data_rpc');
+        if (error) throw error;
+    },
+    clearAndRestoreData: async (p_state: any) => {
+        const { error } = await supabase.rpc('clear_and_restore_data_rpc', { p_state });
+        if (error) throw error;
+    },
     saveCloudBackup: async (userId: string, appState: any): Promise<boolean> => {
         try {
             const { error } = await supabase.from('backups').upsert({
@@ -103,591 +556,5 @@ export const api = {
         } catch (e) {
             return null;
         }
-    },
-    
-    // --- STAFF AUTH (100% LOCAL) ---
-    verifyStaffCredentials: async (username: string, password: string): Promise<User | null> => {
-        const users = await db.getAll<User>(db.STORES.USERS);
-        const user = users.find(u => u.username === username && u.password === password);
-        return user || null;
-    },
-
-    // --- SETTINGS (Local) ---
-    getSettings: async () => {
-        const settings = await db.getById<StoreSettings>(db.STORES.SETTINGS, 'current');
-        return settings || DEFAULT_SETTINGS;
-    },
-    updateSettings: async (settings: StoreSettings) => {
-        await db.putItem(db.STORES.SETTINGS, { ...settings, id: 'current' });
-    },
-
-    // --- USERS & ROLES (LOCAL) ---
-    getUsers: async () => db.getAll<User>(db.STORES.USERS),
-    getRoles: async () => {
-        const roles = await db.getAll<Role>(db.STORES.ROLES);
-        if (roles.length === 0) {
-            await db.putItem(db.STORES.ROLES, DEFAULT_ADMIN_ROLE);
-            return [DEFAULT_ADMIN_ROLE];
-        }
-        return roles;
-    },
-    addUser: async (user: Omit<User, 'id'>) => {
-        const newId = crypto.randomUUID();
-        const newUser = { ...user, id: newId };
-        await db.putItem(db.STORES.USERS, newUser);
-        return newUser;
-    },
-    updateUser: async (user: Partial<User> & { id: string }) => {
-        const existing = await db.getById<User>(db.STORES.USERS, user.id);
-        if (existing) await db.putItem(db.STORES.USERS, { ...existing, ...user });
-    },
-    deleteUser: async (id: string) => db.deleteItem(db.STORES.USERS, id),
-    addRole: async (role: Omit<Role, 'id'>) => {
-        const newId = crypto.randomUUID();
-        const newRole = { ...role, id: newId };
-        await db.putItem(db.STORES.ROLES, newRole);
-        return newRole;
-    },
-    updateRole: async (role: Role) => db.putItem(db.STORES.ROLES, role),
-    deleteRole: async (id: string) => {
-        if (id === 'admin-role') return;
-        await db.deleteItem(db.STORES.ROLES, id);
-    },
-
-    // --- SHOP ENTITIES ---
-    getProducts: async () => db.getAll<Product>(db.STORES.PRODUCTS),
-    addProduct: async (product: Omit<Product, 'id'|'batches'>, firstBatch: Omit<ProductBatch, 'id'>) => {
-        const productId = crypto.randomUUID();
-        const batchId = crypto.randomUUID();
-        const newProduct: Product = { ...product, id: productId, batches: [{ ...firstBatch, id: batchId }] };
-        await db.putItem(db.STORES.PRODUCTS, newProduct);
-        return newProduct;
-    },
-    updateProduct: async (product: Product) => db.putItem(db.STORES.PRODUCTS, product),
-    deleteProduct: async (id: string) => db.deleteItem(db.STORES.PRODUCTS, id),
-
-    getServices: async () => db.getAll<Service>(db.STORES.SERVICES),
-    addService: async (service: Omit<Service, 'id'>) => {
-        const id = crypto.randomUUID();
-        const newService = { ...service, id };
-        await db.putItem(db.STORES.SERVICES, newService);
-        return newService;
-    },
-    deleteService: async (id: string) => db.deleteItem(db.STORES.SERVICES, id),
-
-    getEntities: async () => {
-        const [customers, suppliers, employees, expenses, depositHolders, companies, partners] = await Promise.all([
-            db.getAll<Customer>(db.STORES.CUSTOMERS),
-            db.getAll<Supplier>(db.STORES.SUPPLIERS),
-            db.getAll<Employee>(db.STORES.EMPLOYEES),
-            db.getAll<Expense>(db.STORES.EXPENSES),
-            db.getAll<DepositHolder>(db.STORES.DEPOSIT_HOLDERS),
-            db.getAll<Company>(db.STORES.COMPANIES),
-            db.getAll<Partner>(db.STORES.PARTNERS)
-        ]);
-        return { customers, suppliers, employees, expenses, depositHolders, companies, partners };
-    },
-    addCustomer: async (c: any) => { 
-        const id = crypto.randomUUID(); 
-        const item = { ...c, id, balance: 0, balanceAFN: 0, balanceUSD: 0, balanceIRT: 0 }; 
-        await db.putItem(db.STORES.CUSTOMERS, item); 
-        return item; 
-    },
-    updateCustomer: async (c: Customer) => db.putItem(db.STORES.CUSTOMERS, c),
-    deleteCustomer: async (id: string) => db.deleteItem(db.STORES.CUSTOMERS, id),
-    addSupplier: async (s: any) => { 
-        const id = crypto.randomUUID(); 
-        const item = { ...s, id, balance: 0, balanceAFN: 0, balanceUSD: 0, balanceIRT: 0 }; 
-        await db.putItem(db.STORES.SUPPLIERS, item); 
-        return item; 
-    },
-    updateSupplier: async (s: Supplier) => db.putItem(db.STORES.SUPPLIERS, s),
-    deleteSupplier: async (id: string) => db.deleteItem(db.STORES.SUPPLIERS, id),
-    addEmployee: async (e: any) => { 
-        const id = crypto.randomUUID(); 
-        const item = { 
-            ...e, 
-            id, 
-            isActive: true,
-            balance: 0, 
-            balanceAFN: 0, 
-            balanceUSD: 0, 
-            balanceIRT: 0 
-        }; 
-        await db.putItem(db.STORES.EMPLOYEES, item); 
-        return item; 
-    },
-    updateEmployee: async (e: Employee) => db.putItem(db.STORES.EMPLOYEES, e),
-    deleteEmployee: async (id: string) => db.deleteItem(db.STORES.EMPLOYEES, id),
-    addExpense: async (e: any) => { const id = crypto.randomUUID(); const item = { ...e, id }; await db.putItem(db.STORES.EXPENSES, item); return item; },
-    updateExpense: async (e: Expense) => db.putItem(db.STORES.EXPENSES, e),
-    deleteExpense: async (id: string) => db.deleteItem(db.STORES.EXPENSES, id),
-
-    // --- SECURITY DEPOSITS (LOCAL) ---
-    addDepositHolder: async (holder: Omit<DepositHolder, 'id' | 'balance' | 'balanceAFN' | 'balanceUSD' | 'balanceIRT' | 'createdAt'>) => {
-        const id = crypto.randomUUID();
-        const newHolder: DepositHolder = { ...holder, id, balance: 0, balanceAFN: 0, balanceUSD: 0, balanceIRT: 0, createdAt: new Date().toISOString() };
-        await db.putItem(db.STORES.DEPOSIT_HOLDERS, newHolder);
-        return newHolder;
-    },
-    updateDepositHolder: async (holder: DepositHolder) => db.putItem(db.STORES.DEPOSIT_HOLDERS, holder),
-    deleteDepositHolder: async (id: string) => db.deleteItem(db.STORES.DEPOSIT_HOLDERS, id),
-    addDepositTransaction: async (tx: DepositTransaction) => db.putItem(db.STORES.DEPOSIT_TRANSACTIONS, tx),
-    deleteDepositTransaction: async (id: string) => db.deleteItem(db.STORES.DEPOSIT_TRANSACTIONS, id),
-
-    getTransactions: async () => {
-        const [customerTransactions, supplierTransactions, payrollTransactions, depositTransactions] = await Promise.all([
-            db.getAll<CustomerTransaction>(db.STORES.CUSTOMER_TX),
-            db.getAll<SupplierTransaction>(db.STORES.SUPPLIER_TX),
-            db.getAll<PayrollTransaction>(db.STORES.PAYROLL_TX),
-            db.getAll<DepositTransaction>(db.STORES.DEPOSIT_TRANSACTIONS)
-        ]);
-        return { customerTransactions, supplierTransactions, payrollTransactions, depositTransactions };
-    },
-
-    getInvoices: async () => {
-        const [saleInvoices, purchaseInvoices, inTransitInvoices] = await Promise.all([
-            db.getAll<SaleInvoice>(db.STORES.SALE_INVOICES),
-            db.getAll<PurchaseInvoice>(db.STORES.PURCHASE_INVOICES),
-            db.getAll<InTransitInvoice>(db.STORES.IN_TRANSIT_INVOICES)
-        ]);
-        return { 
-            saleInvoices: saleInvoices.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()), 
-            purchaseInvoices: purchaseInvoices.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-            inTransitInvoices: inTransitInvoices.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        };
-    },
-
-    getActivities: async () => {
-        const logs = await db.getAll<ActivityLog>(db.STORES.ACTIVITY);
-        return logs.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 100);
-    },
-    addActivity: async (log: ActivityLog) => db.putItem(db.STORES.ACTIVITY, log),
-
-    getWastageRecords: async () => {
-        const records = await db.getAll<any>(db.STORES.WASTAGE_RECORDS);
-        return records.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    },
-    addWastageRecord: async (record: any) => db.putItem(db.STORES.WASTAGE_RECORDS, record),
-
-    // --- Companies ---
-    getCompanies: async () => db.getAll<Company>(db.STORES.COMPANIES),
-    addCompany: async (company: Company) => db.putItem(db.STORES.COMPANIES, company),
-    updateCompany: async (company: Company) => db.putItem(db.STORES.COMPANIES, company),
-    deleteCompany: async (id: string) => db.deleteItem(db.STORES.COMPANIES, id),
-
-    // --- Partners ---
-    getPartners: async () => db.getAll<Partner>(db.STORES.PARTNERS),
-    addPartner: async (partner: Partner) => db.putItem(db.STORES.PARTNERS, partner),
-    updatePartner: async (partner: Partner) => db.putItem(db.STORES.PARTNERS, partner),
-    deletePartner: async (id: string) => db.deleteItem(db.STORES.PARTNERS, id),
-    
-    // --- Managed Companies ---
-    getManagedCompanies: async () => db.getAll<ManagedCompany>(db.STORES.MANAGED_COMPANIES),
-    addManagedCompany: async (company: ManagedCompany) => db.putItem(db.STORES.MANAGED_COMPANIES, company),
-    updateManagedCompany: async (company: ManagedCompany) => db.putItem(db.STORES.MANAGED_COMPANIES, company),
-    deleteManagedCompany: async (id: string) => db.deleteItem(db.STORES.MANAGED_COMPANIES, id),
-
-    // --- Managed Company Ledger ---
-    getManagedCompanyLedger: async () => db.getAll<CompanyLedgerEntry>(db.STORES.MANAGED_COMPANY_LEDGER),
-    addManagedCompanyLedgerEntry: async (entry: CompanyLedgerEntry) => db.putItem(db.STORES.MANAGED_COMPANY_LEDGER, entry),
-    updateManagedCompanyLedgerEntry: async (entry: CompanyLedgerEntry) => db.putItem(db.STORES.MANAGED_COMPANY_LEDGER, entry),
-    deleteManagedCompanyLedgerEntry: async (id: string) => db.deleteItem(db.STORES.MANAGED_COMPANY_LEDGER, id),
-
-    // --- Managed Company Customers ---
-    getManagedCompanyCustomers: async () => db.getAll<ManagedCompanyCustomer>(db.STORES.MANAGED_COMPANY_CUSTOMERS),
-    addManagedCompanyCustomer: async (customer: ManagedCompanyCustomer) => db.putItem(db.STORES.MANAGED_COMPANY_CUSTOMERS, customer),
-    updateManagedCompanyCustomer: async (customer: ManagedCompanyCustomer) => db.putItem(db.STORES.MANAGED_COMPANY_CUSTOMERS, customer),
-    deleteManagedCompanyCustomer: async (id: string) => db.deleteItem(db.STORES.MANAGED_COMPANY_CUSTOMERS, id),
-
-    // --- Customer Billing Records ---
-    getCustomerBillingRecords: async () => db.getAll<CustomerBillingRecord>(db.STORES.CUSTOMER_BILLING_RECORDS),
-    addCustomerBillingRecord: async (record: CustomerBillingRecord) => db.putItem(db.STORES.CUSTOMER_BILLING_RECORDS, record),
-    updateCustomerBillingRecord: async (record: CustomerBillingRecord) => db.putItem(db.STORES.CUSTOMER_BILLING_RECORDS, record),
-    deleteCustomerBillingRecord: async (id: string) => db.deleteItem(db.STORES.CUSTOMER_BILLING_RECORDS, id),
-
-    // --- Owner Transactions ---
-    getOwnerTransactions: async () => db.getAll<OwnerTransaction>(db.STORES.OWNER_TRANSACTIONS),
-    addOwnerTransaction: async (tx: OwnerTransaction) => db.putItem(db.STORES.OWNER_TRANSACTIONS, tx),
-    updateOwnerTransaction: async (tx: OwnerTransaction) => db.putItem(db.STORES.OWNER_TRANSACTIONS, tx),
-    deleteOwnerTransaction: async (id: string) => db.deleteItem(db.STORES.OWNER_TRANSACTIONS, id),
-    
-    getOwnerExpenseCategories: async () => db.getAll<OwnerExpenseCategory>(db.STORES.OWNER_EXPENSE_CATEGORIES),
-    addOwnerExpenseCategory: async (c: OwnerExpenseCategory) => db.putItem(db.STORES.OWNER_EXPENSE_CATEGORIES, c),
-    updateOwnerExpenseCategory: async (c: OwnerExpenseCategory) => db.putItem(db.STORES.OWNER_EXPENSE_CATEGORIES, c),
-    deleteOwnerExpenseCategory: async (id: string) => db.deleteItem(db.STORES.OWNER_EXPENSE_CATEGORIES, id),
-
-    // --- Salary Management ---
-    getCompanyEmployees: async () => db.getAll<CompanyEmployee>(db.STORES.COMPANY_EMPLOYEES),
-    addCompanyEmployee: async (employee: CompanyEmployee) => db.putItem(db.STORES.COMPANY_EMPLOYEES, employee),
-    updateCompanyEmployee: async (employee: CompanyEmployee) => db.putItem(db.STORES.COMPANY_EMPLOYEES, employee),
-    deleteCompanyEmployee: async (id: string) => db.deleteItem(db.STORES.COMPANY_EMPLOYEES, id),
-
-    getSalaryRecords: async () => db.getAll<SalaryMonthRecord>(db.STORES.SALARY_RECORDS),
-    addSalaryRecord: async (record: SalaryMonthRecord) => db.putItem(db.STORES.SALARY_RECORDS, record),
-    updateSalaryRecord: async (record: SalaryMonthRecord) => db.putItem(db.STORES.SALARY_RECORDS, record),
-    deleteSalaryRecord: async (id: string) => db.deleteItem(db.STORES.SALARY_RECORDS, id),
-
-    getSalaryPayments: async () => db.getAll<SalaryPayment>(db.STORES.SALARY_PAYMENTS),
-    addSalaryPayment: async (payment: SalaryPayment) => db.putItem(db.STORES.SALARY_PAYMENTS, payment),
-    updateSalaryPayment: async (payment: SalaryPayment) => db.putItem(db.STORES.SALARY_PAYMENTS, payment),
-    deleteSalaryPayment: async (id: string) => db.deleteItem(db.STORES.SALARY_PAYMENTS, id),
-
-    // --- Managed Company Invoices ---
-    getManagedCompanyInvoices: async () => db.getAll<ManagedCompanyInvoice>(db.STORES.MANAGED_COMPANY_INVOICES),
-    addManagedCompanyInvoice: async (invoice: ManagedCompanyInvoice) => db.putItem(db.STORES.MANAGED_COMPANY_INVOICES, invoice),
-    updateManagedCompanyInvoice: async (invoice: ManagedCompanyInvoice) => db.putItem(db.STORES.MANAGED_COMPANY_INVOICES, invoice),
-    deleteManagedCompanyInvoice: async (id: string) => db.deleteItem(db.STORES.MANAGED_COMPANY_INVOICES, id),
-
-    // --- Managed Company Production Logs ---
-    getManagedCompanyProductionLogs: async () => db.getAll<ManagedCompanyProductionLog>(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS),
-    addManagedCompanyProductionLog: async (log: ManagedCompanyProductionLog) => db.putItem(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS, log),
-    updateManagedCompanyProductionLog: async (log: ManagedCompanyProductionLog) => db.putItem(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS, log),
-    deleteManagedCompanyProductionLog: async (id: string) => db.deleteItem(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS, id),
-
-    // --- Orders ---
-    getOrders: async () => {
-        const records = await db.getAll<any>(db.STORES.ORDERS);
-        return records.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    },
-    addOrder: async (order: any) => db.putItem(db.STORES.ORDERS, order),
-    updateOrder: async (order: any) => db.putItem(db.STORES.ORDERS, order),
-    deleteOrder: async (id: string) => db.deleteItem(db.STORES.ORDERS, id),
-
-    createSale: async (
-        invoice: SaleInvoice, 
-        stockUpdates: {batchId: string, newStock: number}[], 
-        customerUpdate?: {id: string, newBalances: {AFN: number, USD: number, IRT: number, Total: number}, transactions: CustomerTransaction[]},
-        supplierUpdate?: {id: string, newBalances: {AFN: number, USD: number, IRT: number, Total: number}, transactions: SupplierTransaction[]}
-    ) => {
-        await db.putItem(db.STORES.SALE_INVOICES, invoice);
-        for (const update of stockUpdates) {
-            const product = await findProductByBatchId(update.batchId);
-            if (product) {
-                product.batches = product.batches.map(b => b.id === update.batchId ? { ...b, stock: update.newStock } : b);
-                await db.putItem(db.STORES.PRODUCTS, product);
-            }
-        }
-        if (customerUpdate) {
-            const customer = await db.getById<Customer>(db.STORES.CUSTOMERS, customerUpdate.id);
-            if (customer) {
-                await db.putItem(db.STORES.CUSTOMERS, { ...customer, balanceAFN: customerUpdate.newBalances.AFN, balanceUSD: customerUpdate.newBalances.USD, balanceIRT: customerUpdate.newBalances.IRT, balance: customerUpdate.newBalances.Total });
-                for (const tx of customerUpdate.transactions) {
-                    await db.putItem(db.STORES.CUSTOMER_TX, tx);
-                }
-            }
-        }
-        if (supplierUpdate) {
-            const supplier = await db.getById<Supplier>(db.STORES.SUPPLIERS, supplierUpdate.id);
-            if (supplier) {
-                await db.putItem(db.STORES.SUPPLIERS, { ...supplier, balanceAFN: supplierUpdate.newBalances.AFN, balanceUSD: supplierUpdate.newBalances.USD, balanceIRT: supplierUpdate.newBalances.IRT, balance: supplierUpdate.newBalances.Total });
-                for (const tx of supplierUpdate.transactions) {
-                    await db.putItem(db.STORES.SUPPLIER_TX, tx);
-                }
-            }
-        }
-    },
-
-    updateSale: async (
-        invoiceId: string, 
-        newInvoiceData: SaleInvoice, 
-        stockRestores: {batchId: string, quantity: number}[], 
-        stockUpdates: {batchId: string, newStock: number}[], 
-        customerUpdates: {id: string, newBalances: {AFN: number, USD: number, IRT: number, Total: number}}[], 
-        customerTransactions: CustomerTransaction[],
-        supplierUpdates: {id: string, newBalances: {AFN: number, USD: number, IRT: number, Total: number}}[] = [],
-        supplierTransactions: SupplierTransaction[] = []
-    ) => {
-        await db.putItem(db.STORES.SALE_INVOICES, newInvoiceData);
-        for (const restore of stockRestores) {
-            const product = await findProductByBatchId(restore.batchId);
-            if (product) {
-                product.batches = product.batches.map(b => b.id === restore.batchId ? { ...b, stock: b.stock + restore.quantity } : b);
-                await db.putItem(db.STORES.PRODUCTS, product);
-            }
-        }
-        for (const update of stockUpdates) {
-            const product = await findProductByBatchId(update.batchId);
-            if (product) {
-                product.batches = product.batches.map(b => b.id === update.batchId ? { ...b, stock: update.newStock } : b);
-                await db.putItem(db.STORES.PRODUCTS, product);
-            }
-        }
-        for (const cu of customerUpdates) {
-            const customer = await db.getById<Customer>(db.STORES.CUSTOMERS, cu.id);
-            if (customer) await db.putItem(db.STORES.CUSTOMERS, { ...customer, balanceAFN: cu.newBalances.AFN, balanceUSD: cu.newBalances.USD, balanceIRT: cu.newBalances.IRT, balance: cu.newBalances.Total });
-        }
-        
-        // Handle Customer Transactions: Delete old ones for this invoice and insert new ones
-        const allCustomerTxs = await db.getAll<CustomerTransaction>(db.STORES.CUSTOMER_TX);
-        const oldCustomerTxs = allCustomerTxs.filter(t => t.invoiceId === invoiceId);
-        for (const otx of oldCustomerTxs) {
-            await db.deleteItem(db.STORES.CUSTOMER_TX, otx.id);
-        }
-        for (const ntx of customerTransactions) {
-            await db.putItem(db.STORES.CUSTOMER_TX, ntx);
-        }
-
-        for (const su of supplierUpdates) {
-            const supplier = await db.getById<Supplier>(db.STORES.SUPPLIERS, su.id);
-            if (supplier) await db.putItem(db.STORES.SUPPLIERS, { ...supplier, balanceAFN: su.newBalances.AFN, balanceUSD: su.newBalances.USD, balanceIRT: su.newBalances.IRT, balance: su.newBalances.Total });
-        }
-
-        // Handle Supplier Transactions: Delete old ones for this invoice and insert new ones
-        const allSupplierTxs = await db.getAll<SupplierTransaction>(db.STORES.SUPPLIER_TX);
-        const oldSupplierTxs = allSupplierTxs.filter(t => t.invoiceId === invoiceId);
-        for (const otx of oldSupplierTxs) {
-            await db.deleteItem(db.STORES.SUPPLIER_TX, otx.id);
-        }
-        for (const ntx of supplierTransactions) {
-            await db.putItem(db.STORES.SUPPLIER_TX, ntx);
-        }
-    },
-
-    deleteSale: async (
-        invoiceId: string, 
-        stockRestores: {batchId: string, quantity: number}[], 
-        customerUpdate?: {id: string, newBalances: {AFN: number, USD: number, IRT: number, Total: number}},
-        supplierUpdate?: {id: string, newBalances: {AFN: number, USD: number, IRT: number, Total: number}}
-    ) => {
-        await db.deleteItem(db.STORES.SALE_INVOICES, invoiceId);
-        
-        for (const restore of stockRestores) {
-            const product = await findProductByBatchId(restore.batchId);
-            if (product) {
-                product.batches = product.batches.map(b => b.id === restore.batchId ? { ...b, stock: b.stock + restore.quantity } : b);
-                await db.putItem(db.STORES.PRODUCTS, product);
-            }
-        }
-        
-        if (customerUpdate) {
-            const customer = await db.getById<Customer>(db.STORES.CUSTOMERS, customerUpdate.id);
-            if (customer) {
-                await db.putItem(db.STORES.CUSTOMERS, { ...customer, balanceAFN: customerUpdate.newBalances.AFN, balanceUSD: customerUpdate.newBalances.USD, balanceIRT: customerUpdate.newBalances.IRT, balance: customerUpdate.newBalances.Total });
-                // Delete ALL associated transactions
-                const txs = await db.getAll<CustomerTransaction>(db.STORES.CUSTOMER_TX);
-                const relatedTxs = txs.filter(t => t.invoiceId === invoiceId);
-                for (const tx of relatedTxs) {
-                    await db.deleteItem(db.STORES.CUSTOMER_TX, tx.id);
-                }
-            }
-        }
-        
-        if (supplierUpdate) {
-            const supplier = await db.getById<Supplier>(db.STORES.SUPPLIERS, supplierUpdate.id);
-            if (supplier) {
-                await db.putItem(db.STORES.SUPPLIERS, { ...supplier, balanceAFN: supplierUpdate.newBalances.AFN, balanceUSD: supplierUpdate.newBalances.USD, balanceIRT: supplierUpdate.newBalances.IRT, balance: supplierUpdate.newBalances.Total });
-                // Delete ALL associated transactions
-                const txs = await db.getAll<SupplierTransaction>(db.STORES.SUPPLIER_TX);
-                const relatedTxs = txs.filter(t => t.invoiceId === invoiceId);
-                for (const tx of relatedTxs) {
-                    await db.deleteItem(db.STORES.SUPPLIER_TX, tx.id);
-                }
-            }
-        }
-    },
-
-    createSaleReturn: async (returnInvoice: SaleInvoice, stockRestores: {batchId: string, quantity: number}[], customerRefund?: {id: string, amount: number, currency: 'AFN'|'USD'|'IRT', newBalances: any}) => {
-        await db.putItem(db.STORES.SALE_INVOICES, returnInvoice);
-        for (const restore of stockRestores) {
-            const product = await findProductByBatchId(restore.batchId);
-            if (product) {
-                product.batches = product.batches.map(b => b.id === restore.batchId ? { ...b, stock: b.stock + restore.quantity } : b);
-                await db.putItem(db.STORES.PRODUCTS, product);
-            }
-        }
-        if (customerRefund) {
-            const customer = await db.getById<Customer>(db.STORES.CUSTOMERS, customerRefund.id);
-            if (customer) {
-                await db.putItem(db.STORES.CUSTOMERS, { ...customer, balanceAFN: customerRefund.newBalances.AFN, balanceUSD: customerRefund.newBalances.USD, balanceIRT: customerRefund.newBalances.IRT, balance: customerRefund.newBalances.Total });
-                const returnTx: CustomerTransaction = { id: crypto.randomUUID(), customerId: customerRefund.id, type: 'sale_return', amount: customerRefund.amount, date: returnInvoice.timestamp, description: `مرجوعی فاکتور #${returnInvoice.originalInvoiceId}`, invoiceId: returnInvoice.id, currency: customerRefund.currency };
-                await db.putItem(db.STORES.CUSTOMER_TX, returnTx);
-            }
-        }
-    },
-
-    createPurchase: async (invoice: PurchaseInvoice, supplierUpdate: {id: string, newBalances: any, transaction: SupplierTransaction}, newBatches: any[]) => {
-        await db.putItem(db.STORES.PURCHASE_INVOICES, invoice);
-        await db.putItem(db.STORES.SUPPLIER_TX, supplierUpdate.transaction);
-        const supplier = await db.getById<Supplier>(db.STORES.SUPPLIERS, supplierUpdate.id);
-        if (supplier) await db.putItem(db.STORES.SUPPLIERS, { ...supplier, balanceAFN: supplierUpdate.newBalances.AFN, balanceUSD: supplierUpdate.newBalances.USD, balanceIRT: supplierUpdate.newBalances.IRT, balance: supplierUpdate.newBalances.Total });
-        for (const b of newBatches) {
-            const p = await db.getById<Product>(db.STORES.PRODUCTS, b.productId);
-            if (p) { p.batches.push(b); await db.putItem(db.STORES.PRODUCTS, p); }
-        }
-    },
-
-    updatePurchase: async (invoiceId: string, newInvoiceData: PurchaseInvoice, supplierUpdate?: {id: string, newBalances: any}) => {
-        const settings = await api.getSettings();
-        const oldInvoice = await db.getById<PurchaseInvoice>(db.STORES.PURCHASE_INVOICES, invoiceId);
-        if (oldInvoice) {
-            for (const item of oldInvoice.items) {
-                const product = await db.getById<Product>(db.STORES.PRODUCTS, item.productId);
-                if (product) {
-                    const bIdx = product.batches.findIndex(b => b.lotNumber === item.lotNumber);
-                    if (bIdx !== -1) { product.batches[bIdx].stock -= item.quantity; await db.putItem(db.STORES.PRODUCTS, product); }
-                }
-            }
-        }
-
-        await db.putItem(db.STORES.PURCHASE_INVOICES, newInvoiceData);
-
-        const totalQty = newInvoiceData.items.reduce((s, i) => s + (i.quantity || 0), 0);
-        const rate = newInvoiceData.exchangeRate || 1;
-        const config = settings.currencyConfigs[newInvoiceData.currency || settings.baseCurrency];
-        
-        const additionalCostBase = newInvoiceData.additionalCost 
-            ? (newInvoiceData.currency === settings.baseCurrency ? newInvoiceData.additionalCost : (config.method === 'multiply' ? newInvoiceData.additionalCost / rate : newInvoiceData.additionalCost * rate)) 
-            : 0;
-        const costPerUnitBase = totalQty > 0 ? additionalCostBase / totalQty : 0;
-
-        for (const item of newInvoiceData.items) {
-            const product = await db.getById<Product>(db.STORES.PRODUCTS, item.productId);
-            if (product) {
-                const bIdx = product.batches.findIndex(b => b.lotNumber === item.lotNumber);
-                const priceBase = (newInvoiceData.currency === settings.baseCurrency ? item.purchasePrice : (config.method === 'multiply' ? item.purchasePrice / rate : item.purchasePrice * rate)) + costPerUnitBase;
-                if (bIdx !== -1) {
-                    product.batches[bIdx].stock += item.quantity;
-                    product.batches[bIdx].purchasePrice = priceBase;
-                    product.batches[bIdx].expiryDate = item.expiryDate;
-                } else {
-                    product.batches.push({ id: crypto.randomUUID(), lotNumber: item.lotNumber, stock: item.quantity, purchasePrice: priceBase, purchaseDate: newInvoiceData.timestamp, expiryDate: item.expiryDate });
-                }
-                await db.putItem(db.STORES.PRODUCTS, product);
-            }
-        }
-
-        if (supplierUpdate) {
-            const supplier = await db.getById<Supplier>(db.STORES.SUPPLIERS, supplierUpdate.id);
-            if (supplier) {
-                await db.putItem(db.STORES.SUPPLIERS, { ...supplier, balanceAFN: supplierUpdate.newBalances.AFN, balanceUSD: supplierUpdate.newBalances.USD, balanceIRT: supplierUpdate.newBalances.IRT, balance: supplierUpdate.newBalances.Total });
-                const txs = await db.getAll<SupplierTransaction>(db.STORES.SUPPLIER_TX);
-                const existingTx = txs.find(t => t.invoiceId === invoiceId);
-                if (existingTx) {
-                    Object.assign(existingTx, { amount: newInvoiceData.totalAmount, date: newInvoiceData.timestamp, currency: newInvoiceData.currency });
-                    await db.putItem(db.STORES.SUPPLIER_TX, existingTx);
-                }
-            }
-        }
-    },
-
-    createPurchaseReturn: async (returnInvoice: PurchaseInvoice, stockDeductions: {productId: string, quantity: number, lotNumber: string}[], supplierRefund?: {id: string, amount: number, currency: 'AFN'|'USD'|'IRT', newBalances: any}) => {
-        await db.putItem(db.STORES.PURCHASE_INVOICES, returnInvoice);
-        for (const deduct of stockDeductions) {
-            const p = await db.getById<Product>(db.STORES.PRODUCTS, deduct.productId);
-            if (p) {
-                const batch = p.batches.find(b => b.lotNumber === deduct.lotNumber);
-                if (batch) { batch.stock = Math.max(0, batch.stock - deduct.quantity); await db.putItem(db.STORES.PRODUCTS, p); }
-            }
-        }
-        if (supplierRefund) {
-            const supplier = await db.getById<Supplier>(db.STORES.SUPPLIERS, supplierRefund.id);
-            if (supplier) {
-                await db.putItem(db.STORES.SUPPLIERS, { ...supplier, balanceAFN: supplierRefund.newBalances.AFN, balanceUSD: supplierRefund.newBalances.USD, balanceIRT: supplierRefund.newBalances.IRT, balance: supplierRefund.newBalances.Total });
-                const returnTx: SupplierTransaction = { id: crypto.randomUUID(), supplierId: supplierRefund.id, type: 'purchase_return', amount: supplierRefund.amount, date: returnInvoice.timestamp, description: `مرجوعی خرید فاکتور #${returnInvoice.originalInvoiceId}`, invoiceId: returnInvoice.id, currency: supplierRefund.currency };
-                await db.putItem(db.STORES.SUPPLIER_TX, returnTx);
-            }
-        }
-    },
-
-    createInTransit: async (invoice: InTransitInvoice) => db.putItem(db.STORES.IN_TRANSIT_INVOICES, invoice),
-    updateInTransit: async (invoice: InTransitInvoice) => db.putItem(db.STORES.IN_TRANSIT_INVOICES, invoice),
-    deleteInTransit: async (id: string) => db.deleteItem(db.STORES.IN_TRANSIT_INVOICES, id),
-    updateSaleInvoiceTransientName: async (id: string, name: string) => {
-        const inv = await db.getById<SaleInvoice>(db.STORES.SALE_INVOICES, id);
-        if (inv) {
-            await db.putItem(db.STORES.SALE_INVOICES, { ...inv, originalInvoiceId: name });
-        }
-    },
-    updateSaleInvoice: async (invoice: SaleInvoice) => db.putItem(db.STORES.SALE_INVOICES, invoice),
-
-    processPayment: async (entityType: 'customer' | 'supplier' | 'employee', entityId: string, newBalance: any, transaction: any, extraFields?: any) => {
-        const store = entityType === 'customer' ? db.STORES.CUSTOMERS : (entityType === 'supplier' ? db.STORES.SUPPLIERS : db.STORES.EMPLOYEES);
-        const txStore = entityType === 'customer' ? db.STORES.CUSTOMER_TX : (entityType === 'supplier' ? db.STORES.SUPPLIER_TX : db.STORES.PAYROLL_TX);
-        const entity = await db.getById<any>(store, entityId);
-        if (entity) {
-            await db.putItem(store, { 
-                ...entity, 
-                ...extraFields,
-                balanceAFN: newBalance.AFN, 
-                balanceUSD: newBalance.USD, 
-                balanceIRT: newBalance.IRT, 
-                balance: newBalance.Total 
-            });
-            await db.putItem(txStore, transaction);
-        }
-    },
-
-    deleteTransaction: async (entityType: 'customer' | 'supplier', entityId: string, transactionId: string, newBalance: any) => {
-        const store = entityType === 'customer' ? db.STORES.CUSTOMERS : db.STORES.SUPPLIERS;
-        const txStore = entityType === 'customer' ? db.STORES.CUSTOMER_TX : db.STORES.SUPPLIER_TX;
-        const entity = await db.getById<any>(store, entityId);
-        if (entity) {
-            await db.putItem(store, { 
-                ...entity, 
-                balanceAFN: newBalance.AFN, 
-                balanceUSD: newBalance.USD, 
-                balanceIRT: newBalance.IRT, 
-                balance: newBalance.Total 
-            });
-            await db.deleteItem(txStore, transactionId);
-        }
-    },
-
-    processPayroll: async (updates: {id: string, newBalances: any}[], transactions: PayrollTransaction[], expense: Expense) => {
-        for (const u of updates) {
-            const emp = await db.getById<Employee>(db.STORES.EMPLOYEES, u.id);
-            if (emp) await db.putItem(db.STORES.EMPLOYEES, { 
-                ...emp, 
-                balanceAFN: u.newBalances.AFN, 
-                balanceUSD: u.newBalances.USD, 
-                balanceIRT: u.newBalances.IRT, 
-                balance: u.newBalances.Total 
-            });
-        }
-        for (const tx of transactions) await db.putItem(db.STORES.PAYROLL_TX, tx);
-        if (expense && expense.amount > 0) await db.putItem(db.STORES.EXPENSES, expense);
-    },
-
-    clearAndRestoreData: async (data: AppState) => {
-        const stores = Object.values(db.STORES);
-        for (const storeName of stores) await db.clearStore(storeName);
-        if (data.storeSettings) await db.putItem(db.STORES.SETTINGS, { ...data.storeSettings, id: 'current' });
-        if (data.products) for (const p of data.products) await db.putItem(db.STORES.PRODUCTS, p);
-        if (data.saleInvoices) for (const s of data.saleInvoices) await db.putItem(db.STORES.SALE_INVOICES, s);
-        if (data.purchaseInvoices) for (const p of data.purchaseInvoices) await db.putItem(db.STORES.PURCHASE_INVOICES, p);
-        if (data.inTransitInvoices) for (const i of data.inTransitInvoices) await db.putItem(db.STORES.IN_TRANSIT_INVOICES, i);
-        if (data.customers) for (const c of data.customers) await db.putItem(db.STORES.CUSTOMERS, c);
-        if (data.suppliers) for (const s of data.suppliers) await db.putItem(db.STORES.SUPPLIERS, s);
-        if (data.employees) for (const e of data.employees) await db.putItem(db.STORES.EMPLOYEES, e);
-        if (data.expenses) for (const e of data.expenses) await db.putItem(db.STORES.EXPENSES, e);
-        if (data.services) for (const s of data.services) await db.putItem(db.STORES.SERVICES, s);
-        if (data.depositHolders) for (const h of data.depositHolders) await db.putItem(db.STORES.DEPOSIT_HOLDERS, h);
-        if (data.customerTransactions) for (const t of data.customerTransactions) await db.putItem(db.STORES.CUSTOMER_TX, t);
-        if (data.supplierTransactions) for (const t of data.supplierTransactions) await db.putItem(db.STORES.SUPPLIER_TX, t);
-        if (data.payrollTransactions) for (const t of data.payrollTransactions) await db.putItem(db.STORES.PAYROLL_TX, t);
-        if (data.depositTransactions) for (const t of data.depositTransactions) await db.putItem(db.STORES.DEPOSIT_TRANSACTIONS, t);
-        if (data.activities) for (const a of data.activities) await db.putItem(db.STORES.ACTIVITY, a);
-        if (data.wastageRecords) for (const w of data.wastageRecords) await db.putItem(db.STORES.WASTAGE_RECORDS, w);
-        if (data.users) for (const u of data.users) await db.putItem(db.STORES.USERS, u);
-        if (data.roles) for (const r of data.roles) await db.putItem(db.STORES.ROLES, r);
-        if (data.companies) for (const c of data.companies) await db.putItem(db.STORES.COMPANIES, c);
-        if (data.managedCompanies) for (const c of data.managedCompanies) await db.putItem(db.STORES.MANAGED_COMPANIES, c);
-        if (data.managedCompanyLedger) for (const e of data.managedCompanyLedger) await db.putItem(db.STORES.MANAGED_COMPANY_LEDGER, e);
-        if (data.managedCompanyCustomers) for (const c of data.managedCompanyCustomers) await db.putItem(db.STORES.MANAGED_COMPANY_CUSTOMERS, c);
-        if (data.customerBillingRecords) for (const r of data.customerBillingRecords) await db.putItem(db.STORES.CUSTOMER_BILLING_RECORDS, r);
-        if (data.ownerTransactions) for (const t of data.ownerTransactions) await db.putItem(db.STORES.OWNER_TRANSACTIONS, t);
-        if (data.ownerExpenseCategories) for (const c of data.ownerExpenseCategories) await db.putItem(db.STORES.OWNER_EXPENSE_CATEGORIES, c);
-        if (data.partners) for (const p of data.partners) await db.putItem(db.STORES.PARTNERS, p);
-        if (data.companyEmployees) for (const e of data.companyEmployees) await db.putItem(db.STORES.COMPANY_EMPLOYEES, e);
-        if (data.salaryRecords) for (const r of data.salaryRecords) await db.putItem(db.STORES.SALARY_RECORDS, r);
-        if (data.salaryPayments) for (const p of data.salaryPayments) await db.putItem(db.STORES.SALARY_PAYMENTS, p);
-        if (data.managedCompanyInvoices) for (const i of data.managedCompanyInvoices) await db.putItem(db.STORES.MANAGED_COMPANY_INVOICES, i);
-        if (data.managedCompanyProductionLogs) for (const l of data.managedCompanyProductionLogs) await db.putItem(db.STORES.MANAGED_COMPANY_PRODUCTION_LOGS, l);
     }
 };
-
-async function findProductByBatchId(batchId: string): Promise<Product | undefined> {
-    const products = await db.getAll<Product>(db.STORES.PRODUCTS);
-    return products.find(p => p.batches.some(b => b.id === batchId));
-}
