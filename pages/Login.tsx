@@ -9,7 +9,6 @@ const Login: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
-    const [isLocked, setIsLocked] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // If shop becomes active, clear errors
@@ -28,28 +27,12 @@ const Login: React.FC = () => {
         try {
             const result = await login(identifier, password);
             if (!result.success) {
-                if (result.locked) setIsLocked(true);
                 setError(result.message);
             }
         } finally {
             setIsSubmitting(false);
         }
     };
-
-    if (isLocked) {
-        return (
-            <div className="flex items-center justify-center h-screen bg-slate-50 p-4 text-center">
-                <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-2xl shadow-2xl border border-gray-200">
-                    <div className="text-red-600 bg-red-50 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                        <WarningIcon className="w-12 h-12" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-slate-800">حساب در دستگاه دیگری فعال است</h2>
-                    <p className="text-slate-600 leading-relaxed">شما نمی‌توانید به طور همزمان در دو دستگاه وارد شوید. لطفاً ابتدا در دستگاه دیگر دکمه «خروج کامل» را بزنید.</p>
-                    <button onClick={() => setIsLocked(false)} className="text-blue-600 font-bold hover:underline mt-4">متوجه شدم</button>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-slate-100 p-4">

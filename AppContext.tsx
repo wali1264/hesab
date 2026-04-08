@@ -469,16 +469,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 return { success: false, message: 'حساب در انتظار تایید است.' };
             }
 
-            const deviceId = getDeviceId();
-            if (user.currentDeviceId && user.currentDeviceId !== deviceId) {
-                setIsLoading(false);
-                return { success: false, message: 'این حساب در دستگاه دیگری فعال است.', locked: true };
-            }
-
-            if (!user.currentDeviceId) {
-                await api.updateUser({ id: user.id, currentDeviceId: deviceId });
-            }
-
             localStorage.setItem('app_session_user', JSON.stringify(user));
             
             // If admin logs in, ensure shop is active
@@ -498,11 +488,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const logout = async (): Promise<{ success: boolean; message: string }> => {
         setIsLoggingOut(true);
-        try {
-            if (state.currentUser) {
-                await api.updateUser({ id: state.currentUser.id, currentDeviceId: null });
-            }
-        } catch (e) {}
         
         localStorage.removeItem('app_session_user');
         setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
