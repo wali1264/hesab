@@ -407,7 +407,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (!navigator.onLine || !state.currentUser) return;
 
         try {
-            const { data: user, error } = await supabase.from('users').select('*, role:roles(*)').eq('id', state.currentUser.id).maybeSingle();
+            const { data: user, error } = await supabase.from('users').select('*').eq('id', state.currentUser.id).maybeSingle();
             
             if (user && user.isApproved === true) {
                 authRetryCount.current = 0;
