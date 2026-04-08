@@ -291,7 +291,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             ]) as any[];
 
             setState(prev => {
-                const mergedSettings = (settings as StoreSettings)?.storeName ? { ...prev.storeSettings, ...settings } : prev.storeSettings;
+                const localLogoLeft = localStorage.getItem('v_store_logo_left');
+                const localLogoRight = localStorage.getItem('v_store_logo_right');
+                
+                const mergedSettings = (settings as StoreSettings)?.storeName 
+                    ? { 
+                        ...prev.storeSettings, 
+                        ...settings,
+                        logoLeft: localLogoLeft || (settings as StoreSettings).logoLeft,
+                        logoRight: localLogoRight || (settings as StoreSettings).logoRight
+                      } 
+                    : {
+                        ...prev.storeSettings,
+                        logoLeft: localLogoLeft || prev.storeSettings.logoLeft,
+                        logoRight: localLogoRight || prev.storeSettings.logoRight
+                    };
                 
                 // Patch products if needed
                 const patchedProducts = (products || []).map((p: any) => ({
@@ -560,7 +574,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const exportData = () => {
-        const dataStr = JSON.stringify({ ...state, isAuthenticated: false, currentUser: null, cart: [] }, null, 2);
+        const localLogoLeft = localStorage.getItem('v_store_logo_left');
+        const localLogoRight = localStorage.getItem('v_store_logo_right');
+        const localMemos = localStorage.getItem('v_pos_memos');
+
+        const backupData = { 
+            ...state, 
+            isAuthenticated: false, 
+            currentUser: null, 
+            cart: [],
+            localStorageData: {
+                logoLeft: localLogoLeft,
+                logoRight: localLogoRight,
+                memos: localMemos ? JSON.parse(localMemos) : []
+            }
+        };
+
+        const dataStr = JSON.stringify(backupData, null, 2);
         const blob = new Blob([dataStr], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -574,7 +604,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
-                const data = JSON.parse(e.target?.result as string) as AppState;
+                const data = JSON.parse(e.target?.result as string) as any;
+                
+                // Restore localStorage data if present
+                if (data.localStorageData) {
+                    if (data.localStorageData.logoLeft) localStorage.setItem('v_store_logo_left', data.localStorageData.logoLeft);
+                    if (data.localStorageData.logoRight) localStorage.setItem('v_store_logo_right', data.localStorageData.logoRight);
+                    if (data.localStorageData.memos) localStorage.setItem('v_pos_memos', JSON.stringify(data.localStorageData.memos));
+                }
+
                 await api.clearAndRestoreData(data);
                 await fetchData();
                 showToast("✅ بازیابی با موفقیت انجام شد.");
@@ -1577,8 +1615,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateSettings = (newSettings: StoreSettings) => {
+        // Strip logos before sending to API to save space
+        const { logoLeft, logoRight, ...textContent } = newSettings;
+        
+        // Save logos to localStorage
+        if (logoLeft !== undefined) localStorage.setItem('v_store_logo_left', logoLeft || '');
+        if (logoRight !== undefined) localStorage.setItem('v_store_logo_right', logoRight || '');
+        
         setState(prev => ({ ...prev, storeSettings: newSettings }));
-        api.updateSettings(newSettings);
+        api.updateSettings(textContent as StoreSettings);
     };
 
     const addService = (service: Omit<Service, 'id'>) => {
