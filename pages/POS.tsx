@@ -636,14 +636,7 @@ const POS: React.FC = () => {
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
     const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
     const [isSupplierMenuOpen, setIsSupplierMenuOpen] = useState(false);
-    const [memoImages, setMemoImages] = useState<SalesMemoImage[]>(() => {
-        const saved = localStorage.getItem('v_pos_memos');
-        return saved ? JSON.parse(saved) : [];
-    });
-
-    useEffect(() => {
-        localStorage.setItem('v_pos_memos', JSON.stringify(memoImages));
-    }, [memoImages]);
+    const [memoImages, setMemoImages] = useState<SalesMemoImage[]>([]);
     const [isGalleryOpen, setIsGalleryOpen] = useState(false);
     const memoFileInputRef = useRef<HTMLInputElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);

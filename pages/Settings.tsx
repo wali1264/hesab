@@ -55,6 +55,10 @@ const StoreDetailsTab: React.FC<TabProps> = ({ showToast }) => {
                     <label htmlFor="phone" className="block text-sm md:text-md font-bold text-slate-700 mb-2">شماره تماس</label>
                     <input id="phone" name="phone" value={formData.phone} onChange={handleChange} className="w-full p-3.5 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-50 outline-none transition-all" dir="ltr" />
                 </div>
+                <div>
+                    <label htmlFor="currencyName" className="block text-sm md:text-md font-bold text-slate-700 mb-2">نام واحد پولی</label>
+                    <input id="currencyName" name="currencyName" value={formData.currencyName} onChange={handleChange} className="w-full p-3.5 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-50 outline-none transition-all" placeholder="مثال: افغانی" />
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t">
                     <div>
