@@ -19,46 +19,10 @@ const handleResponse = async <T>(promise: any): Promise<T | null> => {
     return data;
 };
 
-// --- MAPPING HELPERS ---
-const mapUserToDB = (user: any) => {
-    const dbUser: any = { ...user };
-    if (dbUser.roleId) {
-        dbUser.role_id = dbUser.roleId;
-        delete dbUser.roleId;
-    }
-    return dbUser;
-};
-
-const mapUserFromDB = (dbUser: any) => {
-    if (!dbUser) return null;
-    const user: any = { ...dbUser };
-    if (dbUser.role_id) {
-        user.roleId = dbUser.role_id;
-    }
-    return user;
-};
-
-const mapRoleToDB = (role: any) => {
-    const dbRole: any = { ...role };
-    if (dbRole.companyAccess) {
-        dbRole.company_access = dbRole.companyAccess;
-        delete dbRole.companyAccess;
-    }
-    return dbRole;
-};
-
-const mapRoleFromDB = (dbRole: any) => {
-    if (!dbRole) return null;
-    const role: any = { ...dbRole };
-    if (dbRole.company_access) {
-        role.companyAccess = dbRole.company_access;
-    }
-    return role;
-};
-
+// --- USERS & ROLES ---
 export const api = {
     // --- AUTH (Custom RPC) ---
-    verifyUserLogin: async (username: string, password: string): Promise<any | null> => {
+    verifyUserLogin: async (username: string, password: string): Promise<User | null> => {
         const { data, error } = await supabase.rpc('verify_user_login', { 
             p_username: username, 
             p_password: password 
@@ -67,8 +31,7 @@ export const api = {
             console.error("Login Error:", error);
             return null;
         }
-        const user = Array.isArray(data) ? data[0] : data;
-        return mapUserFromDB(user);
+        return Array.isArray(data) ? data[0] : data;
     },
 
     // --- SETTINGS ---
@@ -80,33 +43,32 @@ export const api = {
         await supabase.from('store_settings').upsert({ id: 'current', data: settings });
     },
 
-    // --- USERS & ROLES ---
     getUsers: async () => {
-        const data = await handleResponse<any[]>(supabase.from('users').select('*'));
-        return data ? data.map(mapUserFromDB) : [];
+        const data = await handleResponse<User[]>(supabase.from('users').select('*'));
+        return data || [];
     },
     getRoles: async () => {
-        const data = await handleResponse<any[]>(supabase.from('roles').select('*'));
-        return data ? data.map(mapRoleFromDB) : [];
+        const data = await handleResponse<Role[]>(supabase.from('roles').select('*'));
+        return data || [];
     },
     addUser: async (user: Omit<User, 'id'>) => {
-        const { data, error } = await supabase.from('users').insert([mapUserToDB(user)]).select().single();
+        const { data, error } = await supabase.from('users').insert([user]).select().single();
         if (error) throw error;
-        return mapUserFromDB(data);
+        return data;
     },
     updateUser: async (user: Partial<User> & { id: string }) => {
-        await supabase.from('users').update(mapUserToDB(user)).eq('id', user.id);
+        await supabase.from('users').update(user).eq('id', user.id);
     },
     deleteUser: async (id: string) => {
         await supabase.from('users').delete().eq('id', id);
     },
     addRole: async (role: Omit<Role, 'id'>) => {
-        const { data, error } = await supabase.from('roles').insert([mapRoleToDB(role)]).select().single();
+        const { data, error } = await supabase.from('roles').insert([role]).select().single();
         if (error) throw error;
-        return mapRoleFromDB(data);
+        return data;
     },
     updateRole: async (role: Role) => {
-        await supabase.from('roles').update(mapRoleToDB(role)).eq('id', role.id);
+        await supabase.from('roles').update(role).eq('id', role.id);
     },
     deleteRole: async (id: string) => {
         await supabase.from('roles').delete().eq('id', id);
@@ -583,10 +545,10 @@ export const api = {
     saveCloudBackup: async (userId: string, appState: any): Promise<boolean> => {
         try {
             const { error } = await supabase.from('backups').upsert({
-                user_id: userId,
+                userId: userId,
                 data: appState,
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id' });
+                updatedAt: new Date().toISOString()
+            }, { onConflict: 'userId' });
             return !error;
         } catch (e) {
             return false;
@@ -594,7 +556,7 @@ export const api = {
     },
     getCloudBackup: async (userId: string): Promise<any | null> => {
         try {
-            const { data, error } = await supabase.from('backups').select('data').eq('user_id', userId).maybeSingle();
+            const { data, error } = await supabase.from('backups').select('data').eq('userId', userId).maybeSingle();
             if (error || !data) return null;
             return data.data;
         } catch (e) {
