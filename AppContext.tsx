@@ -2434,182 +2434,257 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // --- Managed Companies Functions ---
     const addManagedCompany = async (companyData: Omit<ManagedCompany, 'id' | 'createdAt' | 'slotNumber'>) => {
-        // Find first available slot (1-20)
-        const usedSlots = state.managedCompanies.map(c => c.slotNumber);
-        let slotNumber = 1;
-        for (let i = 1; i <= 20; i++) {
-            if (!usedSlots.includes(i)) {
-                slotNumber = i;
-                break;
+        try {
+            // Find first available slot (1-20)
+            const usedSlots = state.managedCompanies.map(c => c.slotNumber);
+            let slotNumber = 1;
+            for (let i = 1; i <= 20; i++) {
+                if (!usedSlots.includes(i)) {
+                    slotNumber = i;
+                    break;
+                }
             }
-        }
 
-        const newCompany: ManagedCompany = {
-            ...companyData,
-            id: crypto.randomUUID(),
-            createdAt: new Date().toISOString(),
-            slotNumber
-        };
-        await api.addManagedCompany(newCompany);
-        setState(prev => ({ ...prev, managedCompanies: [...prev.managedCompanies, newCompany] }));
-        return { success: true, message: `شرکت با موفقیت ثبت شد. (شماره اختصاصی: ${slotNumber})` };
+            const newCompany: ManagedCompany = {
+                ...companyData,
+                id: crypto.randomUUID(),
+                createdAt: new Date().toISOString(),
+                slotNumber
+            };
+            await api.addManagedCompany(newCompany);
+            setState(prev => ({ ...prev, managedCompanies: [...prev.managedCompanies, newCompany] }));
+            return { success: true, message: `شرکت با موفقیت ثبت شد. (شماره اختصاصی: ${slotNumber})` };
+        } catch (error: any) {
+            console.error("Error adding company:", error);
+            return { success: false, message: error.message || 'خطا در ثبت شرکت' };
+        }
     };
 
     const updateManagedCompany = async (company: ManagedCompany) => {
-        await api.updateManagedCompany(company);
-        setState(prev => ({
-            ...prev,
-            managedCompanies: prev.managedCompanies.map(c => c.id === company.id ? company : c)
-        }));
-        return { success: true, message: 'اطلاعات شرکت بروزرسانی شد.' };
+        try {
+            await api.updateManagedCompany(company);
+            setState(prev => ({
+                ...prev,
+                managedCompanies: prev.managedCompanies.map(c => c.id === company.id ? company : c)
+            }));
+            return { success: true, message: 'اطلاعات شرکت بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating company:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی اطلاعات شرکت' };
+        }
     };
 
     const deleteManagedCompany = async (id: string) => {
-        await api.deleteManagedCompany(id);
-        setState(prev => ({
-            ...prev,
-            managedCompanies: prev.managedCompanies.filter(c => c.id !== id),
-            managedCompanyLedger: prev.managedCompanyLedger.filter(e => e.companyId !== id)
-        }));
-        return { success: true, message: 'شرکت حذف شد.' };
+        try {
+            await api.deleteManagedCompany(id);
+            setState(prev => ({
+                ...prev,
+                managedCompanies: prev.managedCompanies.filter(c => c.id !== id),
+                managedCompanyLedger: prev.managedCompanyLedger.filter(e => e.companyId !== id)
+            }));
+            return { success: true, message: 'شرکت حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting company:", error);
+            return { success: false, message: error.message || 'خطا در حذف شرکت' };
+        }
     };
 
     const addLedgerEntry = async (entryData: Omit<CompanyLedgerEntry, 'id'>) => {
-        const newEntry: CompanyLedgerEntry = {
-            ...entryData,
-            id: crypto.randomUUID()
-        };
-        await api.addManagedCompanyLedgerEntry(newEntry);
-        setState(prev => ({ ...prev, managedCompanyLedger: [...prev.managedCompanyLedger, newEntry] }));
-        return { success: true, message: 'رکورد با موفقیت ثبت شد.' };
+        try {
+            const newEntry: CompanyLedgerEntry = {
+                ...entryData,
+                id: crypto.randomUUID()
+            };
+            await api.addManagedCompanyLedgerEntry(newEntry);
+            setState(prev => ({ ...prev, managedCompanyLedger: [...prev.managedCompanyLedger, newEntry] }));
+            return { success: true, message: 'رکورد با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding ledger entry:", error);
+            return { success: false, message: error.message || 'خطا در ثبت رکورد' };
+        }
     };
 
     const updateLedgerEntry = async (entry: CompanyLedgerEntry) => {
-        await api.updateManagedCompanyLedgerEntry(entry);
-        setState(prev => ({
-            ...prev,
-            managedCompanyLedger: prev.managedCompanyLedger.map(e => e.id === entry.id ? entry : e)
-        }));
-        return { success: true, message: 'رکورد بروزرسانی شد.' };
+        try {
+            await api.updateManagedCompanyLedgerEntry(entry);
+            setState(prev => ({
+                ...prev,
+                managedCompanyLedger: prev.managedCompanyLedger.map(e => e.id === entry.id ? entry : e)
+            }));
+            return { success: true, message: 'رکورد بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating ledger entry:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی رکورد' };
+        }
     };
 
     const deleteLedgerEntry = async (id: string) => {
-        await api.deleteManagedCompanyLedgerEntry(id);
-        setState(prev => ({
-            ...prev,
-            managedCompanyLedger: prev.managedCompanyLedger.filter(e => e.id !== id)
-        }));
-        return { success: true, message: 'رکورد حذف شد.' };
+        try {
+            await api.deleteManagedCompanyLedgerEntry(id);
+            setState(prev => ({
+                ...prev,
+                managedCompanyLedger: prev.managedCompanyLedger.filter(e => e.id !== id)
+            }));
+            return { success: true, message: 'رکورد حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting ledger entry:", error);
+            return { success: false, message: error.message || 'خطا در حذف رکورد' };
+        }
     };
 
     const addManagedCompanyCustomer = async (customerData: Omit<ManagedCompanyCustomer, 'id' | 'createdAt'>) => {
-        const newCustomer: ManagedCompanyCustomer = {
-            ...customerData,
-            id: crypto.randomUUID(),
-            createdAt: new Date().toISOString()
-        };
-        await api.addManagedCompanyCustomer(newCustomer);
-        setState(prev => ({ ...prev, managedCompanyCustomers: [...prev.managedCompanyCustomers, newCustomer] }));
-        return { success: true, message: 'مشتری با موفقیت ثبت شد.' };
+        try {
+            const newCustomer: ManagedCompanyCustomer = {
+                ...customerData,
+                id: crypto.randomUUID(),
+                createdAt: new Date().toISOString()
+            };
+            await api.addManagedCompanyCustomer(newCustomer);
+            setState(prev => ({ ...prev, managedCompanyCustomers: [...prev.managedCompanyCustomers, newCustomer] }));
+            return { success: true, message: 'مشتری با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding customer:", error);
+            return { success: false, message: error.message || 'خطا در ثبت مشتری' };
+        }
     };
 
     const updateManagedCompanyCustomer = async (customer: ManagedCompanyCustomer) => {
-        await api.updateManagedCompanyCustomer(customer);
-        setState(prev => ({
-            ...prev,
-            managedCompanyCustomers: prev.managedCompanyCustomers.map(c => c.id === customer.id ? customer : c)
-        }));
-        return { success: true, message: 'اطلاعات مشتری بروزرسانی شد.' };
+        try {
+            await api.updateManagedCompanyCustomer(customer);
+            setState(prev => ({
+                ...prev,
+                managedCompanyCustomers: prev.managedCompanyCustomers.map(c => c.id === customer.id ? customer : c)
+            }));
+            return { success: true, message: 'اطلاعات مشتری بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating customer:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی اطلاعات مشتری' };
+        }
     };
 
     const deleteManagedCompanyCustomer = async (id: string) => {
-        await api.deleteManagedCompanyCustomer(id);
-        setState(prev => ({
-            ...prev,
-            managedCompanyCustomers: prev.managedCompanyCustomers.filter(c => c.id !== id),
-            customerBillingRecords: prev.customerBillingRecords.filter(r => r.customerId !== id)
-        }));
-        return { success: true, message: 'مشتری حذف شد.' };
+        try {
+            await api.deleteManagedCompanyCustomer(id);
+            setState(prev => ({
+                ...prev,
+                managedCompanyCustomers: prev.managedCompanyCustomers.filter(c => c.id !== id),
+                customerBillingRecords: prev.customerBillingRecords.filter(r => r.customerId !== id)
+            }));
+            return { success: true, message: 'مشتری حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting customer:", error);
+            return { success: false, message: error.message || 'خطا در حذف مشتری' };
+        }
     };
 
     const addCustomerBillingRecord = async (recordData: Omit<CustomerBillingRecord, 'id'>) => {
-        const username = state.currentUser?.username || 'مدیر';
-        const newRecord: CustomerBillingRecord = {
-            ...recordData,
-            id: crypto.randomUUID(),
-            surveyorName: username,
-            collectorName: recordData.status === 'paid' ? username : ''
-        };
-        await api.addCustomerBillingRecord(newRecord);
-        setState(prev => ({ ...prev, customerBillingRecords: [...prev.customerBillingRecords, newRecord] }));
-        return { success: true, message: 'قبض با موفقیت ثبت شد.' };
+        try {
+            const username = state.currentUser?.username || 'مدیر';
+            const newRecord: CustomerBillingRecord = {
+                ...recordData,
+                id: crypto.randomUUID(),
+                surveyorName: username,
+                collectorName: recordData.status === 'paid' ? username : ''
+            };
+            await api.addCustomerBillingRecord(newRecord);
+            setState(prev => ({ ...prev, customerBillingRecords: [...prev.customerBillingRecords, newRecord] }));
+            return { success: true, message: 'قبض با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding billing record:", error);
+            return { success: false, message: error.message || 'خطا در ثبت قبض' };
+        }
     };
 
     const updateCustomerBillingRecord = async (record: CustomerBillingRecord) => {
-        const username = state.currentUser?.username || 'مدیر';
-        const updatedRecord = { ...record };
-        
-        // If status is changing to paid, set collectorName
-        const oldRecord = state.customerBillingRecords.find(r => r.id === record.id);
-        if (record.status === 'paid' && oldRecord?.status === 'unpaid') {
-            updatedRecord.collectorName = username;
-        }
+        try {
+            const username = state.currentUser?.username || 'مدیر';
+            const updatedRecord = { ...record };
+            
+            // If status is changing to paid, set collectorName
+            const oldRecord = state.customerBillingRecords.find(r => r.id === record.id);
+            if (record.status === 'paid' && oldRecord?.status === 'unpaid') {
+                updatedRecord.collectorName = username;
+            }
 
-        await api.updateCustomerBillingRecord(updatedRecord);
-        setState(prev => ({
-            ...prev,
-            customerBillingRecords: prev.customerBillingRecords.map(r => r.id === updatedRecord.id ? updatedRecord : r)
-        }));
-        return { success: true, message: 'قبض بروزرسانی شد.' };
+            await api.updateCustomerBillingRecord(updatedRecord);
+            setState(prev => ({
+                ...prev,
+                customerBillingRecords: prev.customerBillingRecords.map(r => r.id === updatedRecord.id ? updatedRecord : r)
+            }));
+            return { success: true, message: 'قبض بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating billing record:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی قبض' };
+        }
     };
 
     const deleteCustomerBillingRecord = async (id: string) => {
-        await api.deleteCustomerBillingRecord(id);
-        setState(prev => ({
-            ...prev,
-            customerBillingRecords: prev.customerBillingRecords.filter(r => r.id !== id)
-        }));
-        return { success: true, message: 'قبض حذف شد.' };
+        try {
+            await api.deleteCustomerBillingRecord(id);
+            setState(prev => ({
+                ...prev,
+                customerBillingRecords: prev.customerBillingRecords.filter(r => r.id !== id)
+            }));
+            return { success: true, message: 'قبض حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting billing record:", error);
+            return { success: false, message: error.message || 'خطا در حذف قبض' };
+        }
     };
     
     const addManagedCompanyInvoice = async (invoiceData: Omit<ManagedCompanyInvoice, 'id'>) => {
-        const username = state.currentUser?.username || 'مدیر';
-        const newInvoice: ManagedCompanyInvoice = {
-            ...invoiceData,
-            id: crypto.randomUUID(),
-            registrarName: username,
-            collectorName: invoiceData.status === 'paid' ? username : ''
-        };
-        await api.addManagedCompanyInvoice(newInvoice);
-        setState(prev => ({ ...prev, managedCompanyInvoices: [...prev.managedCompanyInvoices, newInvoice] }));
-        return { success: true, message: 'فاکتور با موفقیت ثبت شد.' };
+        try {
+            const username = state.currentUser?.username || 'مدیر';
+            const newInvoice: ManagedCompanyInvoice = {
+                ...invoiceData,
+                id: crypto.randomUUID(),
+                registrarName: username,
+                collectorName: invoiceData.status === 'paid' ? username : ''
+            };
+            await api.addManagedCompanyInvoice(newInvoice);
+            setState(prev => ({ ...prev, managedCompanyInvoices: [...prev.managedCompanyInvoices, newInvoice] }));
+            return { success: true, message: 'فاکتور با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding company invoice:", error);
+            return { success: false, message: error.message || 'خطا در ثبت فاکتور' };
+        }
     };
 
     const updateManagedCompanyInvoice = async (invoice: ManagedCompanyInvoice) => {
-        const username = state.currentUser?.username || 'مدیر';
-        const updatedInvoice = { ...invoice };
-        
-        // If status is changing to paid, set collectorName
-        const oldInvoice = state.managedCompanyInvoices.find(i => i.id === invoice.id);
-        if (invoice.status === 'paid' && oldInvoice?.status === 'unpaid') {
-            updatedInvoice.collectorName = username;
-        }
+        try {
+            const username = state.currentUser?.username || 'مدیر';
+            const updatedInvoice = { ...invoice };
+            
+            // If status is changing to paid, set collectorName
+            const oldInvoice = state.managedCompanyInvoices.find(i => i.id === invoice.id);
+            if (invoice.status === 'paid' && oldInvoice?.status === 'unpaid') {
+                updatedInvoice.collectorName = username;
+            }
 
-        await api.updateManagedCompanyInvoice(updatedInvoice);
-        setState(prev => ({
-            ...prev,
-            managedCompanyInvoices: prev.managedCompanyInvoices.map(i => i.id === updatedInvoice.id ? updatedInvoice : i)
-        }));
-        return { success: true, message: 'فاکتور بروزرسانی شد.' };
+            await api.updateManagedCompanyInvoice(updatedInvoice);
+            setState(prev => ({
+                ...prev,
+                managedCompanyInvoices: prev.managedCompanyInvoices.map(i => i.id === updatedInvoice.id ? updatedInvoice : i)
+            }));
+            return { success: true, message: 'فاکتور بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating company invoice:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی فاکتور' };
+        }
     };
 
     const deleteManagedCompanyInvoice = async (id: string) => {
-        await api.deleteManagedCompanyInvoice(id);
-        setState(prev => ({
-            ...prev,
-            managedCompanyInvoices: prev.managedCompanyInvoices.filter(i => i.id !== id)
-        }));
-        return { success: true, message: 'فاکتور حذف شد.' };
+        try {
+            await api.deleteManagedCompanyInvoice(id);
+            setState(prev => ({
+                ...prev,
+                managedCompanyInvoices: prev.managedCompanyInvoices.filter(i => i.id !== id)
+            }));
+            return { success: true, message: 'فاکتور حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting company invoice:", error);
+            return { success: false, message: error.message || 'خطا در حذف فاکتور' };
+        }
     };
 
     const addManagedCompanyProductionLog = async (logData: Omit<ManagedCompanyProductionLog, 'id'>) => {

@@ -10,13 +10,13 @@ import type {
 } from '../types';
 
 // Helper to handle Supabase responses
-const handleResponse = async <T>(promise: any): Promise<T | null> => {
+const handleResponse = async <T>(promise: any): Promise<T> => {
     const { data, error } = await promise;
     if (error) {
         console.error("Supabase Error:", error);
-        return null;
+        throw new Error(error.message || "خطای پایگاه داده");
     }
-    return data;
+    return data as T;
 };
 
 // --- USERS & ROLES ---
@@ -258,117 +258,117 @@ export const api = {
     // --- MANAGED COMPANIES ---
     getManagedCompanies: async () => handleResponse(supabase.from('managed_companies').select('*')),
     addManagedCompany: async (company: ManagedCompany) => {
-        await supabase.from('managed_companies').insert([company]);
+        await handleResponse(supabase.from('managed_companies').insert([company]));
     },
     updateManagedCompany: async (company: ManagedCompany) => {
-        await supabase.from('managed_companies').update(company).eq('id', company.id);
+        await handleResponse(supabase.from('managed_companies').update(company).eq('id', company.id));
     },
     deleteManagedCompany: async (id: string) => {
-        await supabase.from('managed_companies').delete().eq('id', id);
+        await handleResponse(supabase.from('managed_companies').delete().eq('id', id));
     },
     getManagedCompanyLedger: async () => handleResponse(supabase.from('managed_company_ledger').select('*')),
     addManagedCompanyLedgerEntry: async (entry: CompanyLedgerEntry) => {
-        await supabase.from('managed_company_ledger').insert([entry]);
+        await handleResponse(supabase.from('managed_company_ledger').insert([entry]));
     },
     updateManagedCompanyLedgerEntry: async (entry: CompanyLedgerEntry) => {
-        await supabase.from('managed_company_ledger').update(entry).eq('id', entry.id);
+        await handleResponse(supabase.from('managed_company_ledger').update(entry).eq('id', entry.id));
     },
     deleteManagedCompanyLedgerEntry: async (id: string) => {
-        await supabase.from('managed_company_ledger').delete().eq('id', id);
+        await handleResponse(supabase.from('managed_company_ledger').delete().eq('id', id));
     },
     getManagedCompanyCustomers: async () => handleResponse(supabase.from('managed_company_customers').select('*')),
     addManagedCompanyCustomer: async (customer: ManagedCompanyCustomer) => {
-        await supabase.from('managed_company_customers').insert([customer]);
+        await handleResponse(supabase.from('managed_company_customers').insert([customer]));
     },
     updateManagedCompanyCustomer: async (customer: ManagedCompanyCustomer) => {
-        await supabase.from('managed_company_customers').update(customer).eq('id', customer.id);
+        await handleResponse(supabase.from('managed_company_customers').update(customer).eq('id', customer.id));
     },
     deleteManagedCompanyCustomer: async (id: string) => {
-        await supabase.from('managed_company_customers').delete().eq('id', id);
+        await handleResponse(supabase.from('managed_company_customers').delete().eq('id', id));
     },
     getCustomerBillingRecords: async () => handleResponse(supabase.from('customer_billing_records').select('*')),
     addCustomerBillingRecord: async (record: CustomerBillingRecord) => {
-        await supabase.from('customer_billing_records').insert([record]);
+        await handleResponse(supabase.from('customer_billing_records').insert([record]));
     },
     updateCustomerBillingRecord: async (record: CustomerBillingRecord) => {
-        await supabase.from('customer_billing_records').update(record).eq('id', record.id);
+        await handleResponse(supabase.from('customer_billing_records').update(record).eq('id', record.id));
     },
     deleteCustomerBillingRecord: async (id: string) => {
-        await supabase.from('customer_billing_records').delete().eq('id', id);
+        await handleResponse(supabase.from('customer_billing_records').delete().eq('id', id));
     },
     getManagedCompanyInvoices: async () => handleResponse(supabase.from('managed_company_invoices').select('*')),
     addManagedCompanyInvoice: async (invoice: ManagedCompanyInvoice) => {
-        await supabase.from('managed_company_invoices').insert([invoice]);
+        await handleResponse(supabase.from('managed_company_invoices').insert([invoice]));
     },
     updateManagedCompanyInvoice: async (invoice: ManagedCompanyInvoice) => {
-        await supabase.from('managed_company_invoices').update(invoice).eq('id', invoice.id);
+        await handleResponse(supabase.from('managed_company_invoices').update(invoice).eq('id', invoice.id));
     },
     deleteManagedCompanyInvoice: async (id: string) => {
-        await supabase.from('managed_company_invoices').delete().eq('id', id);
+        await handleResponse(supabase.from('managed_company_invoices').delete().eq('id', id));
     },
     getManagedCompanyProductionLogs: async () => handleResponse(supabase.from('managed_company_production_logs').select('*')),
     addManagedCompanyProductionLog: async (log: ManagedCompanyProductionLog) => {
-        await supabase.from('managed_company_production_logs').insert([log]);
+        await handleResponse(supabase.from('managed_company_production_logs').insert([log]));
     },
     updateManagedCompanyProductionLog: async (log: ManagedCompanyProductionLog) => {
-        await supabase.from('managed_company_production_logs').update(log).eq('id', log.id);
+        await handleResponse(supabase.from('managed_company_production_logs').update(log).eq('id', log.id));
     },
     deleteManagedCompanyProductionLog: async (id: string) => {
-        await supabase.from('managed_company_production_logs').delete().eq('id', id);
+        await handleResponse(supabase.from('managed_company_production_logs').delete().eq('id', id));
     },
 
     // --- OWNER TRANSACTIONS ---
     getOwnerTransactions: async () => handleResponse(supabase.from('owner_transactions').select('*')),
     addOwnerTransaction: async (tx: OwnerTransaction) => {
-        await supabase.from('owner_transactions').insert([tx]);
+        await handleResponse(supabase.from('owner_transactions').insert([tx]));
     },
     updateOwnerTransaction: async (tx: OwnerTransaction) => {
-        await supabase.from('owner_transactions').update(tx).eq('id', tx.id);
+        await handleResponse(supabase.from('owner_transactions').update(tx).eq('id', tx.id));
     },
     deleteOwnerTransaction: async (id: string) => {
-        await supabase.from('owner_transactions').delete().eq('id', id);
+        await handleResponse(supabase.from('owner_transactions').delete().eq('id', id));
     },
     getOwnerExpenseCategories: async () => handleResponse(supabase.from('owner_expense_categories').select('*')),
     addOwnerExpenseCategory: async (c: OwnerExpenseCategory) => {
-        await supabase.from('owner_expense_categories').insert([c]);
+        await handleResponse(supabase.from('owner_expense_categories').insert([c]));
     },
     updateOwnerExpenseCategory: async (c: OwnerExpenseCategory) => {
-        await supabase.from('owner_expense_categories').update(c).eq('id', c.id);
+        await handleResponse(supabase.from('owner_expense_categories').update(c).eq('id', c.id));
     },
     deleteOwnerExpenseCategory: async (id: string) => {
-        await supabase.from('owner_expense_categories').delete().eq('id', id);
+        await handleResponse(supabase.from('owner_expense_categories').delete().eq('id', id));
     },
 
     // --- SALARY MANAGEMENT ---
     getCompanyEmployees: async () => handleResponse(supabase.from('company_employees').select('*')),
     addCompanyEmployee: async (employee: CompanyEmployee) => {
-        await supabase.from('company_employees').insert([employee]);
+        await handleResponse(supabase.from('company_employees').insert([employee]));
     },
     updateCompanyEmployee: async (employee: CompanyEmployee) => {
-        await supabase.from('company_employees').update(employee).eq('id', employee.id);
+        await handleResponse(supabase.from('company_employees').update(employee).eq('id', employee.id));
     },
     deleteCompanyEmployee: async (id: string) => {
-        await supabase.from('company_employees').delete().eq('id', id);
+        await handleResponse(supabase.from('company_employees').delete().eq('id', id));
     },
     getSalaryRecords: async () => handleResponse(supabase.from('salary_records').select('*')),
     addSalaryRecord: async (record: SalaryMonthRecord) => {
-        await supabase.from('salary_records').insert([record]);
+        await handleResponse(supabase.from('salary_records').insert([record]));
     },
     updateSalaryRecord: async (record: SalaryMonthRecord) => {
-        await supabase.from('salary_records').update(record).eq('id', record.id);
+        await handleResponse(supabase.from('salary_records').update(record).eq('id', record.id));
     },
     deleteSalaryRecord: async (id: string) => {
-        await supabase.from('salary_records').delete().eq('id', id);
+        await handleResponse(supabase.from('salary_records').delete().eq('id', id));
     },
     getSalaryPayments: async () => handleResponse(supabase.from('salary_payments').select('*')),
     addSalaryPayment: async (payment: SalaryPayment) => {
-        await supabase.from('salary_payments').insert([payment]);
+        await handleResponse(supabase.from('salary_payments').insert([payment]));
     },
     updateSalaryPayment: async (payment: SalaryPayment) => {
-        await supabase.from('salary_payments').update(payment).eq('id', payment.id);
+        await handleResponse(supabase.from('salary_payments').update(payment).eq('id', payment.id));
     },
     deleteSalaryPayment: async (id: string) => {
-        await supabase.from('salary_payments').delete().eq('id', id);
+        await handleResponse(supabase.from('salary_payments').delete().eq('id', id));
     },
 
     // --- ORDERS ---
