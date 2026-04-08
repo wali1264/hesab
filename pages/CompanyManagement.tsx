@@ -890,9 +890,20 @@ const CompanyManagement: React.FC = () => {
     const handleMarkAsPaid = async (record: CustomerBillingRecord) => {
         const paymentDate = new Date().toISOString().split('T')[0];
         const result = await updateCustomerBillingRecord({
-            ...record,
+            id: record.id,
+            companyId: record.companyId,
+            customerId: record.customerId,
+            previousReading: record.previousReading,
+            currentReading: record.currentReading,
+            consumption: record.consumption,
+            amount: record.amount,
+            previousBalance: record.previousBalance,
+            isMinimumFeeApplied: record.isMinimumFeeApplied,
+            date: record.date,
             status: 'paid',
-            paymentDate
+            paymentDate,
+            surveyorName: record.surveyorName,
+            collectorName: record.collectorName
         });
         if (result.success) {
             await logActivity(
@@ -1176,7 +1187,6 @@ const CompanyManagement: React.FC = () => {
             previousBalance,
             isMinimumFeeApplied,
             date: billingDate,
-            isPaid: formData.get('isPaid') === 'on',
             status: formData.get('isPaid') === 'on' ? 'paid' : 'unpaid' as 'paid' | 'unpaid',
             paymentDate: formData.get('isPaid') === 'on' ? billingDate : undefined,
             surveyorName: currentUser?.username || 'System',
@@ -1185,7 +1195,10 @@ const CompanyManagement: React.FC = () => {
 
         let result;
         if (editingBillingRecord) {
-            result = await updateCustomerBillingRecord({ ...editingBillingRecord, ...billingData });
+            result = await updateCustomerBillingRecord({ 
+                id: editingBillingRecord.id,
+                ...billingData 
+            });
             if (result.success) {
                 await logActivity('company', `ویرایش میترخوانی مشتری: ${selectedCustomerForBilling.name}`, editingBillingRecord.id, 'company', selectedCompanyId);
             }

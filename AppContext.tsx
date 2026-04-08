@@ -2581,7 +2581,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             const username = state.currentUser?.username || 'مدیر';
             const newRecord: CustomerBillingRecord = {
-                ...recordData,
+                customerId: recordData.customerId,
+                companyId: recordData.companyId,
+                previousReading: recordData.previousReading,
+                currentReading: recordData.currentReading,
+                consumption: recordData.consumption,
+                amount: recordData.amount,
+                date: recordData.date,
+                status: recordData.status,
+                paymentDate: recordData.paymentDate,
+                previousBalance: recordData.previousBalance,
+                isMinimumFeeApplied: recordData.isMinimumFeeApplied,
                 id: crypto.randomUUID(),
                 surveyorName: username,
                 collectorName: recordData.status === 'paid' ? username : ''
@@ -2598,13 +2608,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const updateCustomerBillingRecord = async (record: CustomerBillingRecord) => {
         try {
             const username = state.currentUser?.username || 'مدیر';
-            const updatedRecord = { ...record };
             
             // If status is changing to paid, set collectorName
             const oldRecord = state.customerBillingRecords.find(r => r.id === record.id);
+            let collectorName = record.collectorName;
             if (record.status === 'paid' && oldRecord?.status === 'unpaid') {
-                updatedRecord.collectorName = username;
+                collectorName = username;
             }
+
+            const updatedRecord: CustomerBillingRecord = {
+                id: record.id,
+                customerId: record.customerId,
+                companyId: record.companyId,
+                previousReading: record.previousReading,
+                currentReading: record.currentReading,
+                consumption: record.consumption,
+                amount: record.amount,
+                date: record.date,
+                status: record.status,
+                paymentDate: record.paymentDate,
+                surveyorName: record.surveyorName,
+                collectorName: collectorName,
+                previousBalance: record.previousBalance,
+                isMinimumFeeApplied: record.isMinimumFeeApplied
+            };
 
             await api.updateCustomerBillingRecord(updatedRecord);
             setState(prev => ({
