@@ -1221,7 +1221,11 @@ const CompanyManagement: React.FC = () => {
 
         let result;
         if (editingInvoice) {
-            result = await updateManagedCompanyInvoice({ ...editingInvoice, ...invoiceData });
+            const updatedInvoice = {
+                id: editingInvoice.id,
+                ...invoiceData
+            };
+            result = await updateManagedCompanyInvoice(updatedInvoice);
             if (result.success) {
                 await logActivity('company', `ویرایش فاکتور: ${invoiceData.totalAmount} افغانی`, editingInvoice.id, 'company', selectedCompanyId);
             }
@@ -2091,7 +2095,19 @@ const CompanyManagement: React.FC = () => {
                                                                     {invoice.status === 'unpaid' && (
                                                                         <button 
                                                                             onClick={async () => {
-                                                                                const result = await updateManagedCompanyInvoice({ ...invoice, status: 'paid' });
+                                                                                const result = await updateManagedCompanyInvoice({ 
+                                                                                    id: invoice.id,
+                                                                                    companyId: invoice.companyId,
+                                                                                    customerId: invoice.customerId,
+                                                                                    units: invoice.units,
+                                                                                    pricePerUnit: invoice.pricePerUnit,
+                                                                                    totalAmount: invoice.totalAmount,
+                                                                                    date: invoice.date,
+                                                                                    status: 'paid',
+                                                                                    description: invoice.description,
+                                                                                    registrarName: invoice.registrarName,
+                                                                                    collectorName: invoice.collectorName
+                                                                                });
                                                                                 showToast(result.message);
                                                                             }}
                                                                             className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
@@ -3638,7 +3654,20 @@ const CompanyManagement: React.FC = () => {
                                                             if (isBilling) {
                                                                 await handleMarkAsPaid(record as any);
                                                             } else {
-                                                                const result = await updateManagedCompanyInvoice({ ...(record as any), status: 'paid' });
+                                                                const invoice = record as ManagedCompanyInvoice;
+                                                                const result = await updateManagedCompanyInvoice({ 
+                                                                    id: invoice.id,
+                                                                    companyId: invoice.companyId,
+                                                                    customerId: invoice.customerId,
+                                                                    units: invoice.units,
+                                                                    pricePerUnit: invoice.pricePerUnit,
+                                                                    totalAmount: invoice.totalAmount,
+                                                                    date: invoice.date,
+                                                                    status: 'paid',
+                                                                    description: invoice.description,
+                                                                    registrarName: invoice.registrarName,
+                                                                    collectorName: invoice.collectorName
+                                                                });
                                                                 showToast(result.message);
                                                             }
                                                         }}

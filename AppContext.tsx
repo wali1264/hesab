@@ -2744,31 +2744,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addOwnerExpenseCategory = async (name: string) => {
-        const newCategory: OwnerExpenseCategory = {
-            id: crypto.randomUUID(),
-            name
-        };
-        await api.addOwnerExpenseCategory(newCategory);
-        setState(prev => ({ ...prev, ownerExpenseCategories: [...prev.ownerExpenseCategories, newCategory] }));
-        return { success: true, message: 'دسته‌بندی جدید با موفقیت ثبت شد.' };
+        try {
+            const newCategory: OwnerExpenseCategory = {
+                id: crypto.randomUUID(),
+                name
+            };
+            await api.addOwnerExpenseCategory(newCategory);
+            setState(prev => ({ ...prev, ownerExpenseCategories: [...prev.ownerExpenseCategories, newCategory] }));
+            return { success: true, message: 'دسته‌بندی جدید با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding owner category:", error);
+            return { success: false, message: error.message || 'خطا در ثبت دسته‌بندی' };
+        }
     };
 
     const updateOwnerExpenseCategory = async (category: OwnerExpenseCategory) => {
-        await api.updateOwnerExpenseCategory(category);
-        setState(prev => ({
-            ...prev,
-            ownerExpenseCategories: prev.ownerExpenseCategories.map(c => c.id === category.id ? category : c)
-        }));
-        return { success: true, message: 'دسته‌بندی بروزرسانی شد.' };
+        try {
+            await api.updateOwnerExpenseCategory(category);
+            setState(prev => ({
+                ...prev,
+                ownerExpenseCategories: prev.ownerExpenseCategories.map(c => c.id === category.id ? category : c)
+            }));
+            return { success: true, message: 'دسته‌بندی بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating owner category:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی دسته‌بندی' };
+        }
     };
 
     const deleteOwnerExpenseCategory = async (id: string) => {
-        await api.deleteOwnerExpenseCategory(id);
-        setState(prev => ({
-            ...prev,
-            ownerExpenseCategories: prev.ownerExpenseCategories.filter(c => c.id !== id)
-        }));
-        return { success: true, message: 'دسته‌بندی حذف شد.' };
+        try {
+            await api.deleteOwnerExpenseCategory(id);
+            setState(prev => ({
+                ...prev,
+                ownerExpenseCategories: prev.ownerExpenseCategories.filter(c => c.id !== id)
+            }));
+            return { success: true, message: 'دسته‌بندی حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting owner category:", error);
+            return { success: false, message: error.message || 'خطا در حذف دسته‌بندی' };
+        }
     };
 
     const addCompanyEmployee = async (employee: Omit<CompanyEmployee, 'id' | 'isActive'>) => {
@@ -2859,48 +2874,58 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const settleSalaryMonth = async (recordId: string) => {
-        const record = state.salaryRecords.find(r => r.id === recordId);
-        if (!record) return { success: false, message: 'رکورد یافت نشد.' };
-        
-        const updatedRecord = { ...record, status: 'settled' as const };
-        await api.updateSalaryRecord(updatedRecord);
-        setState(prev => ({
-            ...prev,
-            salaryRecords: prev.salaryRecords.map(r => r.id === recordId ? updatedRecord : r)
-        }));
-        return { success: true, message: 'وضعیت ماه به تصفیه شده تغییر یافت.' };
+        try {
+            const record = state.salaryRecords.find(r => r.id === recordId);
+            if (!record) return { success: false, message: 'رکورد یافت نشد.' };
+            
+            const updatedRecord = { ...record, status: 'settled' as const };
+            await api.updateSalaryRecord(updatedRecord);
+            setState(prev => ({
+                ...prev,
+                salaryRecords: prev.salaryRecords.map(r => r.id === recordId ? updatedRecord : r)
+            }));
+            return { success: true, message: 'وضعیت ماه به تصفیه شده تغییر یافت.' };
+        } catch (error: any) {
+            console.error("Error settling salary month:", error);
+            return { success: false, message: error.message || 'خطا در تصفیه حقوق' };
+        }
     };
 
     const generateMonthlySalaryRecords = async (year: number, month: number) => {
-        const activeEmployees = state.companyEmployees.filter(e => e.isActive);
-        const existingRecords = state.salaryRecords.filter(r => r.year === year && r.month === month);
-        const existingEmployeeIds = new Set(existingRecords.map(r => r.employeeId));
-        
-        const newRecords: SalaryMonthRecord[] = [];
-        for (const emp of activeEmployees) {
-            if (!existingEmployeeIds.has(emp.id)) {
-                newRecords.push({
-                    id: crypto.randomUUID(),
-                    employeeId: emp.id,
-                    year,
-                    month,
-                    baseSalary: emp.monthlySalary,
-                    currency: emp.salaryCurrency,
-                    status: 'pending',
-                    totalPaid: 0
-                });
+        try {
+            const activeEmployees = state.companyEmployees.filter(e => e.isActive);
+            const existingRecords = state.salaryRecords.filter(r => r.year === year && r.month === month);
+            const existingEmployeeIds = new Set(existingRecords.map(r => r.employeeId));
+            
+            const newRecords: SalaryMonthRecord[] = [];
+            for (const emp of activeEmployees) {
+                if (!existingEmployeeIds.has(emp.id)) {
+                    newRecords.push({
+                        id: crypto.randomUUID(),
+                        employeeId: emp.id,
+                        year,
+                        month,
+                        baseSalary: emp.monthlySalary,
+                        currency: emp.salaryCurrency,
+                        status: 'pending',
+                        totalPaid: 0
+                    });
+                }
             }
-        }
-        
-        if (newRecords.length > 0) {
-            for (const record of newRecords) {
-                await api.addSalaryRecord(record);
+            
+            if (newRecords.length > 0) {
+                for (const record of newRecords) {
+                    await api.addSalaryRecord(record);
+                }
+                setState(prev => ({ ...prev, salaryRecords: [...prev.salaryRecords, ...newRecords] }));
+                return { success: true, message: `${newRecords.length} رکورد جدید ایجاد شد.` };
             }
-            setState(prev => ({ ...prev, salaryRecords: [...prev.salaryRecords, ...newRecords] }));
-            return { success: true, message: `${newRecords.length} رکورد جدید ایجاد شد.` };
+            
+            return { success: true, message: 'تمامی رکوردها قبلاً ایجاد شده‌اند.' };
+        } catch (error: any) {
+            console.error("Error generating salary records:", error);
+            return { success: false, message: error.message || 'خطا در ایجاد رکوردها' };
         }
-        
-        return { success: true, message: 'تمامی رکوردها قبلاً ایجاد شده‌اند.' };
     };
 
     const setSelectedCompanyId = (id: string | null) => {
