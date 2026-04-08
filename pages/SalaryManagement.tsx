@@ -133,13 +133,18 @@ const SalaryManagement: React.FC = () => {
             return;
         }
 
+        let result;
         if (selectedEmployee) {
-            await updateCompanyEmployee({ ...selectedEmployee, ...employeeFormData });
+            result = await updateCompanyEmployee({ ...selectedEmployee, ...employeeFormData });
         } else {
-            await addCompanyEmployee(employeeFormData);
+            result = await addCompanyEmployee(employeeFormData);
         }
-        setShowEmployeeModal(false);
-        setSelectedEmployee(null);
+        
+        showToast(result.message);
+        if (result.success) {
+            setShowEmployeeModal(false);
+            setSelectedEmployee(null);
+        }
     };
 
     const handleSavePayment = async () => {
@@ -149,8 +154,11 @@ const SalaryManagement: React.FC = () => {
         }
 
         const amountInWords = numberToPersianWords(paymentFormData.amount);
-        await addSalaryPayment({ ...paymentFormData, amountInWords });
-        setShowPaymentModal(false);
+        const result = await addSalaryPayment({ ...paymentFormData, amountInWords });
+        showToast(result.message);
+        if (result.success) {
+            setShowPaymentModal(false);
+        }
     };
 
     const handleGenerateRecords = async () => {

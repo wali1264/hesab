@@ -2772,60 +2772,90 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addCompanyEmployee = async (employee: Omit<CompanyEmployee, 'id' | 'isActive'>) => {
-        const newEmployee: CompanyEmployee = {
-            ...employee,
-            id: crypto.randomUUID(),
-            isActive: true
-        };
-        await api.addCompanyEmployee(newEmployee);
-        setState(prev => ({ ...prev, companyEmployees: [...prev.companyEmployees, newEmployee] }));
-        return { success: true, message: 'کارمند جدید با موفقیت ثبت شد.' };
+        try {
+            const newEmployee: CompanyEmployee = {
+                ...employee,
+                id: crypto.randomUUID(),
+                isActive: true
+            };
+            await api.addCompanyEmployee(newEmployee);
+            setState(prev => ({ ...prev, companyEmployees: [...prev.companyEmployees, newEmployee] }));
+            return { success: true, message: 'کارمند جدید با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding employee:", error);
+            return { success: false, message: error.message || 'خطا در ثبت کارمند' };
+        }
     };
 
     const updateCompanyEmployee = async (employee: CompanyEmployee) => {
-        await api.updateCompanyEmployee(employee);
-        setState(prev => ({
-            ...prev,
-            companyEmployees: prev.companyEmployees.map(e => e.id === employee.id ? employee : e)
-        }));
-        return { success: true, message: 'اطلاعات کارمند بروزرسانی شد.' };
+        try {
+            await api.updateCompanyEmployee(employee);
+            setState(prev => ({
+                ...prev,
+                companyEmployees: prev.companyEmployees.map(e => e.id === employee.id ? employee : e)
+            }));
+            return { success: true, message: 'اطلاعات کارمند بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating employee:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی اطلاعات کارمند' };
+        }
     };
 
     const deleteCompanyEmployee = async (id: string) => {
-        await api.deleteCompanyEmployee(id);
-        setState(prev => ({
-            ...prev,
-            companyEmployees: prev.companyEmployees.filter(e => e.id !== id)
-        }));
-        return { success: true, message: 'کارمند حذف شد.' };
+        try {
+            await api.deleteCompanyEmployee(id);
+            setState(prev => ({
+                ...prev,
+                companyEmployees: prev.companyEmployees.filter(e => e.id !== id)
+            }));
+            return { success: true, message: 'کارمند حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting employee:", error);
+            return { success: false, message: error.message || 'خطا در حذف کارمند' };
+        }
     };
 
     const addSalaryPayment = async (payment: Omit<SalaryPayment, 'id'>) => {
-        const newPayment: SalaryPayment = {
-            ...payment,
-            id: crypto.randomUUID()
-        };
-        await api.addSalaryPayment(newPayment);
-        setState(prev => ({ ...prev, salaryPayments: [...prev.salaryPayments, newPayment] }));
-        return { success: true, message: 'پرداختی با موفقیت ثبت شد.' };
+        try {
+            const newPayment: SalaryPayment = {
+                ...payment,
+                id: crypto.randomUUID()
+            };
+            await api.addSalaryPayment(newPayment);
+            setState(prev => ({ ...prev, salaryPayments: [...prev.salaryPayments, newPayment] }));
+            return { success: true, message: 'پرداختی با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding salary payment:", error);
+            return { success: false, message: error.message || 'خطا در ثبت پرداختی' };
+        }
     };
 
     const updateSalaryPayment = async (payment: SalaryPayment) => {
-        await api.updateSalaryPayment(payment);
-        setState(prev => ({
-            ...prev,
-            salaryPayments: prev.salaryPayments.map(p => p.id === payment.id ? payment : p)
-        }));
-        return { success: true, message: 'پرداختی بروزرسانی شد.' };
+        try {
+            await api.updateSalaryPayment(payment);
+            setState(prev => ({
+                ...prev,
+                salaryPayments: prev.salaryPayments.map(p => p.id === payment.id ? payment : p)
+            }));
+            return { success: true, message: 'پرداختی بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating salary payment:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی پرداختی' };
+        }
     };
 
     const deleteSalaryPayment = async (id: string) => {
-        await api.deleteSalaryPayment(id);
-        setState(prev => ({
-            ...prev,
-            salaryPayments: prev.salaryPayments.filter(p => p.id !== id)
-        }));
-        return { success: true, message: 'پرداختی حذف شد.' };
+        try {
+            await api.deleteSalaryPayment(id);
+            setState(prev => ({
+                ...prev,
+                salaryPayments: prev.salaryPayments.filter(p => p.id !== id)
+            }));
+            return { success: true, message: 'پرداختی حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting salary payment:", error);
+            return { success: false, message: error.message || 'خطا در حذف پرداختی' };
+        }
     };
 
     const settleSalaryMonth = async (recordId: string) => {

@@ -889,19 +889,21 @@ const CompanyManagement: React.FC = () => {
 
     const handleMarkAsPaid = async (record: CustomerBillingRecord) => {
         const paymentDate = new Date().toISOString().split('T')[0];
-        await updateCustomerBillingRecord({
+        const result = await updateCustomerBillingRecord({
             ...record,
             status: 'paid',
             paymentDate
         });
-        await logActivity(
-            'company',
-            `وصول مبلغ ${formatCurrency(record.amount, storeSettings, 'AFN')} از مشتری ${managedCompanyCustomers.find(c => c.id === record.customerId)?.name || 'نامشخص'}`,
-            record.id,
-            'company',
-            record.companyId
-        );
-        showToast('مبلغ با موفقیت دریافت شد');
+        if (result.success) {
+            await logActivity(
+                'company',
+                `وصول مبلغ ${formatCurrency(record.amount, storeSettings, 'AFN')} از مشتری ${managedCompanyCustomers.find(c => c.id === record.customerId)?.name || 'نامشخص'}`,
+                record.id,
+                'company',
+                record.companyId
+            );
+        }
+        showToast(result.message);
     };
 
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
@@ -912,9 +914,11 @@ const CompanyManagement: React.FC = () => {
             title: 'حذف شرکت',
             message: `آیا از حذف شرکت "${name}" اطمینان دارید؟`,
             onConfirm: async () => {
-                await deleteManagedCompany(id);
-                await logActivity('company', `حذف شرکت: ${name}`, id, 'company');
-                showToast('شرکت با موفقیت حذف شد');
+                const result = await deleteManagedCompany(id);
+                if (result.success) {
+                    await logActivity('company', `حذف شرکت: ${name}`, id, 'company');
+                }
+                showToast(result.message);
                 setConfirmModal(null);
             }
         });
@@ -926,9 +930,11 @@ const CompanyManagement: React.FC = () => {
             title: 'حذف رکورد دفتر کل',
             message: `آیا از حذف این رکورد اطمینان دارید؟`,
             onConfirm: async () => {
-                await deleteLedgerEntry(id);
-                await logActivity('company', `حذف رکورد دفتر کل: ${description}`, id, 'company', companyId);
-                showToast('رکورد با موفقیت حذف شد');
+                const result = await deleteLedgerEntry(id);
+                if (result.success) {
+                    await logActivity('company', `حذف رکورد دفتر کل: ${description}`, id, 'company', companyId);
+                }
+                showToast(result.message);
                 setConfirmModal(null);
             }
         });
@@ -940,9 +946,11 @@ const CompanyManagement: React.FC = () => {
             title: 'حذف مشتری',
             message: `آیا از حذف مشتری "${name}" اطمینان دارید؟`,
             onConfirm: async () => {
-                await deleteManagedCompanyCustomer(id);
-                await logActivity('company', `حذف مشتری: ${name}`, id, 'company', companyId);
-                showToast('مشتری با موفقیت حذف شد');
+                const result = await deleteManagedCompanyCustomer(id);
+                if (result.success) {
+                    await logActivity('company', `حذف مشتری: ${name}`, id, 'company', companyId);
+                }
+                showToast(result.message);
                 setConfirmModal(null);
             }
         });
@@ -954,9 +962,11 @@ const CompanyManagement: React.FC = () => {
             title: 'حذف رکورد میترخوانی',
             message: `آیا از حذف این رکورد میترخوانی برای "${customerName}" اطمینان دارید؟`,
             onConfirm: async () => {
-                await deleteCustomerBillingRecord(id);
-                await logActivity('company', `حذف رکورد میترخوانی: ${customerName}`, id, 'company', companyId);
-                showToast('رکورد با موفقیت حذف شد');
+                const result = await deleteCustomerBillingRecord(id);
+                if (result.success) {
+                    await logActivity('company', `حذف رکورد میترخوانی: ${customerName}`, id, 'company', companyId);
+                }
+                showToast(result.message);
                 setConfirmModal(null);
             }
         });
@@ -999,15 +1009,24 @@ const CompanyManagement: React.FC = () => {
             shareholders: shareholders
         };
 
+        let result;
         if (editingCompany) {
-            await updateManagedCompany({ ...editingCompany, ...companyData });
-            await logActivity('company', `ویرایش اطلاعات شرکت: ${companyData.name}`, editingCompany.id, 'company', editingCompany.id);
+            result = await updateManagedCompany({ ...editingCompany, ...companyData });
+            if (result.success) {
+                await logActivity('company', `ویرایش اطلاعات شرکت: ${companyData.name}`, editingCompany.id, 'company', editingCompany.id);
+            }
         } else {
-            await addManagedCompany(companyData);
-            await logActivity('company', `ثبت شرکت جدید: ${companyData.name}`, undefined, 'company');
+            result = await addManagedCompany(companyData);
+            if (result.success) {
+                await logActivity('company', `ثبت شرکت جدید: ${companyData.name}`, undefined, 'company');
+            }
         }
-        setIsAddCompanyModalOpen(false);
-        setEditingCompany(null);
+        
+        showToast(result.message);
+        if (result.success) {
+            setIsAddCompanyModalOpen(false);
+            setEditingCompany(null);
+        }
     };
 
     const handleAddLedgerEntry = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1022,15 +1041,24 @@ const CompanyManagement: React.FC = () => {
             date: ledgerDate,
         };
 
+        let result;
         if (editingLedgerEntry) {
-            await updateLedgerEntry({ ...editingLedgerEntry, ...entryData });
-            await logActivity('company', `ویرایش رکورد دفتر کل: ${entryData.description}`, editingLedgerEntry.id, 'company', selectedCompanyId);
+            result = await updateLedgerEntry({ ...editingLedgerEntry, ...entryData });
+            if (result.success) {
+                await logActivity('company', `ویرایش رکورد دفتر کل: ${entryData.description}`, editingLedgerEntry.id, 'company', selectedCompanyId);
+            }
         } else {
-            await addLedgerEntry(entryData);
-            await logActivity('company', `ثبت رکورد جدید در دفتر کل: ${entryData.description} (${formatCurrency(entryData.amount, storeSettings, 'AFN')})`, undefined, 'company', selectedCompanyId);
+            result = await addLedgerEntry(entryData);
+            if (result.success) {
+                await logActivity('company', `ثبت رکورد جدید در دفتر کل: ${entryData.description} (${formatCurrency(entryData.amount, storeSettings, 'AFN')})`, undefined, 'company', selectedCompanyId);
+            }
         }
-        setIsAddLedgerModalOpen(false);
-        setEditingLedgerEntry(null);
+        
+        showToast(result.message);
+        if (result.success) {
+            setIsAddLedgerModalOpen(false);
+            setEditingLedgerEntry(null);
+        }
     };
 
     const handleAddCustomer = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1058,15 +1086,24 @@ const CompanyManagement: React.FC = () => {
             customerData.customerType = 'invoiced';
         }
 
+        let result;
         if (editingCustomer) {
-            await updateManagedCompanyCustomer({ ...editingCustomer, ...customerData });
-            await logActivity('company', `ویرایش اطلاعات مشتری: ${customerData.name}`, editingCustomer.id, 'company', selectedCompanyId);
+            result = await updateManagedCompanyCustomer({ ...editingCustomer, ...customerData });
+            if (result.success) {
+                await logActivity('company', `ویرایش اطلاعات مشتری: ${customerData.name}`, editingCustomer.id, 'company', selectedCompanyId);
+            }
         } else {
-            await addManagedCompanyCustomer(customerData);
-            await logActivity('company', `ثبت مشتری جدید: ${customerData.name}`, undefined, 'company', selectedCompanyId);
+            result = await addManagedCompanyCustomer(customerData);
+            if (result.success) {
+                await logActivity('company', `ثبت مشتری جدید: ${customerData.name}`, undefined, 'company', selectedCompanyId);
+            }
         }
-        setIsAddCustomerModalOpen(false);
-        setEditingCustomer(null);
+        
+        showToast(result.message);
+        if (result.success) {
+            setIsAddCustomerModalOpen(false);
+            setEditingCustomer(null);
+        }
     };
 
     const handleSaveLocation = async (lat: number, lng: number) => {
@@ -1146,16 +1183,25 @@ const CompanyManagement: React.FC = () => {
             collectorName: currentUser?.username || 'System',
         };
 
+        let result;
         if (editingBillingRecord) {
-            await updateCustomerBillingRecord({ ...editingBillingRecord, ...billingData });
-            await logActivity('company', `ویرایش میترخوانی مشتری: ${selectedCustomerForBilling.name}`, editingBillingRecord.id, 'company', selectedCompanyId);
+            result = await updateCustomerBillingRecord({ ...editingBillingRecord, ...billingData });
+            if (result.success) {
+                await logActivity('company', `ویرایش میترخوانی مشتری: ${selectedCustomerForBilling.name}`, editingBillingRecord.id, 'company', selectedCompanyId);
+            }
         } else {
-            await addCustomerBillingRecord(billingData);
-            await logActivity('company', `ثبت میترخوانی جدید برای مشتری: ${selectedCustomerForBilling.name} (قراءت: ${currentReading})`, undefined, 'company', selectedCompanyId);
+            result = await addCustomerBillingRecord(billingData);
+            if (result.success) {
+                await logActivity('company', `ثبت میترخوانی جدید برای مشتری: ${selectedCustomerForBilling.name} (قراءت: ${currentReading})`, undefined, 'company', selectedCompanyId);
+            }
         }
-        setIsBillingModalOpen(false);
-        setEditingBillingRecord(null);
-        setSelectedCustomerForBilling(null);
+        
+        showToast(result.message);
+        if (result.success) {
+            setIsBillingModalOpen(false);
+            setEditingBillingRecord(null);
+            setSelectedCustomerForBilling(null);
+        }
     };
 
     const handleAddInvoice = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1173,15 +1219,24 @@ const CompanyManagement: React.FC = () => {
             description: formData.get('description') as string,
         };
 
+        let result;
         if (editingInvoice) {
-            await updateManagedCompanyInvoice({ ...editingInvoice, ...invoiceData });
-            await logActivity('company', `ویرایش فاکتور: ${invoiceData.totalAmount} افغانی`, editingInvoice.id, 'company', selectedCompanyId);
+            result = await updateManagedCompanyInvoice({ ...editingInvoice, ...invoiceData });
+            if (result.success) {
+                await logActivity('company', `ویرایش فاکتور: ${invoiceData.totalAmount} افغانی`, editingInvoice.id, 'company', selectedCompanyId);
+            }
         } else {
-            await addManagedCompanyInvoice(invoiceData);
-            await logActivity('company', `ثبت فاکتور جدید: ${invoiceData.totalAmount} افغانی`, undefined, 'company', selectedCompanyId);
+            result = await addManagedCompanyInvoice(invoiceData);
+            if (result.success) {
+                await logActivity('company', `ثبت فاکتور جدید: ${invoiceData.totalAmount} افغانی`, undefined, 'company', selectedCompanyId);
+            }
         }
-        setIsInvoiceModalOpen(false);
-        setEditingInvoice(null);
+        
+        showToast(result.message);
+        if (result.success) {
+            setIsInvoiceModalOpen(false);
+            setEditingInvoice(null);
+        }
     };
 
     const handleAddProductionLog = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1196,15 +1251,24 @@ const CompanyManagement: React.FC = () => {
             description: formData.get('description') as string,
         };
 
+        let result;
         if (editingProductionLog) {
-            await updateManagedCompanyProductionLog({ ...editingProductionLog, ...logData });
-            await logActivity('company', `ویرایش رکورد تولید: ${logData.date}`, editingProductionLog.id, 'company', selectedCompanyId);
+            result = await updateManagedCompanyProductionLog({ ...editingProductionLog, ...logData });
+            if (result.success) {
+                await logActivity('company', `ویرایش رکورد تولید: ${logData.date}`, editingProductionLog.id, 'company', selectedCompanyId);
+            }
         } else {
-            await addManagedCompanyProductionLog(logData);
-            await logActivity('company', `ثبت تولید جدید: ${logData.producedUnits} واحد`, undefined, 'company', selectedCompanyId);
+            result = await addManagedCompanyProductionLog(logData);
+            if (result.success) {
+                await logActivity('company', `ثبت تولید جدید: ${logData.producedUnits} واحد`, undefined, 'company', selectedCompanyId);
+            }
         }
-        setIsProductionModalOpen(false);
-        setEditingProductionLog(null);
+        
+        showToast(result.message);
+        if (result.success) {
+            setIsProductionModalOpen(false);
+            setEditingProductionLog(null);
+        }
     };
 
     const handleOwnerTxSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1218,13 +1282,18 @@ const CompanyManagement: React.FC = () => {
             categoryId: formData.get('categoryId') as string || undefined
         };
 
+        let result;
         if (editingOwnerTx) {
-            await updateOwnerTransaction({ ...editingOwnerTx, ...txData });
+            result = await updateOwnerTransaction({ ...editingOwnerTx, ...txData });
         } else {
-            await addOwnerTransaction(txData);
+            result = await addOwnerTransaction(txData);
         }
-        setIsOwnerTxModalOpen(false);
-        setEditingOwnerTx(null);
+        
+        showToast(result.message);
+        if (result.success) {
+            setIsOwnerTxModalOpen(false);
+            setEditingOwnerTx(null);
+        }
     };
 
     const handleCategorySubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1232,13 +1301,18 @@ const CompanyManagement: React.FC = () => {
         const formData = new FormData(e.currentTarget);
         const name = formData.get('name') as string;
 
+        let result;
         if (editingCategory) {
-            await updateOwnerExpenseCategory({ id: editingCategory.id, name });
+            result = await updateOwnerExpenseCategory({ id: editingCategory.id, name });
         } else {
-            await addOwnerExpenseCategory(name);
+            result = await addOwnerExpenseCategory(name);
         }
-        setIsCategoryModalOpen(false);
-        setEditingCategory(null);
+        
+        showToast(result.message);
+        if (result.success) {
+            setIsCategoryModalOpen(false);
+            setEditingCategory(null);
+        }
     };
 
     const myFinancialShare = useMemo(() => {
@@ -2017,8 +2091,8 @@ const CompanyManagement: React.FC = () => {
                                                                     {invoice.status === 'unpaid' && (
                                                                         <button 
                                                                             onClick={async () => {
-                                                                                await updateManagedCompanyInvoice({ ...invoice, status: 'paid' });
-                                                                                showToast("فاکتور به عنوان پرداخت شده علامت‌گذاری شد.");
+                                                                                const result = await updateManagedCompanyInvoice({ ...invoice, status: 'paid' });
+                                                                                showToast(result.message);
                                                                             }}
                                                                             className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
                                                                         >
@@ -2047,8 +2121,8 @@ const CompanyManagement: React.FC = () => {
                                                                     <button 
                                                                         onClick={async () => {
                                                                             if (window.confirm("آیا از حذف این فاکتور مطمئن هستید؟")) {
-                                                                                await deleteManagedCompanyInvoice(invoice.id);
-                                                                                showToast("فاکتور با موفقیت حذف شد.");
+                                                                                const result = await deleteManagedCompanyInvoice(invoice.id);
+                                                                                showToast(result.message);
                                                                             }
                                                                         }}
                                                                         className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
@@ -2191,8 +2265,8 @@ const CompanyManagement: React.FC = () => {
                                                             <button 
                                                                 onClick={async () => {
                                                                     if (window.confirm("آیا از حذف این رکورد تولید مطمئن هستید؟")) {
-                                                                        await deleteManagedCompanyProductionLog(log.id);
-                                                                        showToast("رکورد تولید با موفقیت حذف شد.");
+                                                                        const result = await deleteManagedCompanyProductionLog(log.id);
+                                                                        showToast(result.message);
                                                                     }
                                                                 }}
                                                                 className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
@@ -3564,8 +3638,8 @@ const CompanyManagement: React.FC = () => {
                                                             if (isBilling) {
                                                                 await handleMarkAsPaid(record as any);
                                                             } else {
-                                                                await updateManagedCompanyInvoice({ ...(record as any), status: 'paid' });
-                                                                showToast("فاکتور به عنوان پرداخت شده علامت‌گذاری شد.");
+                                                                const result = await updateManagedCompanyInvoice({ ...(record as any), status: 'paid' });
+                                                                showToast(result.message);
                                                             }
                                                         }}
                                                         className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-[10px] font-bold hover:bg-emerald-700 transition-all shadow-sm"
