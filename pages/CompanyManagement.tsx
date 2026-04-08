@@ -334,8 +334,12 @@ const CompanyManagement: React.FC = () => {
         addManagedCompanyProductionLog, updateManagedCompanyProductionLog, deleteManagedCompanyProductionLog,
         addOwnerTransaction, updateOwnerTransaction, deleteOwnerTransaction,
         addOwnerExpenseCategory, updateOwnerExpenseCategory, deleteOwnerExpenseCategory,
-        showToast, storeSettings, hasPermission, hasCompanyAccess, currentUser, logActivity
+        showToast, storeSettings, hasPermission, hasCompanyAccess, currentUser, logActivity, fetchSectionData
     } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['managedCompanies', 'managedLedger', 'managedCustomers', 'managedInvoices', 'managedProductionLogs', 'billingRecords', 'ownerTransactions', 'ownerExpenseCategories', 'activities']);
+    }, [fetchSectionData]);
     
     const [activeTab, setActiveTab] = useState<'companies' | 'dashboard' | 'activities' | 'charts'>('companies');
     const [companyDetailTab, setCompanyDetailTab] = useState<'ledger' | 'customers' | 'collections' | 'invoices' | 'production'>('ledger');

@@ -35,6 +35,10 @@ interface AppContextType extends AppState {
     autoBackupEnabled: boolean;
     setAutoBackupEnabled: (enabled: boolean) => void;
 
+    // Data Fetching
+    fetchSectionData: (sections: string[]) => Promise<void>;
+    fetchData: (isSilent?: boolean) => Promise<void>;
+
     // Users & Roles
     addUser: (user: Omit<User, 'id'>) => Promise<{ success: boolean; message: string }>;
     updateUser: (user: Partial<User> & { id: string }) => Promise<{ success: boolean; message: string }>;
@@ -261,33 +265,96 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.log("Toast:", message);
     }, []);
 
+    const fetchSectionData = useCallback(async (sections: string[]) => {
+        try {
+            const fetchMap: { [key: string]: () => Promise<any> } = {
+                transactions: () => api.getTransactions(),
+                invoices: () => api.getInvoices(),
+                activities: () => api.getActivities(),
+                wastageRecords: () => api.getWastageRecords(),
+                orders: () => api.getOrders(),
+                managedCompanies: () => api.getManagedCompanies(),
+                managedLedger: () => api.getManagedCompanyLedger(),
+                managedCustomers: () => api.getManagedCompanyCustomers(),
+                managedInvoices: () => api.getManagedCompanyInvoices(),
+                managedProductionLogs: () => api.getManagedCompanyProductionLogs(),
+                billingRecords: () => api.getCustomerBillingRecords(),
+                ownerTransactions: () => api.getOwnerTransactions(),
+                ownerExpenseCategories: () => api.getOwnerExpenseCategories(),
+                companyEmployees: () => api.getCompanyEmployees(),
+                salaryRecords: () => api.getSalaryRecords(),
+                salaryPayments: () => api.getSalaryPayments(),
+                legalRecords: () => api.getLegalRecords()
+            };
+
+            const promises = sections.map(s => fetchMap[s]?.().catch(() => null));
+            const results = await Promise.all(promises);
+
+            setState(prev => {
+                const newState = { ...prev };
+                sections.forEach((s, i) => {
+                    const data = results[i];
+                    if (data === null) return;
+
+                    if (s === 'transactions') {
+                        newState.customerTransactions = data.customerTransactions || [];
+                        newState.supplierTransactions = data.supplierTransactions || [];
+                        newState.payrollTransactions = data.payrollTransactions || [];
+                        newState.depositTransactions = data.depositTransactions || [];
+                    } else if (s === 'invoices') {
+                        newState.saleInvoices = data.saleInvoices || [];
+                        newState.purchaseInvoices = data.purchaseInvoices || [];
+                        newState.inTransitInvoices = data.inTransitInvoices || [];
+                    } else if (s === 'managedCompanies') {
+                        newState.managedCompanies = data || [];
+                    } else if (s === 'managedLedger') {
+                        newState.managedCompanyLedger = data || [];
+                    } else if (s === 'managedCustomers') {
+                        newState.managedCompanyCustomers = data || [];
+                    } else if (s === 'managedInvoices') {
+                        newState.managedCompanyInvoices = data || [];
+                    } else if (s === 'managedProductionLogs') {
+                        newState.managedCompanyProductionLogs = data || [];
+                    } else if (s === 'billingRecords') {
+                        newState.customerBillingRecords = data || [];
+                    } else if (s === 'ownerTransactions') {
+                        newState.ownerTransactions = data || [];
+                    } else if (s === 'ownerExpenseCategories') {
+                        newState.ownerExpenseCategories = data || [];
+                    } else if (s === 'companyEmployees') {
+                        newState.companyEmployees = data || [];
+                    } else if (s === 'salaryRecords') {
+                        newState.salaryRecords = data || [];
+                    } else if (s === 'salaryPayments') {
+                        newState.salaryPayments = data || [];
+                    } else if (s === 'legalRecords') {
+                        newState.legalRecords = data || [];
+                    } else if (s === 'activities') {
+                        newState.activities = data || [];
+                    } else if (s === 'wastageRecords') {
+                        newState.wastageRecords = data || [];
+                    } else if (s === 'orders') {
+                        newState.orders = data || [];
+                    }
+                });
+                return newState;
+            });
+        } catch (error) {
+            console.error("Error fetching section data:", error);
+        }
+    }, []);
+
     const fetchData = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const [settings, users, roles, products, services, entities, transactions, invoices, activity, wastageRecords, orders, managedCompanies, managedLedger, managedCustomers, managedInvoices, managedProductionLogs, billingRecords, ownerTransactions, ownerExpenseCategories, companyEmployees, salaryRecords, salaryPayments, legalRecords] = await Promise.all([
+            // Only fetch essential data initially for speed
+            const [settings, users, roles, products, services, entities] = await Promise.all([
                 api.getSettings().catch(() => ({})),
                 api.getUsers().catch(() => []),
                 api.getRoles().catch(() => []),
                 api.getProducts().catch(() => []),
                 api.getServices().catch(() => []),
-                api.getEntities().catch(() => ({ customers: [], suppliers: [], employees: [], expenses: [], depositHolders: [], companies: [], partners: [] })),
-                api.getTransactions().catch(() => ({ customerTransactions: [], supplierTransactions: [], payrollTransactions: [], depositTransactions: [] })),
-                api.getInvoices().catch(() => ({ saleInvoices: [], purchaseInvoices: [], inTransitInvoices: [] })),
-                api.getActivities().catch(() => []),
-                api.getWastageRecords().catch(() => []),
-                api.getOrders().catch(() => []),
-                api.getManagedCompanies().catch(() => []),
-                api.getManagedCompanyLedger().catch(() => []),
-                api.getManagedCompanyCustomers().catch(() => []),
-                api.getManagedCompanyInvoices().catch(() => []),
-                api.getManagedCompanyProductionLogs().catch(() => []),
-                api.getCustomerBillingRecords().catch(() => []),
-                api.getOwnerTransactions().catch(() => []),
-                api.getOwnerExpenseCategories().catch(() => []),
-                api.getCompanyEmployees().catch(() => []),
-                api.getSalaryRecords().catch(() => []),
-                api.getSalaryPayments().catch(() => []),
-                api.getLegalRecords().catch(() => [])
+                api.getEntities().catch(() => ({ customers: [], suppliers: [], employees: [], expenses: [], depositHolders: [], companies: [], partners: [] }))
             ]) as any[];
 
             setState(prev => {
@@ -351,31 +418,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     suppliers: patchedSuppliers,
                     employees: patchedEmployees, 
                     expenses: entities.expenses || [],
-                    depositHolders: entities.depositHolders || [], 
-                    depositTransactions: transactions.depositTransactions || [],
-                    customerTransactions: transactions.customerTransactions || [],
-                    supplierTransactions: transactions.supplierTransactions || [],
-                    payrollTransactions: transactions.payrollTransactions || [],
-                    saleInvoices: invoices.saleInvoices || [], 
-                    purchaseInvoices: invoices.purchaseInvoices || [],
-                    inTransitInvoices: invoices.inTransitInvoices || [],
-                    activities: activity || [],
-                    wastageRecords: wastageRecords || [],
-                    orders: orders || [],
+                    depositHolders: entities.depositHolders || [],
                     companies: entities.companies || [],
-                    managedCompanies: managedCompanies || [],
-                    managedCompanyLedger: managedLedger || [],
-                    managedCompanyCustomers: managedCustomers || [],
-                    managedCompanyInvoices: managedInvoices || [],
-                    managedCompanyProductionLogs: managedProductionLogs || [],
-                    customerBillingRecords: billingRecords || [],
-                    ownerTransactions: ownerTransactions || [],
-                    ownerExpenseCategories: ownerExpenseCategories || [],
-                    partners: entities.partners || [],
-                    companyEmployees: companyEmployees || [],
-                    salaryRecords: salaryRecords || [],
-                    salaryPayments: salaryPayments || [],
-                    legalRecords: legalRecords || []
+                    partners: entities.partners || []
                 };
             });
         } catch (error) {
@@ -2760,7 +2805,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (isLoading) return <div className="flex items-center justify-center h-screen text-xl font-bold text-blue-600">در حال دریافت اطلاعات...</div>;
 
     return <AppContext.Provider value={{
-        ...state, showToast, isLoading, isLoggingOut, isShopActive, login, logout, hasPermission, hasCompanyAccess, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, exportData, importData,
+        ...state, showToast, isLoading, isLoggingOut, isShopActive, fetchSectionData, fetchData, login, logout, hasPermission, hasCompanyAccess, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, exportData, importData,
         cloudBackup, cloudRestore, autoBackupEnabled, setAutoBackupEnabled,
         addProduct, updateProduct, deleteProduct, registerWastage, addOrder, updateOrderStatus, updateOrder, deleteOrder, addOrderPayment, addToCart, updateCartItemQuantity, updateCartItemFinalPrice, removeFromCart, completeSale,
         beginEditSale, cancelEditSale, deleteSaleInvoice, addSaleReturn, addPurchaseInvoice, beginEditPurchase, cancelEditPurchase, updatePurchaseInvoice, addPurchaseReturn,

@@ -40,7 +40,9 @@ export const api = {
         return data ? data.data : null;
     },
     updateSettings: async (settings: StoreSettings) => {
-        await supabase.from('store_settings').upsert({ id: 'current', data: settings });
+        // Strip logos before saving to database to keep it lightweight
+        const { logoLeft, logoRight, ...textSettings } = settings;
+        await supabase.from('store_settings').upsert({ id: 'current', data: textSettings });
     },
 
     getUsers: async () => {

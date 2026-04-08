@@ -125,7 +125,11 @@ const AlertCard: React.FC<{ title: string, items: { id: string, name: string, st
 );
 
 const Dashboard: React.FC = () => {
-    const { saleInvoices, purchaseInvoices, activities, products, storeSettings, currentUser, customers } = useAppContext();
+    const { saleInvoices, purchaseInvoices, activities, products, storeSettings, currentUser, customers, fetchSectionData } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['invoices', 'activities']);
+    }, [fetchSectionData]);
     const [dateRange, setDateRange] = useState<{ start: Date, end: Date }>({ start: new Date(), end: new Date() });
     const [isAlertsOpen, setIsAlertsOpen] = useState(false);
     const [isMobileAlertsOpen, setIsMobileAlertsOpen] = useState(false);

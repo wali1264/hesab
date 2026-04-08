@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import type { DepositHolder, DepositTransaction } from '../types';
 import { PlusIcon, XIcon, EyeIcon, TrashIcon, SafeIcon, SearchIcon, CheckIcon, EditIcon } from '../components/icons';
@@ -20,7 +20,11 @@ const Modal: React.FC<{ title: string, onClose: () => void, children: React.Reac
 );
 
 const SecurityDeposits: React.FC = () => {
-    const { depositHolders, depositTransactions, addDepositHolder, deleteDepositHolder, processDepositTransaction, updateDepositTransaction, hasPermission, storeSettings } = useAppContext();
+    const { depositHolders, depositTransactions, addDepositHolder, deleteDepositHolder, processDepositTransaction, updateDepositTransaction, hasPermission, storeSettings, fetchSectionData } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['transactions']);
+    }, [fetchSectionData]);
     
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import { PlusIcon, SearchIcon, EditIcon, TrashIcon, BellAlertIcon, CheckCircleIcon, HistoryIcon, XIcon, UserGroupIcon, ClipboardDocumentListIcon, WarningIcon } from '../components/icons';
 import type { Order, OrderStatus, Customer } from '../types';
@@ -8,8 +8,12 @@ import ConfirmModal from '../components/ConfirmModal';
 const Orders: React.FC = () => {
     const { 
         orders, customers, storeSettings, hasPermission, 
-        addOrder, updateOrderStatus, updateOrder, deleteOrder, addOrderPayment, showToast 
+        addOrder, updateOrderStatus, updateOrder, deleteOrder, addOrderPayment, showToast, fetchSectionData 
     } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['orders']);
+    }, [fetchSectionData]);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');

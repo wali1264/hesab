@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import DateRangeFilter from '../components/DateRangeFilter';
 import { formatCurrency, formatStockToPackagesAndUnits } from '../utils/formatters';
@@ -12,8 +12,12 @@ const Reports: React.FC = () => {
     const { 
         saleInvoices, products, expenses, users, activities, inTransitInvoices,
         customers, suppliers, customerTransactions, supplierTransactions, storeSettings, hasPermission,
-        depositHolders, depositTransactions, purchaseInvoices, wastageRecords
+        depositHolders, depositTransactions, purchaseInvoices, wastageRecords, fetchSectionData
     } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['invoices', 'activities', 'transactions', 'wastageRecords', 'orders']);
+    }, [fetchSectionData]);
 
     const [activeTab, setActiveTab] = useState('sales');
     const [dateRange, setDateRange] = useState<{ start: Date, end: Date }>({ start: new Date(), end: new Date() });

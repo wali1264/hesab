@@ -319,8 +319,12 @@ const InTransit: React.FC = () => {
     const { 
         inTransitInvoices, suppliers, products, purchaseInvoices,
         addInTransitInvoice, updateInTransitInvoice, deleteInTransitInvoice, archiveInTransitInvoice, moveInTransitItems, addInTransitPayment,
-        hasPermission, storeSettings 
+        hasPermission, storeSettings, fetchSectionData
     } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['invoices']);
+    }, [fetchSectionData]);
 
     const [activeTab, setActiveTab] = useState<'active' | 'archive'>('active');
     const [isModalOpen, setIsModalOpen] = useState(false);

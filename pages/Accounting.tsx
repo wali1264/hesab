@@ -2603,7 +2603,11 @@ const PartnerStatementModal = ({ partner, onClose, onEditWithdrawal }: { partner
 
 
 const Accounting: React.FC = () => {
-    const { hasPermission } = useAppContext();
+    const { hasPermission, fetchSectionData } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['transactions', 'invoices']);
+    }, [fetchSectionData]);
     const [activeTab, setActiveTab] = useState('suppliers');
 
     const tabs = [

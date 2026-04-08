@@ -38,8 +38,13 @@ const SalaryManagement: React.FC = () => {
         settleSalaryMonth,
         generateMonthlySalaryRecords,
         storeSettings,
-        showToast
+        showToast,
+        fetchSectionData
     } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['companyEmployees', 'salaryRecords', 'salaryPayments']);
+    }, [fetchSectionData]);
 
     const [activeTab, setActiveTab] = useState<'employees' | 'payroll' | 'alerts'>('payroll');
     const [selectedEmployee, setSelectedEmployee] = useState<CompanyEmployee | null>(null);

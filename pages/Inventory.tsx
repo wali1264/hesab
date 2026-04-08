@@ -12,8 +12,12 @@ const Inventory: React.FC = () => {
     const { 
         products, addProduct, updateProduct, deleteProduct, storeSettings, hasPermission,
         saleInvoices, purchaseInvoices, inTransitInvoices,
-        companies, selectedCompanyId, setSelectedCompanyId
+        companies, selectedCompanyId, setSelectedCompanyId, fetchSectionData
     } = useAppContext();
+    
+    useEffect(() => {
+        fetchSectionData(['invoices']);
+    }, [fetchSectionData]);
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [isWastageModalOpen, setIsWastageModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);

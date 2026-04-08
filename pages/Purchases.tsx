@@ -85,8 +85,12 @@ const Purchases: React.FC = () => {
         purchaseInvoices, suppliers, products, companies,
         addPurchaseInvoice, updatePurchaseInvoice, 
         editingPurchaseInvoiceId, beginEditPurchase, cancelEditPurchase,
-        addPurchaseReturn, hasPermission, storeSettings
+        addPurchaseReturn, hasPermission, storeSettings, fetchSectionData
     } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['invoices']);
+    }, [fetchSectionData]);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [toast, setToast] = useState('');

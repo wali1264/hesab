@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import { 
     FilterIcon, 
@@ -49,8 +49,13 @@ const SpecialReports: React.FC = () => {
         wastageRecords,
         storeSettings,
         customerTransactions,
-        supplierTransactions
+        supplierTransactions,
+        fetchSectionData
     } = useAppContext();
+
+    useEffect(() => {
+        fetchSectionData(['invoices', 'activities', 'transactions', 'wastageRecords', 'legalRecords', 'managedCompanies', 'managedLedger']);
+    }, [fetchSectionData]);
 
     const [selectedCategoryId, setSelectedCategoryId] = useState('inventory');
     const [selectedReportId, setSelectedReportId] = useState('total_inventory');
