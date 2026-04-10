@@ -160,16 +160,16 @@ const Dashboard: React.FC = () => {
             return invTime >= startOfDay && invTime <= endOfDay;
         });
 
-        const sales = todayInvoices.filter(inv => inv.type === 'sale').reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
-        const returns = todayInvoices.filter(inv => inv.type === 'return').reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
+        const sales = (todayInvoices.filter(inv => inv.type === 'sale') || []).reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
+        const returns = (todayInvoices.filter(inv => inv.type === 'return') || []).reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
 
         const creditInvoices = todayInvoices.filter(inv => inv.customerId && inv.type === 'sale');
-        const creditSales = creditInvoices.reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
-        const creditReturns = todayInvoices.filter(inv => inv.customerId && inv.type === 'return').reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
+        const creditSales = (creditInvoices || []).reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
+        const creditReturns = (todayInvoices.filter(inv => inv.customerId && inv.type === 'return') || []).reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
 
         const supplierIntermediaryInvoices = todayInvoices.filter(inv => inv.supplierIntermediaryId && inv.type === 'sale');
-        const supplierIntermediarySales = supplierIntermediaryInvoices.reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
-        const supplierIntermediaryReturns = todayInvoices.filter(inv => inv.supplierIntermediaryId && inv.type === 'return').reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
+        const supplierIntermediarySales = (supplierIntermediaryInvoices || []).reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
+        const supplierIntermediaryReturns = (todayInvoices.filter(inv => inv.supplierIntermediaryId && inv.type === 'return') || []).reduce((sum, inv) => sum + (inv.totalAmountAFN || inv.totalAmount), 0);
 
         const netSales = sales - returns;
         const netCreditSales = creditSales - creditReturns;
@@ -186,7 +186,7 @@ const Dashboard: React.FC = () => {
 
     const productsWithTotalStock = products.map(p => ({
         ...p,
-        totalStock: p.batches.reduce((sum, b) => sum + b.stock, 0)
+        totalStock: (p.batches || []).reduce((sum, b) => sum + b.stock, 0)
     }));
 
     const lowStockProducts = productsWithTotalStock.filter(p => p.totalStock > 0 && p.totalStock <= storeSettings.lowStockThreshold);

@@ -688,7 +688,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (productIndex === -1) return prevState;
 
             const product = prevState.products[productIndex];
-            const totalStock = product.batches.reduce((sum, b) => sum + b.stock, 0);
+            const totalStock = (product.batches || []).reduce((sum, b) => sum + b.stock, 0);
 
             if (quantity > totalStock) {
                 message = 'مقدار ضایعات نمی‌تواند بیشتر از موجودی باشد.';
@@ -824,7 +824,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const order = state.orders.find(o => o.id === orderId);
         if (!order) return { success: false, message: 'سفارش یافت نشد.' };
         
-        const totalPaid = order.payments.reduce((sum, p) => sum + p.amount, 0);
+        const totalPaid = (order.payments || []).reduce((sum, p) => sum + p.amount, 0);
         const remaining = order.totalAmount - totalPaid;
         
         if (amount > remaining) {
@@ -858,7 +858,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         if (type === 'product') {
             const product = state.products.find(p => p.id === item.id);
-            const totalStock = product?.batches.reduce((sum, b) => sum + b.stock, 0) || 0;
+            const totalStock = (product?.batches || []).reduce((sum, b) => sum + b.stock, 0) || 0;
             const inCart = state.cart.find(i => i.id === item.id && i.type === 'product')?.quantity || 0;
             
             if (inCart + 1 > totalStock) {
@@ -893,7 +893,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                                 remaining -= deduct;
                             }
                         }
-                        const totalCost = deductions.reduce((s, d) => s + (d.quantity * (product.batches.find(bx => bx.id === d.batchId)?.purchasePrice || 0)), 0);
+                        const totalCost = (deductions || []).reduce((s, d) => s + (d.quantity * (product.batches.find(bx => bx.id === d.batchId)?.purchasePrice || 0)), 0);
                         return { ...cartItem, batchDeductions: deductions, purchasePrice: deductions.length > 0 ? totalCost / cartItem.quantity : 0 };
                     }
                 }
@@ -908,7 +908,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const updateCartItemQuantity = (id: string, type: any, qty: number) => {
         if (type === 'product') {
             const product = state.products.find(p => p.id === id);
-            const totalStock = product?.batches.reduce((sum, b) => sum + b.stock, 0) || 0;
+            const totalStock = (product?.batches || []).reduce((sum, b) => sum + b.stock, 0) || 0;
             if (qty > totalStock) {
                 return { success: false, message: `تعداد انتخابی (${qty}) از موجودی انبار (${totalStock}) بیشتر است!` };
             }
@@ -934,7 +934,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                                 remaining -= deduct;
                             }
                         }
-                        const totalCost = deductions.reduce((s, d) => s + (d.quantity * (product.batches.find(bx => bx.id === d.batchId)?.purchasePrice || 0)), 0);
+                        const totalCost = (deductions || []).reduce((s, d) => s + (d.quantity * (product.batches.find(bx => bx.id === d.batchId)?.purchasePrice || 0)), 0);
                         return { ...cartItem, batchDeductions: deductions, purchasePrice: deductions.length > 0 ? totalCost / cartItem.quantity : 0 };
                     }
                 }
@@ -1003,7 +1003,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             remainingToDeduct -= deduct;
                         }
                     }
-                    const totalCost = finalDeductions.reduce((s, d) => s + (d.quantity * (p.batches.find(bx => bx.id === d.batchId)?.purchasePrice || 0)), 0);
+                    const totalCost = (finalDeductions || []).reduce((s, d) => s + (d.quantity * (p.batches.find(bx => bx.id === d.batchId)?.purchasePrice || 0)), 0);
                     return { ...item, batchDeductions: finalDeductions, purchasePrice: finalDeductions.length > 0 ? totalCost / item.quantity : 0 };
                 }
             }
@@ -1011,7 +1011,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
 
         // 3. Financial Totals
-        const totalBaseAmount = cart.reduce((t, i) => {
+        const totalBaseAmount = (cart || []).reduce((t, i) => {
             const price = (i.finalPrice !== undefined) ? i.finalPrice : (i.type === 'product' ? i.salePrice : i.price);
             return (price * i.quantity) + t;
         }, 0);
