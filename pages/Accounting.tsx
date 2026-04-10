@@ -54,7 +54,7 @@ const SuppliersTab = () => {
     const showToast = (message: string) => { setToast(message); setTimeout(() => setToast(''), 3000); };
 
     const logisticsCapital = useMemo(() => {
-        return inTransitInvoices.filter(inv => inv.status !== 'closed').reduce((sum, inv) => {
+        return (inTransitInvoices || []).filter(inv => inv.status !== 'closed').reduce((sum, inv) => {
             const rate = inv.exchangeRate || 1;
             const paidBase = (inv.paidAmount || 0) * rate;
             return sum + paidBase;
@@ -143,7 +143,7 @@ const SuppliersTab = () => {
         }
     };
     
-    const handleViewHistory = (supplier: Supplier) => { const transactions = supplierTransactions.filter(t => t.supplierId === supplier.id); setHistoryModalData({ person: supplier, transactions }); };
+    const handleViewHistory = (supplier: Supplier) => { const transactions = (supplierTransactions || []).filter(t => t.supplierId === supplier.id); setHistoryModalData({ person: supplier, transactions }); };
 
     const convertedInitialBalance = useMemo(() => { 
         if (!addSupplierAmount || !addSupplierRate || Number(addSupplierRate) <= 0) return 0; 
@@ -172,7 +172,7 @@ const SuppliersTab = () => {
                 <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
                     <div>
                         <p className="text-xs font-black text-slate-400 uppercase mb-1">تعداد تأمین‌کنندگان فعال</p>
-                        <h4 className="text-2xl font-black text-slate-800">{suppliers.length} مجموعه</h4>
+                        <h4 className="text-2xl font-black text-slate-800">{(suppliers || []).length} مجموعه</h4>
                     </div>
                     <button onClick={() => setIsAddModalOpen(true)} className="bg-blue-600 text-white p-4 rounded-2xl hover:bg-blue-700 transition-all shadow-lg active:scale-95"><PlusIcon className="w-6 h-6"/></button>
                 </div>
@@ -189,7 +189,7 @@ const SuppliersTab = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {suppliers.map(s => (
+                        {(suppliers || []).map(s => (
                             <tr key={s.id} className="border-t border-gray-200/60 transition-colors hover:bg-blue-50/30">
                                 <td className="p-4 text-lg font-semibold text-slate-800">{s.name}</td>
                                 <td className="p-4 text-lg text-slate-600">{s.phone}</td>
@@ -240,7 +240,7 @@ const SuppliersTab = () => {
             </div>
 
             <div className="md:hidden space-y-4">
-                {suppliers.map(s => (
+                {(suppliers || []).map(s => (
                     <div key={s.id} className="bg-white/80 backdrop-blur-xl p-5 rounded-2xl shadow-md border border-gray-200/60 active:scale-[0.98] transition-all">
                         <div className="flex justify-between items-start mb-1">
                            <div className="flex flex-col"><h3 className="font-black text-xl text-slate-800">{s.name}</h3><p className="text-xs text-slate-400 font-medium">{s.phone || 'بدون شماره'}</p></div>
@@ -357,7 +357,7 @@ const SuppliersTab = () => {
                     </form>
                 </Modal>
             )}
-            {historyModalData && <TransactionHistoryModal person={historyModalData.person} transactions={historyModalData.transactions} type="supplier" onClose={() => setHistoryModalData(null)} onReprint={(tid) => { const tx = supplierTransactions.find(t=>t.id===tid); if(tx) { setHistoryModalData(null); setReceiptModalData({person: historyModalData.person, transaction: tx}); } }} />}
+            {historyModalData && <TransactionHistoryModal person={historyModalData.person} transactions={historyModalData.transactions} type="supplier" onClose={() => setHistoryModalData(null)} onReprint={(tid) => { const tx = (supplierTransactions || []).find(t=>t.id===tid); if(tx) { setHistoryModalData(null); setReceiptModalData({person: historyModalData.person, transaction: tx}); } }} />}
             {receiptModalData && <ReceiptPreviewModal person={receiptModalData.person} transaction={receiptModalData.transaction} type="supplier" onClose={() => setReceiptModalData(null)} />}
         </div>
     );
@@ -420,7 +420,7 @@ const PayrollTab = () => {
     const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
 
     const filteredEmployees = useMemo(() => {
-        return employees.filter(e => e.isActive !== showInactive);
+        return (employees || []).filter(e => e.isActive !== showInactive);
     }, [employees, showInactive]);
 
     const convertedAdvance = useMemo(() => {
@@ -459,7 +459,7 @@ const PayrollTab = () => {
     };
     
     const handleViewHistory = (employee: Employee) => {
-        const transactions = payrollTransactions.filter(t => t.employeeId === employee.id);
+        const transactions = (payrollTransactions || []).filter(t => t.employeeId === employee.id);
         setHistoryModalData({ person: employee, transactions });
     };
 
@@ -731,15 +731,15 @@ const CustomersTab = () => {
     };
 
     const eligibleActivityHolders = useMemo(() => {
-        const linkedIds = customers.map(c => c.linkedDepositHolderId).filter(Boolean);
-        const activityIds = customers.map(c => c.activityConfig?.depositHolderId).filter(Boolean);
+        const linkedIds = (customers || []).map(c => c.linkedDepositHolderId).filter(Boolean);
+        const activityIds = (customers || []).map(c => c.activityConfig?.depositHolderId).filter(Boolean);
         const allUsedIds = [...linkedIds, ...activityIds];
         
-        return depositHolders.filter(h => !allUsedIds.includes(h.id) || (activitySettingsCustomer?.activityConfig?.depositHolderId === h.id));
+        return (depositHolders || []).filter(h => !allUsedIds.includes(h.id) || (activitySettingsCustomer?.activityConfig?.depositHolderId === h.id));
     }, [depositHolders, customers, activitySettingsCustomer]);
 
     const designatedPersonIds = useMemo(() => {
-        return customers.map(c => c.activityConfig?.depositHolderId).filter(Boolean) as string[];
+        return (customers || []).map(c => c.activityConfig?.depositHolderId).filter(Boolean) as string[];
     }, [customers]);
 
     const customerInvoices = useMemo(() => {
@@ -902,13 +902,13 @@ const CustomersTab = () => {
     };
 
     const handleViewHistory = (customer: Customer) => {
-        const transactions = customerTransactions.filter(t => t.customerId === customer.id);
+        const transactions = (customerTransactions || []).filter(t => t.customerId === customer.id);
         setHistoryModalData({ person: customer, transactions });
     };
 
     const handleReprint = (transactionId: string) => {
-        const transaction = customerTransactions.find(t => t.id === transactionId);
-        const customer = customers.find(c => c.id === transaction?.customerId);
+        const transaction = (customerTransactions || []).find(t => t.id === transactionId);
+        const customer = (customers || []).find(c => c.id === transaction?.customerId);
         if (transaction && customer) {
             setHistoryModalData(null);
             setReceiptModalData({ person: customer, transaction });
@@ -931,11 +931,11 @@ const CustomersTab = () => {
             : Number(paymentAmount) * Number(exchangeRate);
     }, [paymentAmount, exchangeRate, paymentCurrency, storeSettings.currencyConfigs]);
 
-    const selectedTrustee = useMemo(() => depositHolders.find(h => h.id === selectedTrusteeId), [depositHolders, selectedTrusteeId]);
+    const selectedTrustee = useMemo(() => (depositHolders || []).find(h => h.id === selectedTrusteeId), [depositHolders, selectedTrusteeId]);
 
     const filteredCustomers = useMemo(() => {
-        if (!selectedCompanyId) return customers;
-        return customers.filter(c => c.companyId === selectedCompanyId);
+        if (!selectedCompanyId) return (customers || []);
+        return (customers || []).filter(c => c.companyId === selectedCompanyId);
     }, [customers, selectedCompanyId]);
 
     return (
@@ -953,7 +953,7 @@ const CustomersTab = () => {
                         className={`p-3 rounded-xl border-2 transition-all outline-none font-bold text-sm ${selectedCompanyId ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300'}`}
                     >
                         <option value="">همه کمپانی‌ها (فیلتر مشتری)</option>
-                        {companies.map(c => (
+                        {companies && companies.map(c => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                     </select>
@@ -977,7 +977,7 @@ const CustomersTab = () => {
                                 <td onClick={() => handleCustomerClick(c)} className="p-4 text-lg font-bold text-slate-800 cursor-pointer select-none">{c.name}</td>
                                 <td className="p-4 text-md text-slate-600">{c.phone}</td>
                                 <td className="p-4 text-xs font-bold text-blue-600">
-                                    {companies.find(comp => comp.id === c.companyId)?.name || '-'}
+                                    {(companies || []).find(comp => comp.id === c.companyId)?.name || '-'}
                                 </td>
                                 <td className="p-4 text-md font-black" dir="ltr">
                                     <div className="flex flex-col gap-1 items-center">
@@ -1038,7 +1038,7 @@ const CustomersTab = () => {
                                 <h3 onClick={() => handleCustomerClick(c)} className="font-black text-xl text-slate-800 cursor-pointer select-none">{c.name}</h3>
                                 <p className="text-xs text-slate-400 font-medium">{c.phone || 'بدون شماره'}</p>
                                 {c.companyId && (
-                                    <p className="text-[10px] text-blue-600 font-bold mt-1">کمپانی: {companies.find(comp => comp.id === c.companyId)?.name}</p>
+                                    <p className="text-[10px] text-blue-600 font-bold mt-1">کمپانی: {(companies || []).find(comp => comp.id === c.companyId)?.name}</p>
                                 )}
                            </div>
                            <div className="flex gap-2">
@@ -1103,7 +1103,7 @@ const CustomersTab = () => {
                                 className="w-full p-4 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 bg-white font-bold text-sm"
                             >
                                 <option value="">بدون اتصال به کمپانی</option>
-                                {companies.map(c => (
+                                {(companies || []).map(c => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
@@ -1186,7 +1186,7 @@ const CustomersTab = () => {
                                                 <span className="text-xs font-bold">بدون واسط (نقدی مستقیم)</span>
                                                 {selectedTrusteeId === '' && <CheckIcon className="w-4 h-4" />}
                                             </button>
-                                            {depositHolders.filter(h => !designatedPersonIds.includes(h.id) || h.id === selectedTrusteeId).map(holder => (
+                                            {(depositHolders || []).filter(h => !designatedPersonIds.includes(h.id) || h.id === selectedTrusteeId).map(holder => (
                                                 <button 
                                                     key={holder.id}
                                                     onClick={() => { setSelectedTrusteeId(holder.id); setIsTrusteeMenuOpen(false); }}
@@ -1333,8 +1333,8 @@ const ExpensesTab = () => {
     const categories = storeSettings.expenseCategories || ['rent', 'utilities', 'supplies', 'salary', 'other'];
 
     const filteredExpenses = useMemo(() => {
-        if (filterCategory === 'all') return expenses;
-        return expenses.filter(e => e.category === filterCategory);
+        if (filterCategory === 'all') return (expenses || []);
+        return (expenses || []).filter(e => e.category === filterCategory);
     }, [expenses, filterCategory]);
 
     const [expenseAmount, setExpenseAmount] = useState('');
@@ -1486,7 +1486,7 @@ const ExpensesTab = () => {
                                         <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-bold text-slate-500">{getCategoryLabel(e.category)}</span>
                                         {e.category === 'partner_withdrawal' && e.partnerId && (
                                             <span className="text-[10px] font-black text-emerald-600">
-                                                {partners.find(p => p.id === e.partnerId)?.name}
+                                                {(partners || []).find(p => p.id === e.partnerId)?.name}
                                             </span>
                                         )}
                                     </div>
@@ -1533,7 +1533,7 @@ const ExpensesTab = () => {
                                     <span className="text-[10px] font-black bg-slate-100 px-2 py-0.5 rounded-full text-slate-500 uppercase">{getCategoryLabel(e.category)}</span>
                                     {e.category === 'partner_withdrawal' && e.partnerId && (
                                         <span className="text-[10px] font-black bg-emerald-50 px-2 py-0.5 rounded-full text-emerald-600">
-                                            {partners.find(p => p.id === e.partnerId)?.name}
+                                            {(partners || []).find(p => p.id === e.partnerId)?.name}
                                         </span>
                                     )}
                                     <span className="text-[10px] text-slate-400 font-medium">{new Date(e.date).toLocaleDateString('fa-IR')}</span>
@@ -1627,10 +1627,10 @@ const ExpensesTab = () => {
                                             )}
                                         </div>
                                         <div className="max-h-60 overflow-y-auto p-1">
-                                            {companies.length === 0 ? (
+                                            {(companies || []).length === 0 ? (
                                                 <div className="p-4 text-center text-slate-400 text-xs font-bold italic">کمپانی یافت نشد</div>
                                             ) : (
-                                                companies.map(c => (
+                                                (companies || []).map(c => (
                                                     <button
                                                         key={c.id}
                                                         type="button"
@@ -1655,7 +1655,7 @@ const ExpensesTab = () => {
                         {selectedCompanyId && (
                             <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 animate-in slide-in-from-top-2 duration-300">
                                 <BuildingIcon className="w-4 h-4 text-blue-500" />
-                                <span className="text-xs font-bold text-blue-700">مربوط به کمپانی: {companies.find(c => c.id === selectedCompanyId)?.name}</span>
+                                <span className="text-xs font-bold text-blue-700">مربوط به کمپانی: {(companies || []).find(c => c.id === selectedCompanyId)?.name}</span>
                             </div>
                         )}
 
@@ -1788,8 +1788,8 @@ const CompaniesTab: React.FC = () => {
     };
 
     const isCompanyInUse = (companyId: string) => {
-        const inProducts = products.some(p => p.companyId === companyId);
-        const inPurchases = purchaseInvoices.some(inv => inv.companyId === companyId);
+        const inProducts = (products || []).some(p => p.companyId === companyId);
+        const inPurchases = (purchaseInvoices || []).some(inv => inv.companyId === companyId);
         return inProducts || inPurchases;
     };
 
@@ -1813,13 +1813,13 @@ const CompaniesTab: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {companies.length === 0 ? (
+                {(companies || []).length === 0 ? (
                     <div className="col-span-full py-20 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
                         <BuildingIcon className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                         <p className="text-slate-400 font-bold text-lg">هنوز هیچ کمپانی ثبت نشده است.</p>
                     </div>
                 ) : (
-                    companies.map(company => (
+                    (companies || []).map(company => (
                         <div key={company.id} className="bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden flex flex-col">
                             <div className="p-6 flex-grow">
                                 <div className="flex items-center justify-between mb-4">
@@ -2016,14 +2016,14 @@ const PartnersTab: React.FC = () => {
     };
 
     const calculatePartnerProfit = (partnerId: string, companyId: string) => {
-        const partner = partners.find(p => p.id === partnerId);
+        const partner = (partners || []).find(p => p.id === partnerId);
         if (!partner) return 0;
         
-        const share = partner.shares.find(s => s.companyId === companyId);
+        const share = (partner.shares || []).find(s => s.companyId === companyId);
         if (!share) return 0;
 
         // 0. Company Initial Profit/Loss
-        const company = companies.find(c => c.id === companyId);
+        const company = (companies || []).find(c => c.id === companyId);
         let initialProfitBase = 0;
         if (company?.initialProfit) {
             const amount = company.initialProfit;
@@ -2037,10 +2037,10 @@ const PartnersTab: React.FC = () => {
         let totalRevenue = 0;
         let totalCOGS = 0;
 
-        saleInvoices.forEach(inv => {
-            inv.items.forEach(item => {
+        (saleInvoices || []).forEach(inv => {
+            (inv.items || []).forEach(item => {
                 if (item.type === 'product') {
-                    const product = products.find(p => p.id === item.id);
+                    const product = (products || []).find(p => p.id === item.id);
                     if (product?.companyId === companyId) {
                         const itemRevenue = (item.finalPrice || item.salePrice) * item.quantity;
                         const itemCOGS = (item.purchasePrice || 0) * item.quantity;
@@ -2058,7 +2058,7 @@ const PartnersTab: React.FC = () => {
         });
 
         // 2. Company Expenses
-        const companyExpenses = expenses.filter(e => e.companyId === companyId && e.category !== 'partner_withdrawal');
+        const companyExpenses = (expenses || []).filter(e => e.companyId === companyId && e.category !== 'partner_withdrawal');
         const totalExpenses = companyExpenses.reduce((sum, e) => sum + (e.amountBase || 0), 0);
 
         // 3. Net Profit for Company
@@ -2068,14 +2068,14 @@ const PartnersTab: React.FC = () => {
         const partnerProfit = (netProfit * share.percentage) / 100;
 
         // 5. Deduct Withdrawals
-        const partnerWithdrawals = expenses.filter(e => e.category === 'partner_withdrawal' && e.partnerId === partnerId && e.companyId === companyId);
+        const partnerWithdrawals = (expenses || []).filter(e => e.category === 'partner_withdrawal' && e.partnerId === partnerId && e.companyId === companyId);
         const totalWithdrawals = partnerWithdrawals.reduce((sum, e) => sum + (e.amountBase || 0), 0);
 
         return partnerProfit - totalWithdrawals;
     };
 
     const isShareDeletable = (partnerId: string, companyId: string) => {
-        return !expenses.some(e => e.category === 'partner_withdrawal' && e.partnerId === partnerId && e.companyId === companyId);
+        return !(expenses || []).some(e => e.category === 'partner_withdrawal' && e.partnerId === partnerId && e.companyId === companyId);
     };
 
     const handleAddPartner = async () => {
@@ -2195,13 +2195,13 @@ const PartnersTab: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-6">
-                {partners.length === 0 ? (
+                {(partners || []).length === 0 ? (
                     <div className="py-20 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
                         <UserGroupIcon className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                         <p className="text-slate-400 font-bold text-lg">هنوز هیچ شریکی ثبت نشده است.</p>
                     </div>
                 ) : (
-                    partners.map(partner => (
+                    (partners || []).map(partner => (
                         <div key={partner.id} className="bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden flex flex-col md:flex-row">
                             <div className="p-6 flex-grow border-b md:border-b-0 md:border-l border-slate-100">
                                 <div className="flex items-center justify-between mb-6">
@@ -2250,8 +2250,8 @@ const PartnersTab: React.FC = () => {
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {partner.shares.map((share, idx) => {
-                                        const company = companies.find(c => c.id === share.companyId);
+                                    {partner.shares && partner.shares.map((share, idx) => {
+                                        const company = (companies || []).find(c => c.id === share.companyId);
                                         const profit = calculatePartnerProfit(partner.id, share.companyId);
                                         return (
                                             <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col justify-between gap-3">
@@ -2283,7 +2283,7 @@ const PartnersTab: React.FC = () => {
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">کل سود قابل برداشت</p>
                                     <p className="text-2xl font-black text-blue-600">
                                         {formatCurrency(
-                                            partner.shares.reduce((sum, s) => sum + calculatePartnerProfit(partner.id, s.companyId), 0),
+                                            (partner.shares || []).reduce((sum, s) => sum + calculatePartnerProfit(partner.id, s.companyId), 0),
                                             storeSettings
                                         )}
                                     </p>
@@ -2455,7 +2455,7 @@ const PartnersTab: React.FC = () => {
                                 className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-blue-500 outline-none font-bold text-lg"
                             >
                                 <option value="">انتخاب کمپانی...</option>
-                                {companies.map(c => (
+                                {(companies || []).map(c => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
@@ -2509,7 +2509,7 @@ const PartnersTab: React.FC = () => {
 
 const PartnerStatementModal = ({ partner, onClose, onEditWithdrawal }: { partner: Partner, onClose: () => void, onEditWithdrawal: (w: Expense) => void }) => {
     const { expenses, companies, storeSettings, deletePartnerWithdrawal } = useAppContext();
-    const partnerWithdrawals = expenses.filter(e => e.partnerId === partner.id && e.category === 'partner_withdrawal');
+    const partnerWithdrawals = (expenses || []).filter(e => e.partnerId === partner.id && e.category === 'partner_withdrawal');
     
     const handlePrint = () => {
         window.print();
@@ -2543,7 +2543,7 @@ const PartnerStatementModal = ({ partner, onClose, onEditWithdrawal }: { partner
                                 </tr>
                             ) : (
                                 partnerWithdrawals.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(w => {
-                                    const company = companies.find(c => c.id === w.companyId);
+                                    const company = (companies || []).find(c => c.id === w.companyId);
                                     return (
                                         <tr key={w.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors print:border-slate-200">
                                             <td className="p-4 text-sm font-bold text-slate-600">{new Date(w.date).toLocaleDateString('fa-IR')}</td>

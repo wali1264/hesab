@@ -549,6 +549,7 @@ export interface AppState {
     editingSaleInvoiceId: string | null;
     editingPurchaseInvoiceId: string | null;
     selectedCompanyId: string | null;
+    isDataLoaded: boolean;
     // Auth State
     isAuthenticated: boolean;
     currentUser: User | null;

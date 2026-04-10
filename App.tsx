@@ -51,7 +51,7 @@ const AppContent: React.FC = () => {
       settings: hasPermission('page:settings'),
       orders: hasPermission('page:orders'),
       company_management: hasPermission('page:company_management'),
-      salary_management: hasPermission('company:manage_payroll'),
+      salary_management: hasPermission('page:salary_management'),
   }), [hasPermission]);
   
     const navLabels: { [key: string]: string } = {

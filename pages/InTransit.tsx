@@ -98,7 +98,7 @@ const InTransitMovementModal: React.FC<{
 
     useEffect(() => {
         const initialMovements: any = {};
-        invoice.items.forEach(it => {
+        (invoice.items || []).forEach(it => {
             initialMovements[it.productId] = { toTransit: 0, toReceived: 0, lotNumber: it.lotNumber, expiryDate: it.expiryDate || '' };
         });
         setMovements(initialMovements);
@@ -107,7 +107,7 @@ const InTransitMovementModal: React.FC<{
     const handleMovementChange = (pid: string, field: 'toTransit' | 'toReceived' | 'lotNumber' | 'expiryDate', value: any) => {
         setMovements(prev => {
             const current = prev[pid] || { toTransit: 0, toReceived: 0, lotNumber: '', expiryDate: '' };
-            const item = invoice.items.find(i => i.productId === pid);
+            const item = (invoice.items || []).find(i => i.productId === pid);
             if (!item) return prev;
 
             let newValue = value;
@@ -129,7 +129,7 @@ const InTransitMovementModal: React.FC<{
 
     const lotValidations = useMemo(() => {
         const validations: { [pid: string]: { isDuplicate: boolean, isMissing: boolean } } = {};
-        invoice.items.forEach(item => {
+        (invoice.items || []).forEach(item => {
             const pid = item.productId;
             const m = movements[pid];
             if (!m) {
@@ -149,13 +149,13 @@ const InTransitMovementModal: React.FC<{
             const isMissing = !lot;
 
             // Requirement: Scoped Duplicate Check (only this product)
-            const targetProduct = products.find(p => p.id === pid);
-            const warehouseDuplicate = targetProduct?.batches.some(b => b.lotNumber === lot) || false;
+            const targetProduct = (products || []).find(p => p.id === pid);
+            const warehouseDuplicate = (targetProduct?.batches || []).some(b => b.lotNumber === lot) || false;
             
             // Check other transit invoices for the SAME product with the SAME lot
-            const otherTransitDuplicate = inTransitInvoices.some(inv => 
+            const otherTransitDuplicate = (inTransitInvoices || []).some(inv => 
                 inv.id !== invoice.id && 
-                inv.items.some(it => it.productId === pid && it.lotNumber === lot)
+                (inv.items || []).some(it => it.productId === pid && it.lotNumber === lot)
             );
 
             validations[pid] = { isDuplicate: warehouseDuplicate || otherTransitDuplicate, isMissing };
@@ -176,8 +176,8 @@ const InTransitMovementModal: React.FC<{
                 </div>
                 <div className="flex-grow overflow-y-auto pt-6 -mx-4 px-4 custom-scrollbar">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-10">
-                        {invoice.items.map(item => {
-                            const product = products.find(p => p.id === item.productId);
+                        {(invoice.items || []).map(item => {
+                            const product = (products || []).find(p => p.id === item.productId);
                             const m = movements[item.productId] || { toTransit: 0, toReceived: 0, lotNumber: '', expiryDate: '' };
                             const availableInRoad = item.inTransitQty + m.toTransit;
                             const validation = lotValidations[item.productId];
@@ -194,7 +194,7 @@ const InTransitMovementModal: React.FC<{
                                         </div>
                                         <div className="text-left">
                                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">ارزش واحد</p>
-                                            <p className="font-black text-blue-600 text-sm" dir="ltr">{item.purchasePrice.toLocaleString()} {invoice.currency}</p>
+                                            <p className="font-black text-blue-600 text-sm" dir="ltr">{(item.purchasePrice || 0).toLocaleString()} {invoice.currency}</p>
                                         </div>
                                     </div>
 
@@ -355,7 +355,7 @@ const InTransit: React.FC = () => {
     const resetModal = () => { setSupplierId(''); setInvoiceNumber(''); setInvoiceDate(new Date().toISOString().split('T')[0]); setExpectedArrivalDate(''); setItems([]); setProductSearch(''); setCurrency(storeSettings.baseCurrency); setExchangeRate(''); setEditingInvoiceId(null); };
     const handleCloseModal = () => { resetModal(); setIsModalOpen(false); };
 
-    const handleEditClick = (invoice: InTransitInvoice) => { setEditingInvoiceId(invoice.id); setSupplierId(invoice.supplierId); setInvoiceNumber(invoice.invoiceNumber); setInvoiceDate(new Date(invoice.timestamp).toISOString().split('T')[0]); setExpectedArrivalDate(invoice.expectedArrivalDate || ''); setItems(invoice.items.map(i => ({ productId: i.productId, quantity: i.quantity, purchasePrice: i.purchasePrice, lotNumber: i.lotNumber, expiryDate: i.expiryDate || '', showExpiry: !!i.expiryDate }))); setCurrency(invoice.currency || storeSettings.baseCurrency); setExchangeRate(invoice.exchangeRate ? String(invoice.exchangeRate) : ''); setIsModalOpen(true); };
+    const handleEditClick = (invoice: InTransitInvoice) => { setEditingInvoiceId(invoice.id); setSupplierId(invoice.supplierId); setInvoiceNumber(invoice.invoiceNumber); setInvoiceDate(new Date(invoice.timestamp).toISOString().split('T')[0]); setExpectedArrivalDate(invoice.expectedArrivalDate || ''); setItems((invoice.items || []).map(i => ({ productId: i.productId, quantity: i.quantity, purchasePrice: i.purchasePrice, lotNumber: i.lotNumber, expiryDate: i.expiryDate || '', showExpiry: !!i.expiryDate }))); setCurrency(invoice.currency || storeSettings.baseCurrency); setExchangeRate(invoice.exchangeRate ? String(invoice.exchangeRate) : ''); setIsModalOpen(true); };
 
     const handleMovementConfirm = async (movements: any, cost?: number, desc?: string) => { 
         if (!movementInvoice) return; 
@@ -375,10 +375,10 @@ const InTransit: React.FC = () => {
 
     const handleAddItem = (product: Product) => { setItems(prev => [...prev, { productId: product.id, quantity: '', purchasePrice: '', lotNumber: '', expiryDate: '', showExpiry: false }]); setProductSearch(''); };
 
-    const totalInCurrency = useMemo(() => items.reduce((t, i) => t + (Number(i.purchasePrice || 0) * Number(i.quantity || 0)), 0), [items]);
+    const totalInCurrency = useMemo(() => (items || []).reduce((t, i) => t + (Number(i.purchasePrice || 0) * Number(i.quantity || 0)), 0), [items]);
 
     const filteredInvoices = useMemo(() => {
-        return inTransitInvoices.filter(inv => {
+        return (inTransitInvoices || []).filter(inv => {
             const t = new Date(inv.timestamp).getTime();
             const isInRange = t >= dateRange.start.getTime() && t <= dateRange.end.getTime();
             const statusMatch = (activeTab === 'active') ? (inv.status !== 'closed') : (inv.status === 'closed');
@@ -387,7 +387,7 @@ const InTransit: React.FC = () => {
     }, [inTransitInvoices, dateRange, activeTab]);
 
     const totalFilteredValueBase = useMemo(() => {
-        return filteredInvoices.reduce((sum, inv) => {
+        return (filteredInvoices || []).reduce((sum, inv) => {
             const rate = inv.exchangeRate || 1;
             const config = storeSettings.currencyConfigs[inv.currency || storeSettings.baseCurrency];
             const amountBase = (inv.currency === storeSettings.baseCurrency) ? inv.totalAmount : 
@@ -415,14 +415,14 @@ const InTransit: React.FC = () => {
                             <div>
                                 <h4 className="text-xs font-black text-slate-400 uppercase mb-3">فاکتورهای خرید صادر شده (وصولی‌ها):</h4>
                                 <div className="space-y-2">
-                                    {purchaseInvoices.filter(p => p.sourceInTransitId === viewInvoice.id).map(p => (
+                                    {(purchaseInvoices || []).filter(p => p.sourceInTransitId === viewInvoice.id).map(p => (
                                         <div key={p.id} className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex justify-between items-center">
                                             <span className="font-mono text-sm font-bold text-blue-700">{p.invoiceNumber}</span>
-                                            <span className="font-black text-blue-800" dir="ltr">{p.totalAmount.toLocaleString()} {p.currency}</span>
+                                            <span className="font-black text-blue-800" dir="ltr">{(p.totalAmount || 0).toLocaleString()} {p.currency}</span>
                                             <span className="text-[10px] font-bold text-slate-400">{new Date(p.timestamp).toLocaleDateString('fa-IR')}</span>
                                         </div>
                                     ))}
-                                    {purchaseInvoices.filter(p => p.sourceInTransitId === viewInvoice.id).length === 0 && <p className="text-center py-4 text-slate-400 text-sm">هنوز هیچ بخشی از این محموله وصول نشده است.</p>}
+                                    {(purchaseInvoices || []).filter(p => p.sourceInTransitId === viewInvoice.id).length === 0 && <p className="text-center py-4 text-slate-400 text-sm">هنوز هیچ بخشی از این محموله وصول نشده است.</p>}
                                 </div>
                             </div>
                         </div>
@@ -436,8 +436,8 @@ const InTransit: React.FC = () => {
                         <TruckIcon className="w-12 h-12 text-blue-600" /> لجستیک و زنجیره تأمین
                     </h1>
                     <div className="flex p-1 bg-slate-100 rounded-xl w-fit">
-                        <button onClick={() => setActiveTab('active')} className={`px-6 py-2 rounded-lg font-black text-sm transition-all ${activeTab === 'active' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500'}`}>جاری ({inTransitInvoices.filter(i=>i.status!=='closed').length})</button>
-                        <button onClick={() => setActiveTab('archive')} className={`px-6 py-2 rounded-lg font-black text-sm transition-all ${activeTab === 'archive' ? 'bg-white text-slate-700 shadow-md' : 'text-slate-500'}`}>آرشیو ({inTransitInvoices.filter(i=>i.status==='closed').length})</button>
+                        <button onClick={() => setActiveTab('active')} className={`px-6 py-2 rounded-lg font-black text-sm transition-all ${activeTab === 'active' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500'}`}>جاری ({(inTransitInvoices || []).filter(i=>i.status!=='closed').length})</button>
+                        <button onClick={() => setActiveTab('archive')} className={`px-6 py-2 rounded-lg font-black text-sm transition-all ${activeTab === 'archive' ? 'bg-white text-slate-700 shadow-md' : 'text-slate-500'}`}>آرشیو ({(inTransitInvoices || []).filter(i=>i.status==='closed').length})</button>
                     </div>
                 </div>
                 <button onClick={() => {resetModal(); setIsModalOpen(true);}} className="w-full md:w-auto bg-blue-600 text-white px-8 py-4 rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all font-black text-lg active:scale-95 flex items-center justify-center gap-2"><PlusIcon className="w-6 h-6"/> ثبت محموله جدید</button>
@@ -456,12 +456,12 @@ const InTransit: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredInvoices.map((invoice) => {
-                    const totalQty = invoice.items.reduce((s,i) => s + (i.atFactoryQty + i.inTransitQty + i.receivedQty), 0) || 1;
-                    const receivedRatio = (invoice.items.reduce((s,i) => s + i.receivedQty, 0) / totalQty) * 100;
+                    const totalQty = (invoice.items || []).reduce((s,i) => s + (i.atFactoryQty + i.inTransitQty + i.receivedQty), 0) || 1;
+                    const receivedRatio = ((invoice.items || []).reduce((s,i) => s + i.receivedQty, 0) / totalQty) * 100;
                     const isDelayed = activeTab === 'active' && invoice.expectedArrivalDate && new Date(invoice.expectedArrivalDate) < new Date();
                     
-                    const isLockedForDeletion = invoice.items.some(it => it.receivedQty > 0) || 
-                                                 purchaseInvoices.some(p => p.sourceInTransitId === invoice.id);
+                    const isLockedForDeletion = (invoice.items || []).some(it => it.receivedQty > 0) || 
+                                                 (purchaseInvoices || []).some(p => p.sourceInTransitId === invoice.id);
 
                     return (
                         <div key={invoice.id} className={`bg-white/80 backdrop-blur-xl p-6 rounded-3xl border-2 transition-all duration-300 relative group overflow-hidden ${isDelayed ? 'border-red-200 shadow-red-50' : 'border-transparent hover:border-blue-200 shadow-md hover:shadow-xl'}`}>
@@ -472,7 +472,7 @@ const InTransit: React.FC = () => {
                                         <h3 className="font-mono font-black text-xl text-slate-800">#{invoice.invoiceNumber || invoice.id.slice(0,8)}</h3>
                                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${invoice.currency === 'USD' ? 'bg-orange-100 text-orange-700' : (invoice.currency === 'IRT' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500')}`}>{invoice.currency}</span>
                                     </div>
-                                    <p className="text-sm font-bold text-slate-500">{suppliers.find(s => s.id === invoice.supplierId)?.name || 'تأمین‌کننده ناشناس'}</p>
+                                    <p className="text-sm font-bold text-slate-500">{(suppliers || []).find(s => s.id === invoice.supplierId)?.name || 'تأمین‌کننده ناشناس'}</p>
                                 </div>
                                 <div className="flex gap-1.5">
                                     <button onClick={() => setViewInvoice(invoice)} className="p-2 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-xl transition-colors"><EyeIcon className="w-5 h-5"/></button>
@@ -489,8 +489,8 @@ const InTransit: React.FC = () => {
                                     <div style={{ width: `${receivedRatio}%` }} className="h-full bg-emerald-500 transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.3)]"></div>
                                 </div>
                                 <div className="flex justify-between mt-3 text-[9px] font-bold text-slate-400">
-                                    <span>{invoice.items.length} ردیف کالا</span>
-                                    <span>وصول شده: {invoice.items.reduce((s,i)=>s+i.receivedQty,0)} واحد</span>
+                                    <span>{(invoice.items || []).length} ردیف کالا</span>
+                                    <span>وصول شده: {(invoice.items || []).reduce((s,i)=>s+i.receivedQty,0)} واحد</span>
                                 </div>
                             </div>
 
@@ -533,7 +533,7 @@ const InTransit: React.FC = () => {
                         <div className="flex-shrink-0 flex justify-between items-center pb-4 border-b border-slate-100"><h2 className="text-xl md:text-2xl font-black text-slate-800">{editingInvoiceId ? 'ویرایش سفارش' : 'ثبت سفارش جدید'}</h2><button onClick={handleCloseModal} className="p-2 rounded-full text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all"><XIcon /></button></div>
                         <div className="flex-grow overflow-y-auto pt-6 -mx-2 px-2 custom-scrollbar">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                                <div><label className="block text-xs font-black text-slate-500 mb-2 mr-1">تأمین کننده</label><select value={supplierId} onChange={e => setSupplierId(e.target.value)} className="w-full h-12 p-3 bg-slate-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-blue-500 transition-all font-bold outline-none"><option value="">-- انتخاب کنید --</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                                <div><label className="block text-xs font-black text-slate-500 mb-2 mr-1">تأمین کننده</label><select value={supplierId} onChange={e => setSupplierId(e.target.value)} className="w-full h-12 p-3 bg-slate-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-blue-500 transition-all font-bold outline-none"><option value="">-- انتخاب کنید --</option>{(suppliers || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
                                 <div><label className="block text-xs font-black text-slate-500 mb-2 mr-1">شماره فاکتور خرید</label><input value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} type="text" className="w-full h-12 p-3 bg-slate-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-blue-500 transition-all font-bold outline-none" placeholder="شماره بارنامه یا فاکتور" /></div>
                                 <div><label className="block text-xs font-black text-slate-500 mb-2 mr-1">زمان احتمالی ورود به انبار</label><input type="date" value={expectedArrivalDate} onChange={e => setExpectedArrivalDate(e.target.value)} className="w-full h-12 p-3 bg-slate-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-blue-500 transition-all outline-none font-bold" /></div>
                             </div>
@@ -577,13 +577,13 @@ const InTransit: React.FC = () => {
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2"><SearchIcon className="text-slate-300 w-6 h-6 ml-1" /></div>
                                 {productSearch && (
                                     <div className="absolute z-20 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 max-h-60 overflow-y-auto">
-                                        {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(p => <div key={p.id} onClick={() => handleAddItem(p)} className="p-4 hover:bg-blue-50 cursor-pointer font-bold border-b border-slate-50 last:border-0">{p.name}</div>)}
+                                        {(products || []).filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(p => <div key={p.id} onClick={() => handleAddItem(p)} className="p-4 hover:bg-blue-50 cursor-pointer font-bold border-b border-slate-50 last:border-0">{p.name}</div>)}
                                     </div>
                                 )}
                             </div>
                             <div className="space-y-4 mb-8">
-                                {items.map((item, idx) => {
-                                    const product = products.find(p => p.id === item.productId);
+                                {(items || []).map((item, idx) => {
+                                    const product = (products || []).find(p => p.id === item.productId);
                                     if (!product) return null;
                                     return (
                                         <div key={idx} className="p-4 rounded-2xl border-2 bg-slate-50/50 border-slate-100">

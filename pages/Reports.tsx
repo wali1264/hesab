@@ -30,7 +30,7 @@ const Reports: React.FC = () => {
 
     // --- Calculations (Unified for both views) ---
     const salesData = useMemo(() => {
-        const filteredInvoices = saleInvoices.filter(inv => {
+        const filteredInvoices = (saleInvoices || []).filter(inv => {
             const invTime = new Date(inv.timestamp).getTime();
             return invTime >= dateRange.start.getTime() && invTime <= dateRange.end.getTime();
         });
@@ -48,14 +48,14 @@ const Reports: React.FC = () => {
                     const discountBase = config?.method === 'multiply' ? (inv.totalDiscount / rate) : (inv.totalDiscount * rate);
                     totalDiscountsGivenBase += discountBase;
                 }
-                inv.items.forEach(item => { 
+                (inv.items || []).forEach(item => { 
                     if (item.type === 'product') {
                         totalCOGS += (item.purchasePrice || 0) * item.quantity; 
                     }
                 });
             } else if (inv.type === 'return') {
                 returnsAmountBase += amountBase;
-                inv.items.forEach(item => { 
+                (inv.items || []).forEach(item => { 
                     if (item.type === 'product') {
                         totalCOGS -= (item.purchasePrice || 0) * item.quantity; 
                     }
@@ -64,7 +64,7 @@ const Reports: React.FC = () => {
         });
 
         const netSales = grossRevenueBase - returnsAmountBase;
-        const totalExpensesInRange = expenses.filter(exp => {
+        const totalExpensesInRange = (expenses || []).filter(exp => {
             const expTime = new Date(exp.date).getTime();
             return expTime >= dateRange.start.getTime() && expTime <= dateRange.end.getTime();
         }).reduce((sum, exp) => sum + (exp.amountBase || exp.amount), 0);
@@ -73,7 +73,7 @@ const Reports: React.FC = () => {
         const netIncome = grossProfit - totalExpensesInRange;
 
         const topProducts = filteredInvoices
-            .flatMap(inv => inv.items)
+            .flatMap(inv => inv.items || [])
             .filter(item => item.type === 'product')
             .reduce((acc, item) => {
                 const existing = acc.find(p => p.id === item.id);
@@ -88,12 +88,12 @@ const Reports: React.FC = () => {
     }, [saleInvoices, expenses, dateRange]);
 
     const inventoryData = useMemo(() => {
-        const totalBookValue = products.reduce((sum, p) => sum + p.batches.reduce((batchSum, b) => batchSum + (b.stock * b.purchasePrice), 0), 0);
-        const totalSalesValue = products.reduce((sum, p) => {
-            const totalStock = p.batches.reduce((s, b) => s + b.stock, 0);
+        const totalBookValue = (products || []).reduce((sum, p) => sum + (p.batches || []).reduce((batchSum, b) => batchSum + (b.stock * b.purchasePrice), 0), 0);
+        const totalSalesValue = (products || []).reduce((sum, p) => {
+            const totalStock = (p.batches || []).reduce((s, b) => s + b.stock, 0);
             return sum + (totalStock * p.salePrice);
         }, 0);
-        const totalItems = products.reduce((sum, p) => sum + p.batches.reduce((batchSum, b) => batchSum + b.stock, 0), 0);
+        const totalItems = (products || []).reduce((sum, p) => sum + (p.batches || []).reduce((batchSum, b) => batchSum + b.stock, 0), 0);
         return { totalBookValue, totalSalesValue, totalItems, projectedProfit: totalSalesValue - totalBookValue };
     }, [products]);
 
@@ -102,10 +102,10 @@ const Reports: React.FC = () => {
         let totalValueBase = 0;
         let totalPrepaymentsBase = 0;
         
-        inTransitInvoices.forEach(inv => {
+        (inTransitInvoices || []).forEach(inv => {
             const rate = inv.exchangeRate || 1;
             const config = storeSettings.currencyConfigs[inv.currency || baseCurrency];
-            const itemsValBase = inv.items.reduce((s, it) => {
+            const itemsValBase = (inv.items || []).reduce((s, it) => {
                 const priceBase = (inv.currency || baseCurrency) === baseCurrency 
                     ? it.purchasePrice 
                     : (config?.method === 'multiply' ? it.purchasePrice / rate : it.purchasePrice * rate);
@@ -116,32 +116,32 @@ const Reports: React.FC = () => {
             totalPrepaymentsBase += prepaymentBase;
         });
 
-        return { totalValueBase, totalPrepaymentsBase, orderCount: inTransitInvoices.length };
+        return { totalValueBase, totalPrepaymentsBase, orderCount: (inTransitInvoices || []).length };
     }, [inTransitInvoices, storeSettings]);
 
     const depositData = useMemo(() => {
         const baseCurrency = storeSettings.baseCurrency || 'AFN';
-        const totalBase = depositHolders.reduce((s, h) => s + (h.balanceAFN || 0), 0);
-        const totalUSD = depositHolders.reduce((s, h) => s + (h.balanceUSD || 0), 0);
-        const totalIRT = depositHolders.reduce((s, h) => s + (h.balanceIRT || 0), 0);
-        const transactionsInRange = depositTransactions.filter(t => {
+        const totalBase = (depositHolders || []).reduce((s, h) => s + (h.balanceAFN || 0), 0);
+        const totalUSD = (depositHolders || []).reduce((s, h) => s + (h.balanceUSD || 0), 0);
+        const totalIRT = (depositHolders || []).reduce((s, h) => s + (h.balanceIRT || 0), 0);
+        const transactionsInRange = (depositTransactions || []).filter(t => {
             const tTime = new Date(t.date).getTime();
             return tTime >= dateRange.start.getTime() && tTime <= dateRange.end.getTime();
         });
-        return { totalBase, totalUSD, totalIRT, txCount: transactionsInRange.length, holdersCount: depositHolders.length };
+        return { totalBase, totalUSD, totalIRT, txCount: transactionsInRange.length, holdersCount: (depositHolders || []).length };
     }, [depositHolders, depositTransactions, dateRange, storeSettings]);
 
     // --- Virtual Cash Position (Liquidity) Calculation ---
     const cashPosition = useMemo(() => {
         const baseCurrency = storeSettings.baseCurrency || 'AFN';
-        const cashInSales = saleInvoices.reduce((s, i) => {
+        const cashInSales = (saleInvoices || []).reduce((s, i) => {
             // Only add to cash if it's not a credit sale and NOT an intermediary sale
             if (i.type === 'sale' && !i.customerId && !i.supplierIntermediaryId) return s + i.totalAmountAFN;
             if (i.type === 'return' && !i.customerId && !i.supplierIntermediaryId) return s - i.totalAmountAFN;
             return s;
         }, 0);
 
-        const cashInCollections = customerTransactions.filter(t => t.type === 'payment' && !t.isHistorical && t.isCash !== false).reduce((s, t) => {
+        const cashInCollections = (customerTransactions || []).filter(t => t.type === 'payment' && !t.isHistorical && t.isCash !== false).reduce((s, t) => {
             const rate = (t as any).exchangeRate || 1;
             const currency = (t as any).currency || baseCurrency;
             const config = storeSettings.currencyConfigs[currency];
@@ -149,7 +149,7 @@ const Reports: React.FC = () => {
             return s + amountBase;
         }, 0);
 
-        const cashOutToCustomers = customerTransactions.filter(t => (t.type === 'receipt' || t.type === 'sale_return') && !t.isHistorical && t.isCash !== false).reduce((s, t) => {
+        const cashOutToCustomers = (customerTransactions || []).filter(t => (t.type === 'receipt' || t.type === 'sale_return') && !t.isHistorical && t.isCash !== false).reduce((s, t) => {
             const rate = (t as any).exchangeRate || 1;
             const currency = (t as any).currency || baseCurrency;
             const config = storeSettings.currencyConfigs[currency];
@@ -157,14 +157,14 @@ const Reports: React.FC = () => {
             return s + amountBase;
         }, 0);
 
-        const cashInDeposits = depositTransactions.filter(t => t.type === 'deposit' && t.isCash !== false && !t.isHistorical).reduce((s, t) => {
+        const cashInDeposits = (depositTransactions || []).filter(t => t.type === 'deposit' && t.isCash !== false && !t.isHistorical).reduce((s, t) => {
             const rate = (t as any).exchangeRate || 1; 
             const config = storeSettings.currencyConfigs[t.currency || storeSettings.baseCurrency];
             const amountBase = config?.method === 'multiply' ? t.amount / rate : t.amount * rate;
             return s + amountBase;
         }, 0);
 
-        const cashOutSuppliers = supplierTransactions.filter(t => t.type === 'payment' && !t.isHistorical && t.isCash !== false).reduce((s, t) => {
+        const cashOutSuppliers = (supplierTransactions || []).filter(t => t.type === 'payment' && !t.isHistorical && t.isCash !== false).reduce((s, t) => {
             const rate = (t as any).exchangeRate || 1;
             const currency = (t as any).currency || baseCurrency;
             const config = storeSettings.currencyConfigs[currency];
@@ -172,7 +172,7 @@ const Reports: React.FC = () => {
             return s + amountBase;
         }, 0);
 
-        const cashInFromSuppliers = supplierTransactions.filter(t => (t.type === 'receipt' || t.type === 'purchase_return') && !t.isHistorical && t.isCash !== false).reduce((s, t) => {
+        const cashInFromSuppliers = (supplierTransactions || []).filter(t => (t.type === 'receipt' || t.type === 'purchase_return') && !t.isHistorical && t.isCash !== false).reduce((s, t) => {
             const rate = (t as any).exchangeRate || 1;
             const currency = (t as any).currency || baseCurrency;
             const config = storeSettings.currencyConfigs[currency];
@@ -180,9 +180,9 @@ const Reports: React.FC = () => {
             return s + amountBase;
         }, 0);
 
-        const cashOutExpenses = expenses.filter(e => !e.isHistorical).reduce((s, e) => s + (e.amountBase || e.amount), 0);
+        const cashOutExpenses = (expenses || []).filter(e => !e.isHistorical).reduce((s, e) => s + (e.amountBase || e.amount), 0);
 
-        const cashOutDeposits = depositTransactions.filter(t => t.type === 'withdrawal' && t.isCash !== false && !t.isHistorical).reduce((s, t) => {
+        const cashOutDeposits = (depositTransactions || []).filter(t => t.type === 'withdrawal' && t.isCash !== false && !t.isHistorical).reduce((s, t) => {
             const rate = (t as any).exchangeRate || 1;
             const config = storeSettings.currencyConfigs[t.currency || storeSettings.baseCurrency];
             const amountBase = config?.method === 'multiply' ? t.amount / rate : t.amount * rate;
@@ -196,21 +196,21 @@ const Reports: React.FC = () => {
         const invVal = inventoryData.totalBookValue;
         
         // Customers: Positive balance = they owe us (Receivable), Negative balance = we owe them (Payable)
-        const custReceivables = customers.reduce((sum, c) => sum + (c.balance > 0 ? c.balance : 0), 0);
-        const custPayables = customers.reduce((sum, c) => sum + (c.balance < 0 ? Math.abs(c.balance) : 0), 0);
+        const custReceivables = (customers || []).reduce((sum, c) => sum + (c.balance > 0 ? c.balance : 0), 0);
+        const custPayables = (customers || []).reduce((sum, c) => sum + (c.balance < 0 ? Math.abs(c.balance) : 0), 0);
         
         // Suppliers: Positive balance = we owe them (Payable), Negative balance = they owe us (Receivable)
-        const suppPayables = suppliers.reduce((sum, s) => sum + (s.balance > 0 ? s.balance : 0), 0);
-        const suppReceivables = suppliers.reduce((sum, s) => sum + (s.balance < 0 ? Math.abs(s.balance) : 0), 0);
+        const suppPayables = (suppliers || []).reduce((sum, s) => sum + (s.balance > 0 ? s.balance : 0), 0);
+        const suppReceivables = (suppliers || []).reduce((sum, s) => sum + (s.balance < 0 ? Math.abs(s.balance) : 0), 0);
         
         const deferredAssets = supplyChainData.totalValueBase;
         
         // Segregate deposits into assets (when they owe us - Besan-kari) and liabilities (when we owe them - Amanat)
-        const depositAssets = depositHolders.reduce((s, h) => {
+        const depositAssets = (depositHolders || []).reduce((s, h) => {
             const baseBalance = h.balance !== undefined ? h.balance : h.balanceAFN; // Fallback for legacy data
             return s + (baseBalance < 0 ? Math.abs(baseBalance) : 0);
         }, 0);
-        const depositLiabilities = depositHolders.reduce((s, h) => {
+        const depositLiabilities = (depositHolders || []).reduce((s, h) => {
             const baseBalance = h.balance !== undefined ? h.balance : h.balanceAFN;
             return s + (baseBalance > 0 ? baseBalance : 0);
         }, 0);
@@ -238,7 +238,7 @@ const Reports: React.FC = () => {
     }, [inventoryData, customers, suppliers, supplyChainData, cashPosition, depositHolders, wastageRecords]);
 
     const collectionsData = useMemo(() => {
-        const filtered = customerTransactions.filter(t => {
+        const filtered = (customerTransactions || []).filter(t => {
             const tTime = new Date(t.date).getTime();
             return t.type === 'payment' && tTime >= dateRange.start.getTime() && tTime <= dateRange.end.getTime();
         });
@@ -250,7 +250,7 @@ const Reports: React.FC = () => {
                 return s + amountBase;
             }, 0), 
             count: filtered.length,
-            details: filtered.map(t => ({ ...t, customerName: customers.find(c => c.id === t.customerId)?.name || 'ناشناس' }))
+            details: filtered.map(t => ({ ...t, customerName: (customers || []).find(c => c.id === t.customerId)?.name || 'ناشناس' }))
         };
     }, [customerTransactions, dateRange, customers, storeSettings]);
 
@@ -259,7 +259,7 @@ const Reports: React.FC = () => {
         const results: Map<string, { id: string, name: string, quantity: number, totalValue: number, itemsPerPackage: number }> = new Map();
 
         if (statsType === 'purchases') {
-            const filtered = purchaseInvoices.filter(inv => {
+            const filtered = (purchaseInvoices || []).filter(inv => {
                 const t = new Date(inv.timestamp).getTime();
                 const inRange = t >= dateRange.start.getTime() && t <= dateRange.end.getTime();
                 const matchEntity = !selectedEntityId || inv.supplierId === selectedEntityId;
@@ -269,7 +269,7 @@ const Reports: React.FC = () => {
             filtered.forEach(inv => {
                 const rate = inv.exchangeRate || 1;
                 const config = storeSettings.currencyConfigs[inv.currency || storeSettings.baseCurrency];
-                inv.items.forEach(item => {
+                (inv.items || []).forEach(item => {
                     const priceBase = (inv.currency || storeSettings.baseCurrency) === storeSettings.baseCurrency ? item.purchasePrice : (config?.method === 'multiply' ? item.purchasePrice / rate : item.purchasePrice * rate);
                     const valueBase = priceBase * item.quantity;
                     const existing = results.get(item.productId);
@@ -277,7 +277,7 @@ const Reports: React.FC = () => {
                         existing.quantity += item.quantity;
                         existing.totalValue += valueBase;
                     } else {
-                        const product = products.find(p => p.id === item.productId);
+                        const product = (products || []).find(p => p.id === item.productId);
                         results.set(item.productId, {
                             id: item.productId,
                             name: item.productName,
@@ -289,7 +289,7 @@ const Reports: React.FC = () => {
                 });
             });
         } else {
-            const filtered = saleInvoices.filter(inv => {
+            const filtered = (saleInvoices || []).filter(inv => {
                 const t = new Date(inv.timestamp).getTime();
                 const inRange = t >= dateRange.start.getTime() && t <= dateRange.end.getTime();
                 const matchEntity = !selectedEntityId || inv.customerId === selectedEntityId;
@@ -298,7 +298,7 @@ const Reports: React.FC = () => {
 
             filtered.forEach(inv => {
                 const rate = inv.exchangeRate || 1;
-                inv.items.forEach(item => {
+                (inv.items || []).forEach(item => {
                     if (item.type !== 'product') return;
                     const originalPriceBase = item.finalPrice ?? item.salePrice;
                     const valueBase = originalPriceBase * item.quantity;
@@ -327,17 +327,17 @@ const Reports: React.FC = () => {
         if (!selectedProductId) return [];
         
         if (statsType === 'purchases') {
-            return purchaseInvoices
+            return (purchaseInvoices || [])
                 .filter(inv => {
                     const t = new Date(inv.timestamp).getTime();
                     const inRange = t >= dateRange.start.getTime() && t <= dateRange.end.getTime();
                     const matchEntity = !selectedEntityId || inv.supplierId === selectedEntityId;
-                    const hasProduct = inv.items.some(it => it.productId === selectedProductId);
+                    const hasProduct = (inv.items || []).some(it => it.productId === selectedProductId);
                     return inRange && matchEntity && hasProduct;
                 })
                 .flatMap(inv => {
-                    const supplier = suppliers.find(s => s.id === inv.supplierId);
-                    return inv.items
+                    const supplier = (suppliers || []).find(s => s.id === inv.supplierId);
+                    return (inv.items || [])
                         .filter(it => it.productId === selectedProductId)
                         .map(it => {
                             const rate = inv.exchangeRate || 1;
@@ -357,17 +357,17 @@ const Reports: React.FC = () => {
                         });
                 }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         } else {
-            return saleInvoices
+            return (saleInvoices || [])
                 .filter(inv => {
                     const t = new Date(inv.timestamp).getTime();
                     const inRange = t >= dateRange.start.getTime() && t <= dateRange.end.getTime();
                     const matchEntity = !selectedEntityId || inv.customerId === selectedEntityId;
-                    const hasProduct = inv.items.some(it => it.id === selectedProductId && it.type === 'product');
+                    const hasProduct = (inv.items || []).some(it => it.id === selectedProductId && it.type === 'product');
                     return inRange && matchEntity && hasProduct && inv.type === 'sale';
                 })
                 .flatMap(inv => {
-                    const customer = customers.find(c => c.id === inv.customerId);
-                    return inv.items
+                    const customer = (customers || []).find(c => c.id === inv.customerId);
+                    return (inv.items || [])
                         .filter(it => it.id === selectedProductId && it.type === 'product')
                         .map(it => {
                             const originalItem = it as InvoiceItem;
@@ -748,7 +748,7 @@ const Reports: React.FC = () => {
                     <div className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm max-h-[60vh] overflow-y-auto">
                         <h3 className="font-black text-slate-800 mb-6 flex items-center gap-2"><ReportsIcon className="w-6 h-6 text-blue-50"/> تاریخچه فعالیت کارکنان</h3>
                         <div className="space-y-4">
-                            {activities.filter(a => {
+                            {(activities || []).filter(a => {
                                 const t = new Date(a.timestamp).getTime();
                                 return t >= dateRange.start.getTime() && t <= dateRange.end.getTime();
                             }).map(act => (

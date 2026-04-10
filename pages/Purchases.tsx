@@ -50,7 +50,7 @@ const ReturnModal: React.FC<{ invoice: PurchaseInvoice, onClose: () => void, onS
                 </div>
                 <div className="flex-grow overflow-y-auto pt-4 -mx-2 px-2">
                     <div className="space-y-3">
-                        {invoice.items.map((item, idx) => (
+                        {(invoice.items || []).map((item, idx) => (
                             <div key={`${item.productId}-${item.lotNumber}-${idx}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
                                 <div>
                                     <p className="font-semibold text-sm">{item.productName}</p>
@@ -85,13 +85,15 @@ const Purchases: React.FC = () => {
         purchaseInvoices, suppliers, products, companies,
         addPurchaseInvoice, updatePurchaseInvoice, 
         editingPurchaseInvoiceId, beginEditPurchase, cancelEditPurchase,
-        addPurchaseReturn, hasPermission, storeSettings, fetchSectionData
+        addPurchaseReturn, hasPermission, storeSettings, fetchSectionData,
+        isDataLoaded
     } = useAppContext();
 
     useEffect(() => {
         fetchSectionData(['invoices']);
     }, [fetchSectionData]);
 
+    const [isSaving, setIsSaving] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [toast, setToast] = useState('');
     const [invoiceToPrint, setInvoiceToPrint] = useState<PurchaseInvoice | null>(null);
@@ -221,7 +223,7 @@ const Purchases: React.FC = () => {
         setSupplierId(invoice.supplierId);
         setInvoiceNumber(invoice.invoiceNumber);
         setInvoiceDate(new Date(invoice.timestamp).toISOString().split('T')[0]);
-        setItems(invoice.items.map(i => ({
+        setItems((invoice.items || []).map(i => ({
             productId: i.productId,
             quantity: i.quantity,
             purchasePrice: i.purchasePrice,
@@ -291,7 +293,7 @@ const Purchases: React.FC = () => {
 
     const filteredProducts = useMemo(() => {
         if (!productSearch) return [];
-        return products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()));
+        return (products || []).filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()));
     }, [productSearch, products]);
 
     const filteredInvoices = useMemo(() => {
@@ -299,7 +301,7 @@ const Purchases: React.FC = () => {
         const startTime = dateRange.start.getTime();
         const endTime = dateRange.end.getTime();
 
-        return purchaseInvoices.filter(inv => {
+        return (purchaseInvoices || []).filter(inv => {
             const invTime = new Date(inv.timestamp).getTime();
             return invTime >= startTime && invTime <= endTime;
         });
@@ -322,14 +324,14 @@ const Purchases: React.FC = () => {
             );
             
             // 2. Check for duplicates in the existing warehouse (Scoped to the product)
-            const targetProduct = products.find(p => p.id === pid);
-            const externalDuplicate = targetProduct?.batches.some(b => {
+            const targetProduct = (products || []).find(p => p.id === pid);
+            const externalDuplicate = (targetProduct?.batches || []).some(b => {
                 if (b.lotNumber !== lot) return false;
                 if (!editingPurchaseInvoiceId) return true;
                 
                 // If editing, exclude the record that belongs to this specific invoice being edited
-                const originalInvoice = purchaseInvoices.find(inv => inv.id === editingPurchaseInvoiceId);
-                const isFromThisInvoice = originalInvoice?.items.some(oi => oi.lotNumber === lot && oi.productId === pid);
+                const originalInvoice = (purchaseInvoices || []).find(inv => inv.id === editingPurchaseInvoiceId);
+                const isFromThisInvoice = (originalInvoice?.items || []).some(oi => oi.lotNumber === lot && oi.productId === pid);
                 return !isFromThisInvoice;
             }) || false;
 
@@ -380,15 +382,25 @@ const Purchases: React.FC = () => {
             costDescription
         };
 
-        const result = await (editingPurchaseInvoiceId
-            ? updatePurchaseInvoice(invoiceData as any)
-            : addPurchaseInvoice(invoiceData as any));
+        if (isSaving) return;
+        setIsSaving(true);
 
-        if (!result.success) {
-            showToast(result.message);
-        } else {
-            showToast("عملیات با موفقیت انجام شد.");
-            handleCloseModal();
+        try {
+            const result = await (editingPurchaseInvoiceId
+                ? updatePurchaseInvoice(invoiceData as any)
+                : addPurchaseInvoice(invoiceData as any));
+
+            if (!result.success) {
+                showToast(result.message);
+            } else {
+                showToast("عملیات با موفقیت انجام شد.");
+                handleCloseModal();
+            }
+        } catch (error: any) {
+            console.error("Save Invoice Error:", error);
+            showToast("خطا در برقراری ارتباط با سرور.");
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -410,7 +422,7 @@ const Purchases: React.FC = () => {
             {invoiceToPrint && (
                  <PurchasePrintPreviewModal 
                     invoice={invoiceToPrint} 
-                    supplier={suppliers.find(s => s.id === invoiceToPrint.supplierId)}
+                    supplier={(suppliers || []).find(s => s.id === invoiceToPrint.supplierId)}
                     onClose={() => setInvoiceToPrint(null)} 
                 />
             )}
@@ -461,7 +473,13 @@ const Purchases: React.FC = () => {
                                         )}
                                     </div>
                                 </td>
-                                <td className="p-4 text-slate-700 text-lg">{suppliers.find(s => s.id === invoice.supplierId)?.name || 'ناشناس'}</td>
+                                <td className="p-4 text-slate-700 text-lg">
+                                    {!isDataLoaded ? (
+                                        <span className="animate-pulse text-slate-300">...</span>
+                                    ) : (
+                                        (suppliers || []).find(s => s.id === invoice.supplierId)?.name || 'ناشناس'
+                                    )}
+                                </td>
                                 <td className="p-4 text-slate-700 text-lg">{formatCurrency(invoice.totalAmount, storeSettings, getInvoiceCurrencyName(invoice))}</td>
                                 <td className="p-4 text-slate-500 text-lg">
                                     <div className="flex flex-col items-center">
@@ -510,7 +528,7 @@ const Purchases: React.FC = () => {
                            </div>
                         </div>
                          <div className="space-y-2 text-md">
-                            <div className="flex justify-between"><span className="text-slate-500">تأمین کننده:</span> <span className="font-semibold">{suppliers.find(s => s.id === invoice.supplierId)?.name || 'ناشناس'}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-500">تأمین کننده:</span> <span className="font-semibold">{(suppliers || []).find(s => s.id === invoice.supplierId)?.name || 'ناشناس'}</span></div>
                             <div className="flex justify-between">
                                 <span className="text-slate-500">تاریخ:</span> 
                                 <div className="flex flex-col items-end">
@@ -545,7 +563,7 @@ const Purchases: React.FC = () => {
                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                 <select value={supplierId} onChange={e => setSupplierId(e.target.value)} className="w-full h-12 p-3 bg-white/80 border border-gray-300 rounded-lg form-input outline-none focus:ring-4 focus:ring-blue-100" required>
                                     <option value="">-- انتخاب تأمین کننده --</option>
-                                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    {(suppliers || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </select>
                                 <input value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} type="text" className="w-full h-12 p-3 bg-white/80 border border-gray-300 rounded-lg form-input outline-none focus:ring-4 focus:ring-blue-100" placeholder="شماره فاکتور (اختیاری)" />
                                 <JalaliDateInput value={invoiceDate} onChange={setInvoiceDate} />
@@ -610,7 +628,7 @@ const Purchases: React.FC = () => {
                                 </div>
                                 {filteredProducts.length > 0 && (
                                     <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg max-h-52 overflow-y-auto border">
-                                        {filteredProducts.map(p => (
+                                        {(filteredProducts || []).map(p => (
                                             <div key={p.id} onClick={() => handleAddItem(p)} className="p-3 hover:bg-blue-100/50 cursor-pointer">{p.name}</div>
                                         ))}
                                     </div>
@@ -618,8 +636,8 @@ const Purchases: React.FC = () => {
                            </div>
 
                            <div className="space-y-3 mt-4">
-                                {items.map((item, index) => {
-                                    const product = products.find(p => p.id === item.productId);
+                                {(items || []).map((item, index) => {
+                                    const product = (products || []).find(p => p.id === item.productId);
                                     if (!product) return null;
                                     const validation = lotValidations[index];
                                     return (
@@ -708,10 +726,10 @@ const Purchases: React.FC = () => {
                                                                     )}
                                                                 </div>
                                                                 <div className="max-h-40 overflow-y-auto no-scrollbar">
-                                                                    {companies.length === 0 ? (
+                                                                    {(companies || []).length === 0 ? (
                                                                         <div className="p-4 text-center text-slate-400 text-xs">کمپانی ثبت نشده است</div>
                                                                     ) : (
-                                                                        companies.map(c => (
+                                                                        (companies || []).map(c => (
                                                                             <button
                                                                                 key={c.id}
                                                                                 type="button"
@@ -786,10 +804,10 @@ const Purchases: React.FC = () => {
                                <button 
                                     type="button" 
                                     onClick={handleSaveInvoice} 
-                                    disabled={hasAnyValidationError || items.length === 0}
-                                    className={`flex-1 px-8 py-3 rounded-lg text-white font-semibold transition-all ${hasAnyValidationError || items.length === 0 ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 btn-primary'}`}
+                                    disabled={hasAnyValidationError || items.length === 0 || isSaving}
+                                    className={`flex-1 px-8 py-3 rounded-lg text-white font-semibold transition-all ${hasAnyValidationError || items.length === 0 || isSaving ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 btn-primary'}`}
                                 >
-                                    {editingPurchaseInvoiceId ? 'بروزرسانی' : 'ذخیره نهایی'}
+                                    {isSaving ? 'در حال ذخیره...' : (editingPurchaseInvoiceId ? 'بروزرسانی' : 'ذخیره نهایی')}
                                 </button>
                            </div>
                         </div>

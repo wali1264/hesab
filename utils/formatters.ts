@@ -1,3 +1,4 @@
+import { numberToPersianWords as n2pw } from './numberToWords';
 import type { PackageUnits, StoreSettings } from '../types';
 
 export const toEnglishDigits = (str: string): string => {
@@ -65,55 +66,7 @@ export const formatBalance = (amount: number, locale: string = 'fa-IR'): string 
 };
 
 export const numberToPersianWords = (num: number): string => {
-    if (num === 0) return 'صفر';
-
-    const units = ['', 'یک', 'دو', 'سه', 'چهار', 'پنج', 'شش', 'هفت', 'هشت', 'نه'];
-    const teens = ['ده', 'یازده', 'دوازده', 'سیزده', 'چهارده', 'پانزده', 'شانزده', 'هفده', 'هجده', 'نوزده'];
-    const tens = ['', '', 'بیست', 'سی', 'چهل', 'پنجاه', 'شصت', 'هفتاد', 'هشتاد', 'نود'];
-    const hundreds = ['', 'یکصد', 'دویست', 'سیصد', 'چهارصد', 'پانصد', 'ششصد', 'هفتصد', 'هشتصد', 'نهصد'];
-    const thousands = ['', 'هزار', 'میلیون', 'میلیارد', 'تریلیون'];
-
-    let numStr = String(Math.round(num || 0));
-    if (numStr.length > 15) return 'عدد بسیار بزرگ';
-
-    const groups = [];
-    while (numStr.length > 0) {
-        groups.push(numStr.slice(-3));
-        numStr = numStr.slice(0, -3);
-    }
-
-    let words = [];
-    for (let i = groups.length - 1; i >= 0; i--) {
-        const group = parseInt(groups[i], 10);
-        if (group === 0) continue;
-
-        const groupWords = [];
-        const h = Math.floor(group / 100);
-        const t = Math.floor((group % 100) / 10);
-        const u = group % 10;
-
-        if (h > 0) {
-            groupWords.push(hundreds[h]);
-        }
-
-        if (t === 1) {
-            groupWords.push(teens[u]);
-        } else {
-            if (t > 1) {
-                groupWords.push(tens[t]);
-            }
-            if (u > 0) {
-                groupWords.push(units[u]);
-            }
-        }
-        
-        words.push(groupWords.join(' و '));
-        if (i > 0) {
-            words.push(thousands[i]);
-        }
-    }
-
-    return words.join(' و ');
+    return n2pw(num);
 };
 
 const persianDigitsMap: { [key: string]: string } = { '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9' };

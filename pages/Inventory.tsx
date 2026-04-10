@@ -12,7 +12,8 @@ const Inventory: React.FC = () => {
     const { 
         products, addProduct, updateProduct, deleteProduct, storeSettings, hasPermission,
         saleInvoices, purchaseInvoices, inTransitInvoices,
-        companies, selectedCompanyId, setSelectedCompanyId, fetchSectionData
+        companies, selectedCompanyId, setSelectedCompanyId, fetchSectionData,
+        isDataLoaded
     } = useAppContext();
     
     useEffect(() => {
@@ -63,14 +64,14 @@ const Inventory: React.FC = () => {
     ) => {
         let result;
         if (editingProduct) {
-            const isLocked = saleInvoices.some(inv => 
-                inv.items.some(item => item.type === 'product' && item.id === editingProduct.id && 
-                item.batchDeductions?.some(d => d.batchId === editingProduct.batches[0]?.id))
+            const isLocked = (saleInvoices || []).some(inv => 
+                (inv.items || []).some(item => item.type === 'product' && item.id === editingProduct.id && 
+                (item.batchDeductions || []).some(d => d.batchId === (editingProduct.batches || [])[0]?.id))
             );
 
             const updatedProduct = { ...editingProduct, ...productData };
             // If the first batch has no sales, we can update its details too
-            if (!isLocked && updatedProduct.batches.length > 0) {
+            if (!isLocked && (updatedProduct.batches || []).length > 0) {
                 updatedProduct.batches[0] = { ...updatedProduct.batches[0], ...firstBatchData };
             }
             result = updateProduct(updatedProduct);
@@ -87,15 +88,15 @@ const Inventory: React.FC = () => {
     
     // Check if product is referenced in any invoice
     const isProductUsed = (productId: string) => {
-        const hasSale = saleInvoices.some(inv => inv.items.some(item => item.id === productId));
-        const hasPurchase = purchaseInvoices.some(inv => inv.items.some(item => item.productId === productId));
-        const hasInTransit = inTransitInvoices.some(inv => inv.items.some(item => item.productId === productId));
+        const hasSale = (saleInvoices || []).some(inv => (inv.items || []).some(item => item.id === productId));
+        const hasPurchase = (purchaseInvoices || []).some(inv => (inv.items || []).some(item => item.productId === productId));
+        const hasInTransit = (inTransitInvoices || []).some(inv => (inv.items || []).some(item => item.productId === productId));
         return hasSale || hasPurchase || hasInTransit;
     };
 
-    const filteredProducts = products.filter(p => {
+    const filteredProducts = (products || []).filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.batches.some(b => b.lotNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+            (p.batches || []).some(b => b.lotNumber.toLowerCase().includes(searchTerm.toLowerCase()));
         
         const matchesCompany = !selectedCompanyId || p.companyId === selectedCompanyId;
         
@@ -152,7 +153,7 @@ const Inventory: React.FC = () => {
                                             </button>
                                             <div className="my-1 border-t border-slate-50"></div>
                                             <div className="max-h-60 overflow-y-auto">
-                                                {companies.map(company => (
+                                                {(companies || []).map(company => (
                                                     <button
                                                         key={company.id}
                                                         onClick={() => { setSelectedCompanyId(company.id); setIsCompanyDropdownOpen(false); }}
@@ -185,8 +186,17 @@ const Inventory: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredProducts.length > 0 ? filteredProducts.map((product) => {
-                                const totalStock = product.batches.reduce((sum, b) => sum + b.stock, 0);
+                            {!isDataLoaded ? (
+                                <tr>
+                                    <td colSpan={5} className="text-center p-16">
+                                        <div className="flex flex-col items-center justify-center space-y-4">
+                                            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                            <p className="text-slate-500 font-bold">در حال بارگذاری اطلاعات انبار...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredProducts.length > 0 ? filteredProducts.map((product) => {
+                                const totalStock = (product.batches || []).reduce((sum, b) => sum + b.stock, 0);
                                 const isExpanded = !!expandedProducts[product.id];
                                 const isUsed = isProductUsed(product.id);
                                 
@@ -233,7 +243,7 @@ const Inventory: React.FC = () => {
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {product.batches.map(batch => (
+                                                            {(product.batches || []).map(batch => (
                                                                 <tr key={batch.id}>
                                                                     <td className="p-2 font-mono">{batch.lotNumber}</td>
                                                                     <td className="p-2">{batch.stock}</td>
@@ -270,8 +280,13 @@ const Inventory: React.FC = () => {
 
             {/* Mobile View */}
             <div className="md:hidden space-y-4">
-                 {filteredProducts.length > 0 ? filteredProducts.map((product) => {
-                    const totalStock = product.batches.reduce((sum, b) => sum + b.stock, 0);
+                 {!isDataLoaded ? (
+                     <div className="p-8 text-center flex flex-col items-center justify-center space-y-3">
+                         <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                         <p className="text-slate-500 font-bold">در حال بارگذاری...</p>
+                     </div>
+                 ) : filteredProducts.length > 0 ? filteredProducts.map((product) => {
+                    const totalStock = (product.batches || []).reduce((sum, b) => sum + b.stock, 0);
                     const isUsed = isProductUsed(product.id);
                     return (
                         <div key={product.id} className="bg-white/70 p-4 rounded-xl shadow-md border border-gray-200/60">
@@ -308,9 +323,9 @@ const Inventory: React.FC = () => {
             {isProductModalOpen && (
                 <ProductModal 
                     product={editingProduct} 
-                    isBatchLocked={editingProduct ? saleInvoices.some(inv => 
-                        inv.items.some(item => item.type === 'product' && item.id === editingProduct.id && 
-                        item.batchDeductions?.some(d => d.batchId === editingProduct.batches[0]?.id))
+                    isBatchLocked={editingProduct ? (saleInvoices || []).some(inv => 
+                        (inv.items || []).some(item => item.type === 'product' && item.id === editingProduct.id && 
+                        (item.batchDeductions || []).some(d => d.batchId === (editingProduct.batches || [])[0]?.id))
                     ) : false}
                     onClose={() => setIsProductModalOpen(false)} 
                     onSave={handleSaveProduct} 

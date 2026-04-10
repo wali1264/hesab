@@ -438,20 +438,36 @@ export const api = {
         if (error) throw error;
     },
     createPurchase: async (p_invoice: any, p_supplier_update: any, p_new_batches: any) => {
-        const { error } = await supabase.rpc('create_purchase_rpc', {
-            p_invoice,
-            p_supplier_update,
-            p_new_batches
-        });
-        if (error) throw error;
+        try {
+            const { error } = await supabase.rpc('create_purchase_rpc', {
+                p_invoice,
+                p_supplier_update,
+                p_new_batches
+            });
+            if (error) {
+                console.error("RPC Error (create_purchase_rpc):", error);
+                throw error;
+            }
+        } catch (e) {
+            console.error("Supabase createPurchase Error:", e);
+            throw e;
+        }
     },
     updatePurchase: async (p_invoice_id: string, p_new_invoice: any, p_supplier_update: any) => {
-        const { error } = await supabase.rpc('update_purchase_rpc', {
-            p_invoice_id,
-            p_new_invoice,
-            p_supplier_update
-        });
-        if (error) throw error;
+        try {
+            const { error } = await supabase.rpc('update_purchase_rpc', {
+                p_invoice_id,
+                p_new_invoice,
+                p_supplier_update
+            });
+            if (error) {
+                console.error("RPC Error (update_purchase_rpc):", error);
+                throw error;
+            }
+        } catch (e) {
+            console.error("Supabase updatePurchase Error:", e);
+            throw e;
+        }
     },
     createPurchaseReturn: async (p_return_invoice: any, p_return_items: any, p_supplier_refund: any) => {
         const { error } = await supabase.rpc('create_purchase_return_rpc', {

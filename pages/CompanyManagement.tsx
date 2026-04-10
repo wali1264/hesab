@@ -342,6 +342,19 @@ const CompanyManagement: React.FC = () => {
     }, [fetchSectionData]);
     
     const [activeTab, setActiveTab] = useState<'companies' | 'dashboard' | 'activities' | 'charts'>('companies');
+
+    // Tab redirection based on permissions
+    useEffect(() => {
+        const accessibleTabs: ('companies' | 'dashboard' | 'activities' | 'charts')[] = [];
+        if (hasPermission('company:view_main')) accessibleTabs.push('companies');
+        if (hasPermission('company:view_dashboard')) accessibleTabs.push('dashboard');
+        if (hasPermission('company:view_activities')) accessibleTabs.push('activities');
+        if (hasPermission('company:view_charts')) accessibleTabs.push('charts');
+
+        if (accessibleTabs.length > 0 && !accessibleTabs.includes(activeTab)) {
+            setActiveTab(accessibleTabs[0]);
+        }
+    }, [hasPermission, activeTab]);
     const [companyDetailTab, setCompanyDetailTab] = useState<'ledger' | 'customers' | 'collections' | 'invoices' | 'production'>('ledger');
     const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
     const selectedCompany = useMemo(() => managedCompanies.find(c => c.id === selectedCompanyId), [managedCompanies, selectedCompanyId]);
@@ -2592,12 +2605,14 @@ const CompanyManagement: React.FC = () => {
                 </div>
                 
                 <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
-                    <button 
-                        onClick={() => setActiveTab('companies')}
-                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'companies' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        مدیریت شرکت‌ها
-                    </button>
+                    {hasPermission('company:view_main') && (
+                        <button 
+                            onClick={() => setActiveTab('companies')}
+                            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'companies' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            مدیریت شرکت‌ها
+                        </button>
+                    )}
                     {hasPermission('company:view_dashboard') && (
                         <button 
                             onClick={() => setActiveTab('dashboard')}
@@ -2614,12 +2629,14 @@ const CompanyManagement: React.FC = () => {
                             گزارش فعالیت‌ها
                         </button>
                     )}
-                    <button 
-                        onClick={() => setActiveTab('charts')}
-                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'charts' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        نمودارها
-                    </button>
+                    {hasPermission('company:view_charts') && (
+                        <button 
+                            onClick={() => setActiveTab('charts')}
+                            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'charts' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            نمودارها
+                        </button>
+                    )}
                 </div>
             </div>
 

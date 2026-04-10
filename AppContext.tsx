@@ -224,6 +224,7 @@ const getDefaultState = (): AppState => {
         cart: [], customerTransactions: [], supplierTransactions: [], payrollTransactions: [],
         activities: [], wastageRecords: [], orders: [], saleInvoiceCounter: 0, editingSaleInvoiceId: null, editingPurchaseInvoiceId: null,
         selectedCompanyId: null,
+        isDataLoaded: false,
         managedCompanies: [],
         managedCompanyLedger: [],
         managedCompanyCustomers: [],
@@ -409,6 +410,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                 return {
                     ...prev,
+                    isDataLoaded: true,
                     storeSettings: mergedSettings,
                     users: users || [],
                     roles: (roles && roles.length > 0) ? roles : [{ id: 'admin-role', name: 'Admin', permissions: ['page:dashboard', 'page:inventory', 'page:pos', 'page:purchases', 'page:accounting', 'page:reports', 'page:settings', 'page:in_transit', 'page:deposits', 'page:orders', 'orders:create', 'orders:edit', 'orders:delete', 'orders:add_payment', 'page:special_reports'] }],
@@ -545,7 +547,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const roleId = state.currentUser.roleId;
         if (roleId === SYSTEM_SUPER_OWNER_ID) return true;
         if (roleId === 'admin-role') return true;
-        const userRole = state.roles.find(r => r.id === roleId);
+        const userRole = (state.roles || []).find(r => r.id === roleId);
         if (!userRole || !userRole.permissions) return false;
         return userRole.permissions.includes(permission);
     }, [state.currentUser, state.roles]);
@@ -555,7 +557,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const roleId = state.currentUser.roleId;
         if (roleId === SYSTEM_SUPER_OWNER_ID) return true;
         if (roleId === 'admin-role') return true;
-        const userRole = state.roles.find(r => r.id === roleId);
+        const userRole = (state.roles || []).find(r => r.id === roleId);
         if (!userRole) return false;
         if (!userRole.companyAccess) return false;
         return userRole.companyAccess.includes(slotNumber);
@@ -592,7 +594,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const updateRole = async (roleData: Role) => {
         await api.updateRole(roleData);
-        setState(prev => ({ ...prev, roles: prev.roles.map(r => r.id === roleData.id ? roleData : r) }));
+        setState(prev => ({ ...prev, roles: (prev.roles || []).map(r => r.id === roleData.id ? roleData : r) }));
         logActivity('login', `دسترسی‌های نقش ${roleData.name} تغییر یافت.`);
         return { success: true, message: '✅ نقش بروزرسانی شد.' };
     };
@@ -600,7 +602,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const deleteRole = async (roleId: string) => {
         if (roleId === 'admin-role') return;
         await api.deleteRole(roleId);
-        setState(prev => ({ ...prev, roles: prev.roles.filter(r => r.id !== roleId) }));
+        setState(prev => ({ ...prev, roles: (prev.roles || []).filter(r => r.id !== roleId) }));
     };
 
     const exportData = () => {
@@ -778,7 +780,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
         if (!hasPermission('orders:edit')) return { success: false, message: 'عدم دسترسی' };
         
-        const order = state.orders.find(o => o.id === orderId);
+        const order = (state.orders || []).find(o => o.id === orderId);
         if (!order) return { success: false, message: 'سفارش یافت نشد.' };
         
         const updatedOrder = { ...order, status };
@@ -786,7 +788,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         setState(prev => ({
             ...prev,
-            orders: prev.orders.map(o => o.id === orderId ? updatedOrder : o)
+            orders: (prev.orders || []).map(o => o.id === orderId ? updatedOrder : o)
         }));
         
         return { success: true, message: 'وضعیت سفارش بروزرسانی شد.' };
@@ -799,7 +801,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         setState(prev => ({
             ...prev,
-            orders: prev.orders.map(o => o.id === updatedOrder.id ? updatedOrder : o)
+            orders: (prev.orders || []).map(o => o.id === updatedOrder.id ? updatedOrder : o)
         }));
         
         return { success: true, message: 'سفارش با موفقیت بروزرسانی شد.' };
@@ -812,7 +814,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         setState(prev => ({
             ...prev,
-            orders: prev.orders.filter(o => o.id === orderId)
+            orders: (prev.orders || []).filter(o => o.id !== orderId)
         }));
         
         return { success: true, message: 'سفارش حذف شد.' };
@@ -1374,12 +1376,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 await addExpense(expense);
             }
 
+            // Fetch data silently to update UI
             await fetchData(true);
             logActivity('purchase', `خرید جدید ثبت شد: ${id}`, id, 'purchaseInvoice');
             return { success: true, message: 'خرید با موفقیت ثبت و به انبار اضافه شد.' };
-        } catch (e) { 
+        } catch (e: any) { 
             console.error("Purchase Error:", e);
-            return { success: false, message: 'خطا در ثبت خرید.' }; 
+            const msg = e.message || 'خطا در ثبت خرید.';
+            return { success: false, message: msg }; 
         }
     };
 
@@ -1474,9 +1478,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setState(prev => ({ ...prev, editingPurchaseInvoiceId: null }));
             logActivity('purchase', `ویرایش فاکتور خرید: ${newInvoice.id}`, newInvoice.id, 'purchaseInvoice');
             return { success: true, message: 'فاکتور با موفقیت بروزرسانی شد.' };
-        } catch (e) { 
+        } catch (e: any) { 
             console.error("Update Purchase Error:", e);
-            return { success: false, message: 'خطا در ویرایش فاکتور.' }; 
+            const msg = e.message || 'خطا در ویرایش فاکتور.';
+            return { success: false, message: msg }; 
         }
     };
 

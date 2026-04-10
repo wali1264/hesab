@@ -41,11 +41,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, storeName,
     { id: 'dashboard', label: 'داشبورد', icon: <DashboardIcon />, visible: accessiblePages.dashboard },
     { id: 'inventory', label: 'انبارداری', icon: <InventoryIcon />, visible: accessiblePages.inventory },
     { id: 'pos', label: 'فروش', icon: <POSIcon />, visible: accessiblePages.pos },
-    { id: 'orders', label: 'سفارشات', icon: <ClipboardDocumentListIcon />, visible: accessiblePages.orders },
+    { id: 'orders', label: 'سفارشات', icon: <ClipboardDocumentListIcon />, visible: false },
     { id: 'purchases', label: 'خرید', icon: <PurchaseIcon />, visible: accessiblePages.purchases },
-    { id: 'in_transit', label: 'اجناس در راه', icon: <TruckIcon />, visible: accessiblePages.in_transit },
+    { id: 'in_transit', label: 'اجناس در راه', icon: <TruckIcon />, visible: false },
     { id: 'accounting', label: 'حسابداری', icon: <AccountingIcon />, visible: accessiblePages.accounting },
-    { id: 'deposits', label: 'امانات', icon: <SafeIcon className="w-6 h-6 text-indigo-600" />, visible: accessiblePages.deposits },
+    { id: 'deposits', label: 'امانات', icon: <SafeIcon className="w-6 h-6 text-indigo-600" />, visible: false },
     { id: 'company_management', label: 'مدیریت شرکت‌ها', icon: <UserGroupIcon className="w-6 h-6 text-emerald-600" />, visible: accessiblePages.company_management },
     { id: 'reports', label: 'گزارشات', icon: <ReportsIcon />, visible: accessiblePages.reports },
     { id: 'salary_management', label: 'مدیریت حقوق', icon: <UserGroupIcon className="w-6 h-6 text-blue-600" />, visible: accessiblePages.salary_management },
@@ -74,8 +74,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, storeName,
     <>
       {isMobileOpen && <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setIsMobileOpen(false)}></div>}
       <div className={`
-        flex flex-col h-screen p-4 bg-white/60 backdrop-blur-lg border-l border-gray-200/60 
-        transition-all duration-300 ease-in-out z-50
+        flex flex-col h-[100dvh] p-4 bg-white/60 backdrop-blur-lg border-l border-gray-200/60 
+        transition-all duration-300 ease-in-out z-50 overflow-y-auto overflow-x-hidden
         md:relative md:translate-x-0 md:shadow-lg
         fixed inset-y-0 right-0
         ${isCollapsed ? 'w-24' : 'w-72 md:w-64'} 

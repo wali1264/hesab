@@ -15,9 +15,18 @@ export function numberToPersianWords(num: number): string {
     while (num > 0) {
         const part = num % 1000;
         if (part !== 0) {
-            const partWords = convertThreeDigits(part);
+            let partWords = convertThreeDigits(part);
+            
+            // Special case: for 1000, we usually say "هزار" instead of "یک هزار"
+            // For other units like million, we keep "یک" (e.g., "یک میلیون")
+            if (part === 1 && partCount === 1) {
+                partWords = '';
+            }
+
             const unit = thousands[partCount];
-            result = partWords + (unit ? ' ' + unit : '') + (result ? ' و ' + result : '');
+            const partWithUnit = (partWords ? partWords + (unit ? ' ' : '') : '') + (unit || '');
+            
+            result = partWithUnit + (result ? ' و ' + result : '');
         }
         num = Math.floor(num / 1000);
         partCount++;
