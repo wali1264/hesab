@@ -37,20 +37,22 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, storeName,
     };
   }, []);
   
+  const ALLOWED_NAV_IDS = ['dashboard', 'company_management', 'salary_management', 'settings'];
+
   const navItems = [
-    { id: 'dashboard', label: 'داشبورد', icon: <DashboardIcon />, visible: accessiblePages.dashboard },
-    { id: 'inventory', label: 'انبارداری', icon: <InventoryIcon />, visible: accessiblePages.inventory },
-    { id: 'pos', label: 'فروش', icon: <POSIcon />, visible: accessiblePages.pos },
+    { id: 'dashboard', label: 'داشبورد', icon: <DashboardIcon />, visible: accessiblePages.dashboard && ALLOWED_NAV_IDS.includes('dashboard') },
+    { id: 'inventory', label: 'انبارداری', icon: <InventoryIcon />, visible: accessiblePages.inventory && ALLOWED_NAV_IDS.includes('inventory') },
+    { id: 'pos', label: 'فروش', icon: <POSIcon />, visible: accessiblePages.pos && ALLOWED_NAV_IDS.includes('pos') },
     { id: 'orders', label: 'سفارشات', icon: <ClipboardDocumentListIcon />, visible: false },
-    { id: 'purchases', label: 'خرید', icon: <PurchaseIcon />, visible: accessiblePages.purchases },
+    { id: 'purchases', label: 'خرید', icon: <PurchaseIcon />, visible: accessiblePages.purchases && ALLOWED_NAV_IDS.includes('purchases') },
     { id: 'in_transit', label: 'اجناس در راه', icon: <TruckIcon />, visible: false },
-    { id: 'accounting', label: 'حسابداری', icon: <AccountingIcon />, visible: accessiblePages.accounting },
+    { id: 'accounting', label: 'حسابداری', icon: <AccountingIcon />, visible: accessiblePages.accounting && ALLOWED_NAV_IDS.includes('accounting') },
     { id: 'deposits', label: 'امانات', icon: <SafeIcon className="w-6 h-6 text-indigo-600" />, visible: false },
-    { id: 'company_management', label: 'مدیریت شرکت‌ها', icon: <UserGroupIcon className="w-6 h-6 text-emerald-600" />, visible: accessiblePages.company_management },
-    { id: 'reports', label: 'گزارشات', icon: <ReportsIcon />, visible: accessiblePages.reports },
-    { id: 'salary_management', label: 'مدیریت حقوق', icon: <UserGroupIcon className="w-6 h-6 text-blue-600" />, visible: accessiblePages.salary_management },
-    { id: 'special_reports', label: 'دانلود گزارشات', icon: <ZapIcon className="w-6 h-6 text-amber-500" />, visible: accessiblePages.special_reports },
-    { id: 'settings', label: 'تنظیمات', icon: <SettingsIcon />, visible: accessiblePages.settings },
+    { id: 'company_management', label: 'مدیریت شرکت‌ها', icon: <UserGroupIcon className="w-6 h-6 text-emerald-600" />, visible: accessiblePages.company_management && ALLOWED_NAV_IDS.includes('company_management') },
+    { id: 'reports', label: 'گزارشات', icon: <ReportsIcon />, visible: accessiblePages.reports && ALLOWED_NAV_IDS.includes('reports') },
+    { id: 'salary_management', label: 'مدیریت حقوق', icon: <UserGroupIcon className="w-6 h-6 text-blue-600" />, visible: accessiblePages.salary_management && ALLOWED_NAV_IDS.includes('salary_management') },
+    { id: 'special_reports', label: 'دانلود گزارشات', icon: <ZapIcon className="w-6 h-6 text-amber-500" />, visible: accessiblePages.special_reports && ALLOWED_NAV_IDS.includes('special_reports') },
+    { id: 'settings', label: 'تنظیمات', icon: <SettingsIcon />, visible: accessiblePages.settings && ALLOWED_NAV_IDS.includes('settings') },
   ];
   
   const [mainName, subName] = storeName.includes(' ') ? storeName.split(' ') : [storeName, ''];

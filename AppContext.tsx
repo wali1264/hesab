@@ -606,6 +606,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const exportData = () => {
+        const localLogoLeft = localStorage.getItem('v_store_logo_left');
+        const localLogoRight = localStorage.getItem('v_store_logo_right');
         const localMemos = localStorage.getItem('v_pos_memos');
 
         const backupData = { 
@@ -614,6 +616,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             currentUser: null, 
             cart: [],
             localStorageData: {
+                logoLeft: localLogoLeft,
+                logoRight: localLogoRight,
                 memos: localMemos ? JSON.parse(localMemos) : []
             }
         };
@@ -634,18 +638,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             try {
                 const data = JSON.parse(e.target?.result as string) as any;
                 
-                // Restore localStorage data if present (excluding logos as requested)
+                // Restore localStorage data if present
                 if (data.localStorageData) {
+                    if (data.localStorageData.logoLeft) localStorage.setItem('v_store_logo_left', data.localStorageData.logoLeft);
+                    if (data.localStorageData.logoRight) localStorage.setItem('v_store_logo_right', data.localStorageData.logoRight);
                     if (data.localStorageData.memos) localStorage.setItem('v_pos_memos', JSON.stringify(data.localStorageData.memos));
                 }
 
                 await api.clearAndRestoreData(data);
                 await fetchData();
                 showToast("✅ بازیابی با موفقیت انجام شد.");
-            } catch (err) { 
-                console.error("Import error:", err);
-                showToast("❌ خطا در ساختار فایل یا فرآیند بازیابی."); 
-            }
+            } catch (err) { showToast("❌ خطا در ساختار فایل."); }
         };
         reader.readAsText(file);
     };

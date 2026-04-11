@@ -88,19 +88,12 @@ const Reports: React.FC = () => {
     }, [saleInvoices, expenses, dateRange]);
 
     const inventoryData = useMemo(() => {
-        const totalBookValue = (products || []).reduce((sum, p) => {
-            if (!p) return sum;
-            return sum + (p.batches || []).reduce((batchSum, b) => batchSum + ((b.stock || 0) * (b.purchasePrice || 0)), 0);
-        }, 0);
+        const totalBookValue = (products || []).reduce((sum, p) => sum + (p.batches || []).reduce((batchSum, b) => batchSum + (b.stock * b.purchasePrice), 0), 0);
         const totalSalesValue = (products || []).reduce((sum, p) => {
-            if (!p) return sum;
-            const totalStock = (p.batches || []).reduce((s, b) => s + (b.stock || 0), 0);
-            return sum + (totalStock * (p.salePrice || 0));
+            const totalStock = (p.batches || []).reduce((s, b) => s + b.stock, 0);
+            return sum + (totalStock * p.salePrice);
         }, 0);
-        const totalItems = (products || []).reduce((sum, p) => {
-            if (!p) return sum;
-            return sum + (p.batches || []).reduce((batchSum, b) => batchSum + (b.stock || 0), 0);
-        }, 0);
+        const totalItems = (products || []).reduce((sum, p) => sum + (p.batches || []).reduce((batchSum, b) => batchSum + b.stock, 0), 0);
         return { totalBookValue, totalSalesValue, totalItems, projectedProfit: totalSalesValue - totalBookValue };
     }, [products]);
 
@@ -475,10 +468,9 @@ const Reports: React.FC = () => {
                                 </thead>
                                 <tbody>
                                     {products.map(p => {
-                                        if (!p) return null;
-                                        const stock = (p.batches || []).reduce((s,b)=>s+(b.stock || 0),0);
-                                        const bookVal = (p.batches || []).reduce((s,b)=>s+((b.stock || 0)*(b.purchasePrice || 0)),0);
-                                        const saleVal = stock * (p.salePrice || 0);
+                                        const stock = p.batches.reduce((s,b)=>s+b.stock,0);
+                                        const bookVal = p.batches.reduce((s,b)=>s+(b.stock*b.purchasePrice),0);
+                                        const saleVal = stock * p.salePrice;
                                         const avgPurc = stock > 0 ? (bookVal / stock) : 0;
                                         return (
                                             <tr key={p.id} className="border-t">
@@ -486,7 +478,7 @@ const Reports: React.FC = () => {
                                                 <td className="p-4 font-mono font-bold">{stock}</td>
                                                 <td className="p-4 font-mono">{bookVal.toLocaleString(undefined, {maximumFractionDigits: 3})}</td>
                                                 <td className="p-4 font-mono text-blue-600 font-bold">{saleVal.toLocaleString(undefined, {maximumFractionDigits: 3})}</td>
-                                                <td className="p-4 text-emerald-600 font-black" dir="ltr">{( (p.salePrice || 0) - avgPurc).toLocaleString(undefined, {maximumFractionDigits:1})}</td>
+                                                <td className="p-4 text-emerald-600 font-black" dir="ltr">{(p.salePrice - avgPurc).toLocaleString(undefined, {maximumFractionDigits:1})}</td>
                                             </tr>
                                         )
                                     })}
