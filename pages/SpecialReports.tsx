@@ -125,13 +125,14 @@ const SpecialReports: React.FC = () => {
         switch (selectedReportId) {
             case 'total_inventory':
                 headers = ['نام کالا', 'کمپانی', 'موجودی کل', 'تاریخ انقضا (نزدیک‌ترین)'];
-                data = products.map(p => {
-                    const company = companies.find(c => c.id === p.companyId)?.name || 'نامشخص';
-                    const totalStock = p.batches.reduce((sum, b) => sum + b.stock, 0);
+                data = (products || []).map(p => {
+                    if (!p) return null;
+                    const company = (companies || []).find(c => c.id === p.companyId)?.name || 'نامشخص';
+                    const totalStock = (p.batches || []).reduce((sum, b) => sum + (b.stock || 0), 0);
                     // Find the earliest expiry date among batches with stock
-                    const activeBatches = p.batches.filter(b => b.stock > 0 && b.expiryDate);
+                    const activeBatches = (p.batches || []).filter(b => (b.stock || 0) > 0 && b.expiryDate);
                     const earliestExpiry = activeBatches.length > 0 
-                        ? activeBatches.sort((a, b) => a.expiryDate!.localeCompare(b.expiryDate!))[0].expiryDate 
+                        ? [...activeBatches].sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''))[0].expiryDate 
                         : '-';
                     
                     return [
@@ -140,7 +141,7 @@ const SpecialReports: React.FC = () => {
                         totalStock,
                         earliestExpiry
                     ];
-                });
+                }).filter(Boolean) as any[];
                 break;
 
             case 'company_inventory':
@@ -148,11 +149,11 @@ const SpecialReports: React.FC = () => {
                 const companyName = companies.find(c => c.id === selectedCompanyId)?.name || '';
                 title = `موجودی تفصیلی کمپانی ${companyName}`;
                 headers = ['نام کالا', 'سری ساخت', 'موجودی', 'تاریخ انقضا'];
-                data = products
-                    .filter(p => p.companyId === selectedCompanyId)
+                data = (products || [])
+                    .filter(p => p && p.companyId === selectedCompanyId)
                     .flatMap(p => 
-                        p.batches
-                            .filter(b => b.stock > 0)
+                        (p.batches || [])
+                            .filter(b => (b.stock || 0) > 0)
                             .map(b => [
                                 p.name,
                                 b.lotNumber,
@@ -164,8 +165,8 @@ const SpecialReports: React.FC = () => {
 
             case 'expiry_report':
                 headers = ['نام کالا', 'سری ساخت', 'موجودی', 'تاریخ انقضا'];
-                data = products.flatMap(p => 
-                    p.batches
+                data = (products || []).flatMap(p => 
+                    (p.batches || [])
                         .filter(b => b.expiryDate)
                         .map(b => [
                             p.name,
@@ -183,11 +184,11 @@ const SpecialReports: React.FC = () => {
                 headers = ['تاریخ', 'نوع تراکنش', 'تعداد', 'جزئیات'];
                 
                 // Sales
-                const sales = saleInvoices.flatMap(inv => 
-                    inv.items
-                        .filter(item => item.id === selectedProductId)
+                const sales = (saleInvoices || []).flatMap(inv => 
+                    (inv.items || [])
+                        .filter(item => item && item.id === selectedProductId)
                         .map(item => [
-                            inv.timestamp.split('T')[0],
+                            (inv.timestamp || '').split('T')[0],
                             inv.type === 'sale' ? 'فروش' : 'مرجوعی فروش',
                             item.quantity,
                             `فاکتور #${inv.id.slice(-6)}`
@@ -195,11 +196,11 @@ const SpecialReports: React.FC = () => {
                 );
 
                 // Purchases
-                const purchases = purchaseInvoices.flatMap(inv => 
-                    inv.items
-                        .filter(item => item.productId === selectedProductId)
+                const purchases = (purchaseInvoices || []).flatMap(inv => 
+                    (inv.items || [])
+                        .filter(item => item && item.productId === selectedProductId)
                         .map(item => [
-                            inv.timestamp.split('T')[0],
+                            (inv.timestamp || '').split('T')[0],
                             inv.type === 'purchase' ? 'خرید' : 'مرجوعی خرید',
                             item.quantity,
                             `فاکتور #${inv.invoiceNumber}`
