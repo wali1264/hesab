@@ -418,6 +418,11 @@ const CompanyManagement: React.FC = () => {
     const [productionDateFilter, setProductionDateFilter] = useState<'today' | 'yesterday' | 'week' | 'month' | 'year' | 'all' | 'custom'>('today');
     const [productionStartDate, setProductionStartDate] = useState('');
     const [productionEndDate, setProductionEndDate] = useState('');
+    
+    // Ledger Date Filters
+    const [ledgerDateFilter, setLedgerDateFilter] = useState<'all' | 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom'>('all');
+    const [ledgerStartDate, setLedgerStartDate] = useState('');
+    const [ledgerEndDate, setLedgerEndDate] = useState('');
 
     // Sales Dashboard States
     const [salesSubTab, setSalesSubTab] = useState<'list' | 'dashboard' | 'map'>('list');
@@ -1377,10 +1382,38 @@ const CompanyManagement: React.FC = () => {
         if (!selectedCompanyId || !selectedCompany) {
             return { expenses: [], waterRevenue: [], equipmentRevenue: [], generalRevenue: [], totalExpenses: 0, totalWater: 0, totalEquipment: 0, totalGeneralRevenue: 0 };
         }
-        const expenses = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'expense').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const waterRevenue = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'water_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const equipmentRevenue = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'equipment_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const generalRevenue = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId && e.type === 'revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        let filteredLedger = managedCompanyLedger.filter(e => e.companyId === selectedCompanyId);
+        
+        // Apply Date Filter
+        if (ledgerDateFilter !== 'all') {
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+            const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+            if (ledgerDateFilter === 'today') {
+                filteredLedger = filteredLedger.filter(e => e.date === todayStr);
+            } else if (ledgerDateFilter === 'yesterday') {
+                filteredLedger = filteredLedger.filter(e => e.date === yesterdayStr);
+            } else if (ledgerDateFilter === 'week') {
+                const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                filteredLedger = filteredLedger.filter(e => new Date(e.date) >= lastWeek);
+            } else if (ledgerDateFilter === 'month') {
+                const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+                filteredLedger = filteredLedger.filter(e => new Date(e.date) >= lastMonth);
+            } else if (ledgerDateFilter === 'year') {
+                const lastYear = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+                filteredLedger = filteredLedger.filter(e => new Date(e.date) >= lastYear);
+            } else if (ledgerDateFilter === 'custom' && ledgerStartDate && ledgerEndDate) {
+                filteredLedger = filteredLedger.filter(e => e.date >= ledgerStartDate && e.date <= ledgerEndDate);
+            }
+        }
+
+        const expenses = filteredLedger.filter(e => e.type === 'expense').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const waterRevenue = filteredLedger.filter(e => e.type === 'water_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const equipmentRevenue = filteredLedger.filter(e => e.type === 'equipment_revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const generalRevenue = filteredLedger.filter(e => e.type === 'revenue').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
         const totalWater = waterRevenue.reduce((sum, e) => sum + e.amount, 0);
@@ -1388,7 +1421,7 @@ const CompanyManagement: React.FC = () => {
         const totalGeneralRevenue = generalRevenue.reduce((sum, e) => sum + e.amount, 0);
         
         return { expenses, waterRevenue, equipmentRevenue, generalRevenue, totalExpenses, totalWater, totalEquipment, totalGeneralRevenue };
-    }, [selectedCompanyId, selectedCompany, managedCompanyLedger]);
+    }, [selectedCompanyId, selectedCompany, managedCompanyLedger, ledgerDateFilter, ledgerStartDate, ledgerEndDate]);
 
     return (
         <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
@@ -1496,7 +1529,55 @@ const CompanyManagement: React.FC = () => {
                 </div>
 
                 {companyDetailTab === 'ledger' ? (
-                    <div className={`grid grid-cols-1 ${selectedCompany?.type === CompanyType.WATER ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6`}>
+                    <div className="space-y-6">
+                        {/* Ledger Date Filter Toolbar */}
+                        <div className="bg-white/60 backdrop-blur-md p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto">
+                                <CalendarIcon className="w-5 h-5 text-slate-400 shrink-0" />
+                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                    {[
+                                        { id: 'all', label: 'همه' },
+                                        { id: 'today', label: 'امروز' },
+                                        { id: 'yesterday', label: 'دیروز' },
+                                        { id: 'week', label: 'هفته' },
+                                        { id: 'month', label: 'ماه' },
+                                        { id: 'year', label: 'سال' },
+                                        { id: 'custom', label: 'سفارشی' }
+                                    ].map(filter => (
+                                        <button
+                                            key={filter.id}
+                                            onClick={() => setLedgerDateFilter(filter.id as any)}
+                                            className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${ledgerDateFilter === filter.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            {filter.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {ledgerDateFilter === 'custom' && (
+                                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-slate-400">از:</span>
+                                        <JalaliDateInput
+                                            value={ledgerStartDate}
+                                            onChange={setLedgerStartDate}
+                                            className="text-[10px] p-1.5 border rounded-lg w-28"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-slate-400">تا:</span>
+                                        <JalaliDateInput
+                                            value={ledgerEndDate}
+                                            onChange={setLedgerEndDate}
+                                            className="text-[10px] p-1.5 border rounded-lg w-28"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className={`grid grid-cols-1 ${selectedCompany?.type === CompanyType.WATER ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6`}>
                         {/* Expenses Column */}
                         <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-gray-200/60 shadow-xl overflow-hidden flex flex-col h-[70vh]">
                             <div className="p-4 bg-red-50 border-b border-red-100 flex justify-between items-center">
@@ -1704,6 +1785,7 @@ const CompanyManagement: React.FC = () => {
                                 </div>
                             </div>
                         )}
+                        </div>
                     </div>
                 ) : companyDetailTab === 'customers' ? (
                     <div className="space-y-6">
