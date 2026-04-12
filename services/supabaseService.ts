@@ -360,6 +360,9 @@ export const api = {
     deleteSalaryRecord: async (id: string) => {
         await handleResponse(supabase.from('salary_records').delete().eq('id', id));
     },
+    deleteSalaryRecordsByEmployee: async (employeeId: string) => {
+        await handleResponse(supabase.from('salary_records').delete().eq('employeeId', employeeId));
+    },
     getSalaryPayments: async () => handleResponse(supabase.from('salary_payments').select('*')),
     addSalaryPayment: async (payment: SalaryPayment) => {
         await handleResponse(supabase.from('salary_payments').insert([payment]));
@@ -369,6 +372,9 @@ export const api = {
     },
     deleteSalaryPayment: async (id: string) => {
         await handleResponse(supabase.from('salary_payments').delete().eq('id', id));
+    },
+    deleteSalaryPaymentsByEmployee: async (employeeId: string) => {
+        await handleResponse(supabase.from('salary_payments').delete().eq('employeeId', employeeId));
     },
 
     // --- ORDERS ---

@@ -2937,12 +2937,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const deleteCompanyEmployee = async (id: string) => {
         if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
+            // 1. Delete associated salary payments from DB
+            await api.deleteSalaryPaymentsByEmployee(id);
+            
+            // 2. Delete associated salary records from DB
+            await api.deleteSalaryRecordsByEmployee(id);
+            
+            // 3. Delete the employee themselves from DB
             await api.deleteCompanyEmployee(id);
+
+            // 4. Update local state for all three
             setState(prev => ({
                 ...prev,
-                companyEmployees: prev.companyEmployees.filter(e => e.id !== id)
+                companyEmployees: prev.companyEmployees.filter(e => e.id !== id),
+                salaryRecords: prev.salaryRecords.filter(r => r.employeeId !== id),
+                salaryPayments: prev.salaryPayments.filter(p => p.employeeId !== id)
             }));
-            return { success: true, message: 'کارمند حذف شد.' };
+
+            return { success: true, message: 'کارمند و تمامی سوابق مربوطه حذف شدند.' };
         } catch (error: any) {
             console.error("Error deleting employee:", error);
             return { success: false, message: error.message || 'خطا در حذف کارمند' };
