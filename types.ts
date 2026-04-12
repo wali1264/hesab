@@ -493,6 +493,16 @@ export interface SalaryMonthRecord {
     totalPaid: number;
 }
 
+export interface LegalRecord {
+    id: string;
+    title: string;
+    description?: string;
+    date: string;
+    type: string;
+    attachmentUrl?: string;
+    created_at?: string;
+}
+
 // --- Auth & RBAC Types ---
 export type Permission = string; // e.g., 'pos:create_invoice'
 
@@ -545,6 +555,7 @@ export interface AppState {
     companyEmployees: CompanyEmployee[];
     salaryRecords: SalaryMonthRecord[];
     salaryPayments: SalaryPayment[];
+    legalRecords: LegalRecord[];
     saleInvoiceCounter: number;
     editingSaleInvoiceId: string | null;
     editingPurchaseInvoiceId: string | null;

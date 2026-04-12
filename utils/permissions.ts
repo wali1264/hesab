@@ -63,6 +63,7 @@ export const ALL_PERMISSIONS = [
     { id: 'company:view_dashboard', name: 'مشاهده داشبورد مدیریتی شرکت', group: 'مدیریت شرکت‌ها' },
     { id: 'company:view_activities', name: 'مشاهده گزارش فعالیت‌ها', group: 'مدیریت شرکت‌ها' },
     { id: 'company:view_charts', name: 'مشاهده نمودارهای شرکت', group: 'مدیریت شرکت‌ها' },
+    { id: 'company:view_reports', name: 'مشاهده و دانلود گزارشات اکسل', group: 'مدیریت شرکت‌ها' },
     { id: 'company:view_main', name: 'مشاهده تب مدیریت شرکت‌ها', group: 'مدیریت شرکت‌ها' },
     { id: 'company_customer:create', name: 'ثبت مشتری جدید شرکت', group: 'مدیریت شرکت‌ها' },
     { id: 'company_customer:edit', name: 'ویرایش مشتری شرکت', group: 'مدیریت شرکت‌ها' },

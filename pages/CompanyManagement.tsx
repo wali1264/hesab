@@ -3,11 +3,12 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType, Shareholder, ManagedCompanyInvoice } from '../types';
 import { CompanyType } from '../types';
-import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon, ExclamationCircleIcon, MapIcon, MapPinIcon, ArrowPathIcon, LocateIcon } from '../components/icons';
+import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon, ExclamationCircleIcon, MapIcon, MapPinIcon, ArrowPathIcon, LocateIcon, DownloadIcon } from '../components/icons';
 import { formatCurrency, numberToPersianWords } from '../utils/formatters';
 import { formatJalaliDate } from '../utils/jalali';
 import JalaliDateInput from '../components/JalaliDateInput';
 import CompanyPrintModal from '../components/CompanyPrintModal';
+import * as XLSX from 'xlsx';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { 
@@ -355,7 +356,7 @@ const CompanyManagement: React.FC = () => {
             setActiveTab(accessibleTabs[0]);
         }
     }, [hasPermission, activeTab]);
-    const [companyDetailTab, setCompanyDetailTab] = useState<'ledger' | 'customers' | 'collections' | 'invoices' | 'production'>('ledger');
+    const [companyDetailTab, setCompanyDetailTab] = useState<'ledger' | 'customers' | 'collections' | 'invoices' | 'production' | 'reports'>('ledger');
     const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
     const selectedCompany = useMemo(() => managedCompanies.find(c => c.id === selectedCompanyId), [managedCompanies, selectedCompanyId]);
 
@@ -403,6 +404,9 @@ const CompanyManagement: React.FC = () => {
     const [visibleWaterRevenueCount, setVisibleWaterRevenueCount] = useState(5);
     const [visibleEquipmentRevenueCount, setVisibleEquipmentRevenueCount] = useState(5);
     const [visibleRevenueCount, setVisibleRevenueCount] = useState(5); // For non-water companies
+    const [visibleCustomersCount, setVisibleCustomersCount] = useState(5);
+    const [visibleInvoicesCount, setVisibleInvoicesCount] = useState(5);
+    const [visibleProductionCount, setVisibleProductionCount] = useState(5);
     
     // Activity Filters
     const [activityCompanyFilter, setActivityCompanyFilter] = useState<string>('all');
@@ -433,6 +437,12 @@ const CompanyManagement: React.FC = () => {
     const [salesEmployeeFilter, setSalesEmployeeFilter] = useState<string>('all');
 
     const [chartsTimeRange, setChartsTimeRange] = useState<'30days' | '6months' | 'year'>('30days');
+    
+    // Report States
+    const [selectedReportType, setSelectedReportType] = useState<string>('profit_loss');
+    const [reportDateFilter, setReportDateFilter] = useState<'all' | 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom'>('all');
+    const [reportStartDate, setReportStartDate] = useState('');
+    const [reportEndDate, setReportEndDate] = useState('');
     
     // Handle default tab selection based on permissions
     useEffect(() => {
@@ -1376,6 +1386,175 @@ const CompanyManagement: React.FC = () => {
         return { expenses, receivables, payables, netWorth };
     }, [ownerTransactions, myFinancialShare]);
 
+    const handleDownloadReport = () => {
+        if (!selectedCompanyId || !selectedCompany) return;
+
+        let reportData: any[] = [];
+        let headers: string[] = [];
+        let fileName = `${selectedCompany.name}_Report`;
+
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const filterDataByDate = (data: any[]) => {
+            if (reportDateFilter === 'all') return data;
+            return data.filter(item => {
+                const itemDate = item.date || item.createdAt;
+                if (!itemDate) return true;
+                const d = itemDate.split('T')[0];
+                if (reportDateFilter === 'today') return d === todayStr;
+                if (reportDateFilter === 'yesterday') return d === yesterdayStr;
+                if (reportDateFilter === 'week') return new Date(d) >= new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                if (reportDateFilter === 'month') return new Date(d) >= new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+                if (reportDateFilter === 'year') return new Date(d) >= new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+                if (reportDateFilter === 'custom' && reportStartDate && reportEndDate) return d >= reportStartDate && d <= reportEndDate;
+                return true;
+            });
+        };
+
+        if (selectedReportType === 'profit_loss') {
+            fileName = `${selectedCompany.name}_سود_و_زیان`;
+            headers = ['تاریخ', 'نوع تراکنش', 'کتگوری', 'مبلغ', 'توضیحات'];
+            const ledger = filterDataByDate(managedCompanyLedger.filter(e => e.companyId === selectedCompanyId));
+            reportData = ledger.map(e => [
+                formatJalaliDate(e.date),
+                e.type === 'expense' ? 'هزینه' : 'درآمد',
+                e.category || '---',
+                e.amount,
+                e.description || '---'
+            ]);
+        } else if (selectedReportType === 'customers') {
+            fileName = `${selectedCompany.name}_لیست_مشتریان`;
+            headers = ['نام مشتری', 'شماره تماس', 'آدرس', 'شماره میتر', 'بدهی فعلی'];
+            const customers = managedCompanyCustomers.filter(c => c.companyId === selectedCompanyId);
+            reportData = customers.map(c => {
+                const unpaidBilling = customerBillingRecords.filter(r => r.customerId === c.id && r.status === 'unpaid');
+                const unpaidInvoices = managedCompanyInvoices.filter(i => i.customerId === c.id && i.status === 'unpaid');
+                const totalDebt = unpaidBilling.reduce((sum, r) => sum + r.amount, 0) + unpaidInvoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+                return [c.name, c.phone || '---', c.address || '---', c.meterNumber || '---', totalDebt];
+            });
+        } else if (selectedReportType === 'invoices') {
+            fileName = `${selectedCompany.name}_فاکتورها_و_فروشات`;
+            headers = ['تاریخ', 'مشتری', 'مبلغ کل', 'تخفیف', 'مبلغ نهایی', 'وضعیت'];
+            const invoices = filterDataByDate(managedCompanyInvoices.filter(i => i.companyId === selectedCompanyId));
+            reportData = invoices.map(i => {
+                const customer = managedCompanyCustomers.find(c => c.id === i.customerId);
+                return [
+                    formatJalaliDate(i.date),
+                    customer?.name || '---',
+                    i.totalAmount,
+                    i.discount || 0,
+                    (i.totalAmount || 0) - (i.discount || 0),
+                    i.status === 'paid' ? 'پرداخت شده' : 'پرداخت نشده'
+                ];
+            });
+        } else if (selectedReportType === 'production') {
+            fileName = `${selectedCompany.name}_گزارش_تولید`;
+            headers = ['تاریخ', 'تولید کل', 'ضایعات', 'تولید خالص', 'توضیحات'];
+            const logs = filterDataByDate(managedCompanyProductionLogs.filter(l => l.companyId === selectedCompanyId));
+            reportData = logs.map(l => [
+                formatJalaliDate(l.date),
+                l.producedUnits,
+                l.spoilageUnits,
+                l.producedUnits - l.spoilageUnits,
+                l.description || '---'
+            ]);
+        }
+
+        if (reportData.length === 0) {
+            showToast("داده‌ای برای گزارش‌گیری در این بازه زمانی یافت نشد.");
+            return;
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...reportData]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Report");
+        XLSX.writeFile(wb, `${fileName}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+    const handleDownloadGlobalFinancialReport = () => {
+        const wb = XLSX.utils.book_new();
+
+        // Sheet 1: Summary
+        const summaryHeaders = ['عنوان', 'مبلغ (AFN)'];
+        const summaryData = [
+            ['سود کل شرکت‌ها', totalCompanyProfit],
+            ['مجموع مصارف شخصی', ownerStats.expenses],
+            ['مجموع طلبات', ownerStats.receivables],
+            ['مجموع بدهی‌ها', ownerStats.payables],
+            ['ثروت خالص نهایی', ownerStats.netWorth]
+        ];
+        const wsSummary = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryData]);
+        XLSX.utils.book_append_sheet(wb, wsSummary, "خلاصه وضعیت");
+
+        // Sheet 2: Detailed Personal Expenses
+        const expenseHeaders = ['تاریخ', 'کتگوری', 'مبلغ', 'توضیحات'];
+        const expenses = ownerTransactions.filter(t => t.type === 'personal_expense').sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const expenseData = expenses.map(t => [
+            formatJalaliDate(t.date),
+            ownerExpenseCategories.find(c => c.id === t.categoryId)?.name || 'عمومی',
+            t.amount,
+            t.description
+        ]);
+        const wsExpenses = XLSX.utils.aoa_to_sheet([expenseHeaders, ...expenseData]);
+        XLSX.utils.book_append_sheet(wb, wsExpenses, "مصارف شخصی");
+
+        // Sheet 3: Detailed Receivables
+        const receivableHeaders = ['تاریخ', 'کتگوری', 'مبلغ', 'توضیحات'];
+        const receivables = ownerTransactions.filter(t => t.type === 'receivable').sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const receivableData = receivables.map(t => [
+            formatJalaliDate(t.date),
+            ownerExpenseCategories.find(c => c.id === t.categoryId)?.name || 'شخصی',
+            t.amount,
+            t.description
+        ]);
+        const wsReceivables = XLSX.utils.aoa_to_sheet([receivableHeaders, ...receivableData]);
+        XLSX.utils.book_append_sheet(wb, wsReceivables, "طلبات");
+
+        // Sheet 4: Detailed Debts
+        const payableHeaders = ['تاریخ', 'کتگوری', 'مبلغ', 'توضیحات'];
+        const payables = ownerTransactions.filter(t => t.type === 'payable').sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const payableData = payables.map(t => [
+            formatJalaliDate(t.date),
+            ownerExpenseCategories.find(c => c.id === t.categoryId)?.name || 'شخصی',
+            t.amount,
+            t.description
+        ]);
+        const wsPayables = XLSX.utils.aoa_to_sheet([payableHeaders, ...payableData]);
+        XLSX.utils.book_append_sheet(wb, wsPayables, "بدهی‌ها");
+
+        // Sheet 5: Profit per Company
+        const companyHeaders = ['نام شرکت', 'هزینه تاسیس', 'مجموع هزینه‌ها', 'مجموع عواید', 'سود/ضرر خالص'];
+        const companyData = companyStats.map(c => [
+            c.name,
+            c.establishmentCost || 0,
+            c.expenses,
+            c.totalIncome,
+            c.profit
+        ]);
+        const wsCompanies = XLSX.utils.aoa_to_sheet([companyHeaders, ...companyData]);
+        XLSX.utils.book_append_sheet(wb, wsCompanies, "سود شرکت‌ها");
+
+        XLSX.writeFile(wb, `گزارش_جامع_مالی_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+    const handleDownloadActivityReport = () => {
+        const headers = ['تاریخ و زمان', 'کاربر / کارمند', 'نوع فعالیت', 'توضیحات و جزئیات'];
+        const reportData = filteredActivities.map(a => [
+            formatJalaliDate(a.timestamp),
+            a.user,
+            a.description.includes('وصول') ? 'وصولی' : a.description.includes('میترخوانی') ? 'میترخوانی' : a.type === 'company' ? 'مدیریت شرکت' : a.type,
+            a.description
+        ]);
+
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...reportData]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Activities");
+        XLSX.writeFile(wb, `گزارش_فعالیت‌ها_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
     const { 
         expenses, waterRevenue, equipmentRevenue, generalRevenue, totalExpenses, totalWater, totalEquipment, totalGeneralRevenue 
     } = useMemo(() => {
@@ -1481,6 +1660,14 @@ const CompanyManagement: React.FC = () => {
                                             تولیدات روزانه
                                         </button>
                                     </>
+                                )}
+                                {hasPermission('company:view_reports') && (
+                                    <button 
+                                        onClick={() => setCompanyDetailTab('reports')}
+                                        className={`px-4 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${companyDetailTab === 'reports' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        گزارش‌گیری
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -1818,7 +2005,7 @@ const CompanyManagement: React.FC = () => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {currentCompanyCustomers.map(customer => {
+                            {currentCompanyCustomers.slice(0, visibleCustomersCount).map(customer => {
                                 const lastRecord = [...currentCompanyBillingRecords]
                                     .filter(r => r.customerId === customer.id)
                                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
@@ -1946,6 +2133,15 @@ const CompanyManagement: React.FC = () => {
                                 );
                             })}
                         </div>
+
+                        {currentCompanyCustomers.length > visibleCustomersCount && (
+                            <button 
+                                onClick={() => setVisibleCustomersCount(prev => prev + 5)}
+                                className="w-full py-3 text-sm font-black text-blue-600 bg-white hover:bg-blue-50 rounded-2xl transition-all border-2 border-dashed border-blue-100 shadow-sm"
+                            >
+                                مشاهده ۵ مشتری قبلی...
+                            </button>
+                        )}
 
                         {currentCompanyCustomers.length === 0 && (
                             <div className="text-center py-12 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
@@ -2132,7 +2328,7 @@ const CompanyManagement: React.FC = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
-                                                {filteredInvoices.map(inv => {
+                                                {filteredInvoices.slice(0, visibleInvoicesCount).map(inv => {
                                                     const customer = managedCompanyCustomers.find(c => c.id === inv.customerId);
                                                     return (
                                                         <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
@@ -2152,6 +2348,14 @@ const CompanyManagement: React.FC = () => {
                                             </tbody>
                                         </table>
                                     </div>
+                                    {filteredInvoices.length > visibleInvoicesCount && (
+                                        <button 
+                                            onClick={() => setVisibleInvoicesCount(prev => prev + 5)}
+                                            className="w-full py-3 text-sm font-black text-blue-600 bg-slate-50 hover:bg-blue-50 transition-all border-t border-slate-100"
+                                        >
+                                            بارگذاری فاکتورهای بیشتر...
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         ) : (
@@ -2371,7 +2575,7 @@ const CompanyManagement: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
-                                        {filteredProductionLogs.map(log => (
+                                        {filteredProductionLogs.slice(0, visibleProductionCount).map(log => (
                                                 <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
                                                     <td className="p-4 text-xs text-slate-600">{formatJalaliDate(log.date)}</td>
                                                     <td className="p-4 text-sm font-bold text-blue-600">{log.producedUnits}</td>
@@ -2404,9 +2608,110 @@ const CompanyManagement: React.FC = () => {
                                     </tbody>
                                 </table>
                             </div>
+                            {filteredProductionLogs.length > visibleProductionCount && (
+                                <button 
+                                    onClick={() => setVisibleProductionCount(prev => prev + 5)}
+                                    className="w-full py-3 text-sm font-black text-blue-600 bg-slate-50 hover:bg-blue-50 transition-all border-t border-slate-100"
+                                >
+                                    مشاهده رکوردهای تولید بیشتر...
+                                </button>
+                            )}
                             {managedCompanyProductionLogs.filter(log => log.companyId === selectedCompanyId).length === 0 && (
                                 <div className="p-12 text-center text-slate-400 italic">هیچ رکورد تولیدی ثبت نشده است.</div>
                             )}
+                        </div>
+                    </div>
+                ) : companyDetailTab === 'reports' ? (
+                    <div className="space-y-6">
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <ClipboardDocumentListIcon className="w-6 h-6 text-blue-600" />
+                                گزارش‌گیری و خروجی اکسل
+                            </h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                                <h3 className="font-black text-slate-800 border-b pb-2">تنظیمات گزارش</h3>
+                                
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">نوع گزارش</label>
+                                    <select 
+                                        value={selectedReportType}
+                                        onChange={(e) => setSelectedReportType(e.target.value)}
+                                        className="w-full p-3 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                                    >
+                                        <option value="profit_loss">گزارش سود و زیان (تراکنش‌های مالی)</option>
+                                        <option value="customers">لیست مشتریان و مانده حساب</option>
+                                        {selectedCompany.type !== CompanyType.WATER && (
+                                            <option value="invoices">لیست فاکتورهای فروش</option>
+                                        )}
+                                        {selectedCompany.type !== CompanyType.WATER && (
+                                            <option value="production">گزارش تولیدات و ضایعات</option>
+                                        )}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">بازه زمانی</label>
+                                    <select 
+                                        value={reportDateFilter}
+                                        onChange={(e) => setReportDateFilter(e.target.value as any)}
+                                        className="w-full p-3 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                                    >
+                                        <option value="all">همه زمان‌ها</option>
+                                        <option value="today">امروز</option>
+                                        <option value="yesterday">دیروز</option>
+                                        <option value="week">هفته اخیر</option>
+                                        <option value="month">ماه اخیر</option>
+                                        <option value="year">سال اخیر</option>
+                                        <option value="custom">بازه دلخواه</option>
+                                    </select>
+                                </div>
+
+                                {reportDateFilter === 'custom' && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">از تاریخ</label>
+                                            <JalaliDateInput 
+                                                value={reportStartDate}
+                                                onChange={setReportStartDate}
+                                                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">تا تاریخ</label>
+                                            <JalaliDateInput 
+                                                value={reportEndDate}
+                                                onChange={setReportEndDate}
+                                                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <button 
+                                    onClick={handleDownloadReport}
+                                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white py-4 rounded-2xl font-black text-lg hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 active:scale-[0.98] mt-4"
+                                >
+                                    <DownloadIcon className="w-6 h-6" />
+                                    دریافت فایل اکسل (.xlsx)
+                                </button>
+                            </div>
+
+                            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 border-dashed flex flex-col items-center justify-center text-center space-y-4">
+                                <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-emerald-500">
+                                    <DownloadIcon className="w-8 h-8" />
+                                </div>
+                                <div>
+                                    <h4 className="font-black text-slate-800 mb-1">راهنمای گزارش‌گیری</h4>
+                                    <p className="text-xs text-slate-500 leading-relaxed font-bold">
+                                        گزارشات تولید شده شامل تمامی جزئیات تراکنش‌ها، مشتریان و فاکتورها بر اساس فیلترهای انتخابی شما می‌باشد.
+                                        <br />
+                                        فایل خروجی با فرمت استاندارد اکسل بوده و در تمامی نرم‌افزارهای محاسباتی قابل مشاهده است.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 ) : (
@@ -2810,43 +3115,52 @@ const CompanyManagement: React.FC = () => {
             {activeTab === 'dashboard' && (
                 <div className="space-y-8">
                     {/* Owner Dashboard Header Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600">
-                                    <TrendingUpIcon className="w-6 h-6" />
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-grow">
+                            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600">
+                                        <TrendingUpIcon className="w-6 h-6" />
+                                    </div>
                                 </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">سود کل شرکت‌ها</span>
+                                <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(totalCompanyProfit, storeSettings, 'AFN')}</h3>
                             </div>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">سود کل شرکت‌ها</span>
-                            <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(totalCompanyProfit, storeSettings, 'AFN')}</h3>
-                        </div>
-                        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-red-50 rounded-2xl text-red-600">
-                                    <TrendingDownIcon className="w-6 h-6" />
+                            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="p-3 bg-red-50 rounded-2xl text-red-600">
+                                        <TrendingDownIcon className="w-6 h-6" />
+                                    </div>
                                 </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">مجموع مصارف شخصی</span>
+                                <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(ownerStats.expenses, storeSettings, 'AFN')}</h3>
                             </div>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">مجموع مصارف شخصی</span>
-                            <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(ownerStats.expenses, storeSettings, 'AFN')}</h3>
-                        </div>
-                        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
-                                    <WalletIcon className="w-6 h-6" />
+                            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
+                                        <WalletIcon className="w-6 h-6" />
+                                    </div>
                                 </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">مجموع طلبات</span>
+                                <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(ownerStats.receivables, storeSettings, 'AFN')}</h3>
                             </div>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">مجموع طلبات</span>
-                            <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(ownerStats.receivables, storeSettings, 'AFN')}</h3>
-                        </div>
-                        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-orange-50 rounded-2xl text-orange-600">
-                                    <TrendingDownIcon className="w-6 h-6" />
+                            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="p-3 bg-orange-50 rounded-2xl text-orange-600">
+                                        <TrendingDownIcon className="w-6 h-6" />
+                                    </div>
                                 </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">مجموع بدهی‌ها</span>
+                                <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(ownerStats.payables, storeSettings, 'AFN')}</h3>
                             </div>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">مجموع بدهی‌ها</span>
-                            <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(ownerStats.payables, storeSettings, 'AFN')}</h3>
                         </div>
+                        <button 
+                            onClick={handleDownloadGlobalFinancialReport}
+                            className="w-full md:w-auto flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black text-sm hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 active:scale-[0.98]"
+                        >
+                            <DownloadIcon className="w-5 h-5" />
+                            دریافت گزارش جامع مالی
+                        </button>
                     </div>
 
                     {/* Net Worth Highlight */}
@@ -3074,6 +3388,13 @@ const CompanyManagement: React.FC = () => {
                                         میترخوانی‌ها
                                     </button>
                                 </div>
+                                <button 
+                                    onClick={handleDownloadActivityReport}
+                                    className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20"
+                                >
+                                    <DownloadIcon className="w-4 h-4" />
+                                    خروجی اکسل فعالیت‌ها
+                                </button>
                             </div>
 
                             <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-end">

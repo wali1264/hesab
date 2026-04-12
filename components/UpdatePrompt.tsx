@@ -26,7 +26,7 @@ const UpdatePrompt: React.FC = () => {
     setNeedRefresh(false);
   };
 
-  if (!needRefresh && !offlineReady) return null;
+  if (!needRefresh) return null;
 
   return (
     <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-8 md:bottom-8 z-[9999] animate-bounce-in">

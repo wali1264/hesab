@@ -10,7 +10,7 @@ import type {
     ManagedCompanyCustomer, CustomerBillingRecord,
     ManagedCompanyInvoice, ManagedCompanyProductionLog,
     OwnerTransaction, OwnerTransactionType, OwnerExpenseCategory,
-    CompanyEmployee, SalaryMonthRecord, SalaryPayment
+    CompanyEmployee, SalaryMonthRecord, SalaryPayment, LegalRecord
 } from './types';
 import { api } from './services/supabaseService';
 import { supabase } from './utils/supabaseClient';
@@ -184,6 +184,11 @@ interface AppContextType extends AppState {
     deleteSalaryPayment: (id: string) => Promise<{ success: boolean; message: string }>;
     settleSalaryMonth: (recordId: string) => Promise<{ success: boolean; message: string }>;
     generateMonthlySalaryRecords: (year: number, month: number) => Promise<{ success: boolean; message: string }>;
+    
+    // Legal Records
+    addLegalRecord: (record: Omit<LegalRecord, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateLegalRecord: (record: LegalRecord) => Promise<{ success: boolean; message: string }>;
+    deleteLegalRecord: (id: string) => Promise<{ success: boolean; message: string }>;
 
     logActivity: (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType'], companyId?: string) => Promise<void>;
 }
@@ -206,7 +211,7 @@ const getDefaultState = (): AppState => {
         products: [], saleInvoices: [], purchaseInvoices: [], inTransitInvoices: [], customers: [],
         suppliers: [], employees: [], expenses: [], services: [], depositHolders: [], depositTransactions: [],
         companies: [], partners: [],
-        companyEmployees: [], salaryRecords: [], salaryPayments: [],
+        companyEmployees: [], salaryRecords: [], salaryPayments: [], legalRecords: [],
         storeSettings: {
         storeName: 'Vendura', address: '', phone: '', lowStockThreshold: 10,
             expiryThresholdMonths: 3, currencyName: 'افغانی', currencySymbol: 'AFN',
@@ -265,6 +270,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const showToast = useCallback((message: string) => {
         console.log("Toast:", message);
     }, []);
+
+    const checkOnline = useCallback(() => {
+        if (!navigator.onLine) {
+            showToast("خطا: اتصال اینترنت برقرار نیست. برای ذخیره تغییرات و همگام‌سازی با پایگاه داده، به اینترنت نیاز دارید.");
+            return false;
+        }
+        return true;
+    }, [showToast]);
 
     const fetchSectionData = useCallback(async (sections: string[]) => {
         try {
@@ -492,6 +505,52 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         window.addEventListener('online', handleOnline);
         return () => window.removeEventListener('online', handleOnline);
     }, [checkAuthorization]);
+
+    const addLegalRecord = async (record: Omit<LegalRecord, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const newRecord: LegalRecord = {
+                ...record,
+                id: crypto.randomUUID()
+            };
+            await api.addLegalRecord(newRecord);
+            setState(prev => ({ ...prev, legalRecords: [newRecord, ...prev.legalRecords] }));
+            return { success: true, message: 'سند با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding legal record:", error);
+            return { success: false, message: error.message || 'خطا در ثبت سند' };
+        }
+    };
+
+    const updateLegalRecord = async (record: LegalRecord) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.updateLegalRecord(record);
+            setState(prev => ({
+                ...prev,
+                legalRecords: prev.legalRecords.map(r => r.id === record.id ? record : r)
+            }));
+            return { success: true, message: 'سند با موفقیت بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating legal record:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی سند' };
+        }
+    };
+
+    const deleteLegalRecord = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.deleteLegalRecord(id);
+            setState(prev => ({
+                ...prev,
+                legalRecords: prev.legalRecords.filter(r => r.id !== id)
+            }));
+            return { success: true, message: 'سند حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting legal record:", error);
+            return { success: false, message: error.message || 'خطا در حذف سند' };
+        }
+    };
 
     const logActivity = useCallback(async (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType'], companyId?: string) => {
         if (!state.currentUser) return;
@@ -1650,6 +1709,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateSettings = (newSettings: StoreSettings) => {
+        if (!checkOnline()) return;
         // Strip logos before sending to API to save space
         const { logoLeft, logoRight, ...textContent } = newSettings;
         
@@ -2439,6 +2499,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // --- Managed Companies Functions ---
     const addManagedCompany = async (companyData: Omit<ManagedCompany, 'id' | 'createdAt' | 'slotNumber'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             // Find first available slot (1-20)
             const usedSlots = state.managedCompanies.map(c => c.slotNumber);
@@ -2466,6 +2527,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateManagedCompany = async (company: ManagedCompany) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.updateManagedCompany(company);
             setState(prev => ({
@@ -2480,6 +2542,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteManagedCompany = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.deleteManagedCompany(id);
             setState(prev => ({
@@ -2495,6 +2558,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addLedgerEntry = async (entryData: Omit<CompanyLedgerEntry, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const newEntry: CompanyLedgerEntry = {
                 ...entryData,
@@ -2510,6 +2574,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateLedgerEntry = async (entry: CompanyLedgerEntry) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.updateManagedCompanyLedgerEntry(entry);
             setState(prev => ({
@@ -2524,6 +2589,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteLedgerEntry = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.deleteManagedCompanyLedgerEntry(id);
             setState(prev => ({
@@ -2538,6 +2604,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addManagedCompanyCustomer = async (customerData: Omit<ManagedCompanyCustomer, 'id' | 'createdAt'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const newCustomer: ManagedCompanyCustomer = {
                 ...customerData,
@@ -2554,6 +2621,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateManagedCompanyCustomer = async (customer: ManagedCompanyCustomer) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.updateManagedCompanyCustomer(customer);
             setState(prev => ({
@@ -2568,6 +2636,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteManagedCompanyCustomer = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.deleteManagedCompanyCustomer(id);
             setState(prev => ({
@@ -2583,6 +2652,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addCustomerBillingRecord = async (recordData: Omit<CustomerBillingRecord, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const username = state.currentUser?.username || 'مدیر';
             const newRecord: CustomerBillingRecord = {
@@ -2611,6 +2681,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateCustomerBillingRecord = async (record: CustomerBillingRecord) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const username = state.currentUser?.username || 'مدیر';
             
@@ -2651,6 +2722,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteCustomerBillingRecord = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.deleteCustomerBillingRecord(id);
             setState(prev => ({
@@ -2665,6 +2737,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     const addManagedCompanyInvoice = async (invoiceData: Omit<ManagedCompanyInvoice, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const username = state.currentUser?.username || 'مدیر';
             const newInvoice: ManagedCompanyInvoice = {
@@ -2683,6 +2756,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateManagedCompanyInvoice = async (invoice: ManagedCompanyInvoice) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const username = state.currentUser?.username || 'مدیر';
             const updatedInvoice = { ...invoice };
@@ -2706,6 +2780,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteManagedCompanyInvoice = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.deleteManagedCompanyInvoice(id);
             setState(prev => ({
@@ -2720,6 +2795,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addManagedCompanyProductionLog = async (logData: Omit<ManagedCompanyProductionLog, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         const newLog: ManagedCompanyProductionLog = {
             ...logData,
             id: crypto.randomUUID()
@@ -2730,6 +2806,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateManagedCompanyProductionLog = async (log: ManagedCompanyProductionLog) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         await api.updateManagedCompanyProductionLog(log);
         setState(prev => ({
             ...prev,
@@ -2739,6 +2816,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteManagedCompanyProductionLog = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         await api.deleteManagedCompanyProductionLog(id);
         setState(prev => ({
             ...prev,
@@ -2748,6 +2826,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addOwnerTransaction = async (txData: Omit<OwnerTransaction, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         const newTx: OwnerTransaction = {
             ...txData,
             id: crypto.randomUUID()
@@ -2758,6 +2837,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateOwnerTransaction = async (tx: OwnerTransaction) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         await api.updateOwnerTransaction(tx);
         setState(prev => ({
             ...prev,
@@ -2767,6 +2847,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteOwnerTransaction = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         await api.deleteOwnerTransaction(id);
         setState(prev => ({
             ...prev,
@@ -2776,6 +2857,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addOwnerExpenseCategory = async (name: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const newCategory: OwnerExpenseCategory = {
                 id: crypto.randomUUID(),
@@ -2791,6 +2873,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateOwnerExpenseCategory = async (category: OwnerExpenseCategory) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.updateOwnerExpenseCategory(category);
             setState(prev => ({
@@ -2805,6 +2888,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteOwnerExpenseCategory = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.deleteOwnerExpenseCategory(id);
             setState(prev => ({
@@ -2819,6 +2903,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addCompanyEmployee = async (employee: Omit<CompanyEmployee, 'id' | 'isActive'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const newEmployee: CompanyEmployee = {
                 ...employee,
@@ -2835,6 +2920,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateCompanyEmployee = async (employee: CompanyEmployee) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.updateCompanyEmployee(employee);
             setState(prev => ({
@@ -2849,6 +2935,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteCompanyEmployee = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.deleteCompanyEmployee(id);
             setState(prev => ({
@@ -2863,6 +2950,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addSalaryPayment = async (payment: Omit<SalaryPayment, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const newPayment: SalaryPayment = {
                 ...payment,
@@ -2878,6 +2966,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateSalaryPayment = async (payment: SalaryPayment) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.updateSalaryPayment(payment);
             setState(prev => ({
@@ -2892,6 +2981,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteSalaryPayment = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             await api.deleteSalaryPayment(id);
             setState(prev => ({
@@ -2906,6 +2996,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const settleSalaryMonth = async (recordId: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const record = state.salaryRecords.find(r => r.id === recordId);
             if (!record) return { success: false, message: 'رکورد یافت نشد.' };
@@ -2924,6 +3015,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const generateMonthlySalaryRecords = async (year: number, month: number) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         try {
             const activeEmployees = state.companyEmployees.filter(e => e.isActive);
             const existingRecords = state.salaryRecords.filter(r => r.year === year && r.month === month);
@@ -2985,6 +3077,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addCompanyEmployee, updateCompanyEmployee, deleteCompanyEmployee,
         addSalaryPayment, updateSalaryPayment, deleteSalaryPayment,
         settleSalaryMonth, generateMonthlySalaryRecords,
+        addLegalRecord, updateLegalRecord, deleteLegalRecord,
         addDepositHolder, deleteDepositHolder, processDepositTransaction, updateDepositTransaction, deleteDepositTransaction,
         setSelectedCompanyId, logActivity
     }}>{children}</AppContext.Provider>;
