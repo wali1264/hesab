@@ -491,7 +491,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
 
             // 3. Check if password has changed
-            if (user.password !== state.currentUser.password) {
+            // Only check if we have a password in our local session to compare with
+            if (state.currentUser.password && user.password !== state.currentUser.password) {
                 showToast("🔐 رمز عبور شما تغییر یافته است. لطفاً دوباره وارد شوید.");
                 localStorage.removeItem('app_session_user');
                 setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
@@ -610,7 +611,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 return { success: false, message: 'حساب در انتظار تایید است.' };
             }
 
-            localStorage.setItem('app_session_user', JSON.stringify(user));
+            // Ensure the password is included in the session user object for security checks
+            const sessionUser = { ...user, password: password };
+
+            localStorage.setItem('app_session_user', JSON.stringify(sessionUser));
             
             // If admin logs in, ensure shop is active
             if (user.roleId === 'admin-role' || user.roleId === SYSTEM_SUPER_OWNER_ID) {
@@ -618,7 +622,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setIsShopActive(true);
             }
 
-            setState(prev => ({ ...prev, isAuthenticated: true, currentUser: user }));
+            setState(prev => ({ ...prev, isAuthenticated: true, currentUser: sessionUser }));
             await fetchData();
             return { success: true, message: `✅ خوش آمدید ${user.username}` };
         } catch (e) {
