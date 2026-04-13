@@ -87,7 +87,14 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                                     <div className="text-base font-mono font-black text-slate-700">
                                         {isBillingRecord ? (record as CustomerBillingRecord).consumption : (record as ManagedCompanyInvoice).units} 
                                         {' '} × {' '}
-                                        {(isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('fa-IR')}
+                                        {company.type === CompanyType.WATER ? (
+                                            <>
+                                                {((isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit) / 1000).toLocaleString('fa-IR', { maximumFractionDigits: 4 })}
+                                                <span className="text-[10px] mr-1">(فی ۱۰۰۰ واحد: {(isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('fa-IR')})</span>
+                                            </>
+                                        ) : (
+                                            (isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('fa-IR')
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -96,7 +103,7 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             <div className="mb-2">
                                 <p className="text-xs font-black text-slate-500 mb-0 uppercase tracking-widest">مبلغ قابل پرداخت</p>
                                 <div className="text-4xl font-black font-mono mb-0 leading-none" dir="ltr">
-                                    {totalAmount.toLocaleString('fa-IR')}
+                                    {Math.floor(totalAmount).toLocaleString('fa-IR')}
                                 </div>
                                 <div className="text-sm font-black text-slate-800">
                                     {numberToPersianWords(totalAmount)} افغانی

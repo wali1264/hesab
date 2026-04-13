@@ -1194,7 +1194,14 @@ const CompanyManagement: React.FC = () => {
         const previousReading = Number(formData.get('previousReading'));
         const consumption = currentReading - previousReading;
         
-        let amount = consumption * (selectedCompany?.unitPrice || 0);
+        const isWaterSupply = selectedCompany?.type === CompanyType.WATER;
+        let amount = isWaterSupply 
+            ? (consumption / 1000) * (selectedCompany?.unitPrice || 0)
+            : consumption * (selectedCompany?.unitPrice || 0);
+            
+        // Round down to remove decimals as per user request
+        amount = Math.floor(amount);
+        
         let isMinimumFeeApplied = false;
         
         if (amount < 100) {
@@ -1249,13 +1256,24 @@ const CompanyManagement: React.FC = () => {
         e.preventDefault();
         if (!selectedCompanyId) return;
         const formData = new FormData(e.currentTarget);
+        const isWaterSupply = selectedCompany?.type === CompanyType.WATER;
+        const units = Number(formData.get('units'));
+        const pricePerUnit = Number(formData.get('pricePerUnit'));
+        
+        let totalAmount = isWaterSupply 
+            ? (units / 1000) * pricePerUnit
+            : units * pricePerUnit;
+            
+        // Round down to remove decimals
+        totalAmount = Math.floor(totalAmount);
+
         const invoiceData = {
             companyId: selectedCompanyId,
             customerId: tempInvoiceCustomerId,
             date: invoiceDate,
-            units: Number(formData.get('units')),
-            pricePerUnit: Number(formData.get('pricePerUnit')),
-            totalAmount: Number(formData.get('units')) * Number(formData.get('pricePerUnit')),
+            units: units,
+            pricePerUnit: pricePerUnit,
+            totalAmount: totalAmount,
             status: invoiceStatus,
             description: formData.get('description') as string,
         };
@@ -3898,17 +3916,21 @@ const CompanyManagement: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    {companyType === CompanyType.WATER ? 'قیمت فی واحد آب' : 
-                                     companyType === CompanyType.ICE ? 'قیمت فی واحد یخ' : 'قیمت فی واحد گالن'}
+                                    {companyType === CompanyType.WATER ? 'قیمت فی ۱۰۰۰ واحد آب' : 
+                                     companyType === CompanyType.ICE ? 'قیمت فی واحد یخ' : 'قیمت فی واحد بوتل'}
                                 </label>
                                 <input 
                                     name="unitPrice" 
                                     type="number"
+                                    step="any"
                                     required 
                                     defaultValue={editingCompany?.unitPrice}
                                     className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-                                    placeholder="0"
+                                    placeholder={companyType === CompanyType.WATER ? "مثلاً ۲۰" : "0"}
                                 />
+                                {companyType === CompanyType.WATER && (
+                                    <p className="text-[10px] text-slate-400 mt-1 font-bold">قیمت را برای هر ۱۰۰۰ واحد وارد کنید (مثلاً ۲۰ افغانی برای ۱۰۰۰ لیتر)</p>
+                                )}
                             </div>
                         </div>
                         <div>
@@ -4228,10 +4250,13 @@ const CompanyManagement: React.FC = () => {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">قیمت فی واحد</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    {selectedCompany?.type === CompanyType.WATER ? 'قیمت فی ۱۰۰۰ واحد' : 'قیمت فی واحد'}
+                                </label>
                                 <input 
                                     name="pricePerUnit" 
                                     type="number" 
+                                    step="any"
                                     required 
                                     value={invoicePricePerUnit || ''}
                                     onChange={(e) => setInvoicePricePerUnit(e.target.value === '' ? 0 : Number(e.target.value))}
@@ -4242,7 +4267,15 @@ const CompanyManagement: React.FC = () => {
                         </div>
                         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
                             <span className="text-sm text-blue-700 font-bold">مبلغ کل فاکتور:</span>
-                            <span className="text-xl font-black text-blue-800">{formatCurrency(invoiceUnits * invoicePricePerUnit, storeSettings, 'AFN')}</span>
+                            <span className="text-xl font-black text-blue-800">
+                                {formatCurrency(
+                                    Math.floor(selectedCompany?.type === CompanyType.WATER 
+                                        ? (invoiceUnits / 1000) * invoicePricePerUnit 
+                                        : invoiceUnits * invoicePricePerUnit), 
+                                    storeSettings, 
+                                    'AFN'
+                                )}
+                            </span>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">توضیحات</label>
