@@ -1050,7 +1050,18 @@ const CompanyManagement: React.FC = () => {
 
         let result;
         if (editingCompany) {
-            result = await updateManagedCompany({ ...editingCompany, ...companyData });
+            // Remove virtual/calculated fields that don't exist in the database schema
+            // to prevent "column not found" errors during update.
+            const { 
+                expenses, 
+                totalIncome, 
+                profit, 
+                investmentRecovery, 
+                totalDebt, 
+                ...cleanEditingCompany 
+            } = editingCompany as any;
+
+            result = await updateManagedCompany({ ...cleanEditingCompany, ...companyData });
             if (result.success) {
                 await logActivity('company', `ویرایش اطلاعات شرکت: ${companyData.name}`, editingCompany.id, 'company', editingCompany.id);
             }
