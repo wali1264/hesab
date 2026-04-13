@@ -469,21 +469,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             const { data: user, error } = await supabase.from('users').select('*').eq('id', state.currentUser.id).maybeSingle();
             
-            if (user && user.isApproved === true) {
+            // 1. Check if user still exists
+            if (!user) {
+                authRetryCount.current += 1;
+                if (authRetryCount.current >= 2) {
+                    showToast("⚠️ حساب کاربری شما یافت نشد یا حذف شده است.");
+                    localStorage.removeItem('app_session_user');
+                    setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
+                    authRetryCount.current = 0;
+                }
+                return;
+            }
+
+            // 2. Check if account is still approved
+            if (user.isApproved === false) {
+                showToast("🚫 حساب کاربری شما مسدود شده است.");
+                localStorage.removeItem('app_session_user');
+                setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
                 authRetryCount.current = 0;
                 return;
             }
 
-            authRetryCount.current += 1;
-            if (authRetryCount.current >= 3) {
+            // 3. Check if password has changed
+            if (user.password !== state.currentUser.password) {
+                showToast("🔐 رمز عبور شما تغییر یافته است. لطفاً دوباره وارد شوید.");
                 localStorage.removeItem('app_session_user');
                 setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
                 authRetryCount.current = 0;
+                return;
             }
+
+            // 4. Check if role has changed
+            if (user.roleId !== state.currentUser.roleId) {
+                setState(prev => ({
+                    ...prev,
+                    currentUser: {
+                        ...prev.currentUser!,
+                        roleId: user.roleId
+                    }
+                }));
+                // Update local storage too so it persists on refresh
+                const updatedUser = { ...state.currentUser, roleId: user.roleId };
+                localStorage.setItem('app_session_user', JSON.stringify(updatedUser));
+            }
+            
+            authRetryCount.current = 0;
         } catch (e) {
             console.error("Auth check error:", e);
         }
-    }, [state.currentUser]);
+    }, [state.currentUser, showToast]);
 
     useEffect(() => {
         let interval: any;
@@ -491,7 +525,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (isShopActive) {
             initialTimeout = setTimeout(checkAuthorization, 5000);
-            interval = setInterval(checkAuthorization, 3600000);
+            // Check every 20 minutes (1,200,000 ms)
+            interval = setInterval(checkAuthorization, 1200000);
         }
 
         return () => {
