@@ -96,6 +96,12 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                                             (isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('fa-IR')
                                         )}
                                     </div>
+                                    {company.hasPrintFee && (
+                                        <div className="mt-2 pt-2 border-t border-slate-200 flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-slate-500">هزینه چاپ بل:</span>
+                                            <span className="text-xs font-black text-slate-700">۱۰ افغانی</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

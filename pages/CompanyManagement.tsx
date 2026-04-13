@@ -469,6 +469,7 @@ const CompanyManagement: React.FC = () => {
     const [isAddCompanyModalOpen, setIsAddCompanyModalOpen] = useState(false);
     const [editingCompany, setEditingCompany] = useState<ManagedCompany | null>(null);
     const [companyType, setCompanyType] = useState<CompanyType>(CompanyType.WATER);
+    const [hasPrintFee, setHasPrintFee] = useState(false);
     const [shareholders, setShareholders] = useState<Shareholder[]>([]);
     const [isAddLedgerModalOpen, setIsAddLedgerModalOpen] = useState(false);
     const [editingLedgerEntry, setEditingLedgerEntry] = useState<CompanyLedgerEntry | null>(null);
@@ -1044,6 +1045,7 @@ const CompanyManagement: React.FC = () => {
             establishmentCost: Number(formData.get('establishmentCost')) || 0,
             unitPrice: Number(formData.get('unitPrice')) || 0,
             unitName: formData.get('unitName') as string || undefined,
+            hasPrintFee: companyType === CompanyType.WATER ? hasPrintFee : false,
             type: companyType,
             shareholders: shareholders
         };
@@ -1058,6 +1060,7 @@ const CompanyManagement: React.FC = () => {
                 profit, 
                 investmentRecovery, 
                 totalDebt, 
+                hasPrintFee: _,
                 ...cleanEditingCompany 
             } = editingCompany as any;
 
@@ -1220,6 +1223,11 @@ const CompanyManagement: React.FC = () => {
             isMinimumFeeApplied = true;
         }
         
+        // Add print fee if enabled (10 AFN)
+        if (selectedCompany?.hasPrintFee) {
+            amount += 10;
+        }
+        
         // Invoices are now independent, previous balance is not carried over
         const previousBalance = 0;
         
@@ -1277,6 +1285,11 @@ const CompanyManagement: React.FC = () => {
             
         // Round down to remove decimals
         totalAmount = Math.floor(totalAmount);
+
+        // Add print fee if enabled (10 AFN)
+        if (selectedCompany?.hasPrintFee) {
+            totalAmount += 10;
+        }
 
         const invoiceData = {
             companyId: selectedCompanyId,
@@ -3061,7 +3074,12 @@ const CompanyManagement: React.FC = () => {
                     <div className="flex justify-end">
                         {hasPermission('company:create') && (
                             <button 
-                                onClick={() => { setEditingCompany(null); setAmountInWords(''); setIsAddCompanyModalOpen(true); }}
+                                onClick={() => { 
+                                    setEditingCompany(null); 
+                                    setAmountInWords(''); 
+                                    setHasPrintFee(false);
+                                    setIsAddCompanyModalOpen(true); 
+                                }}
                                 className="flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 group"
                             >
                                 <PlusIcon className="w-6 h-6 group-hover:rotate-90 transition-transform" />
@@ -3083,7 +3101,17 @@ const CompanyManagement: React.FC = () => {
                                                 اسلات {company.slotNumber}
                                             </div>
                                             {hasPermission('company:edit') && (
-                                                <button onClick={() => { setEditingCompany(company); setAmountInWords(numberToPersianWords(company.establishmentCost || 0)); setIsAddCompanyModalOpen(true); }} className="p-2 bg-white rounded-xl border border-slate-100 text-blue-600 hover:bg-blue-50 transition-all shadow-sm"><EditIcon className="w-5 h-5" /></button>
+                                                <button 
+                                                    onClick={() => { 
+                                                        setEditingCompany(company); 
+                                                        setAmountInWords(numberToPersianWords(company.establishmentCost || 0)); 
+                                                        setHasPrintFee(company.hasPrintFee || false);
+                                                        setIsAddCompanyModalOpen(true); 
+                                                    }} 
+                                                    className="p-2 bg-white rounded-xl border border-slate-100 text-blue-600 hover:bg-blue-50 transition-all shadow-sm"
+                                                >
+                                                    <EditIcon className="w-5 h-5" />
+                                                </button>
                                             )}
                                             {hasPermission('company:delete') && (
                                                 <button onClick={() => handleDeleteCompany(company.id, company.name)} className="p-2 bg-white rounded-xl border border-slate-100 text-red-600 hover:bg-red-50 transition-all shadow-sm"><TrashIcon className="w-5 h-5" /></button>
@@ -3944,14 +3972,34 @@ const CompanyManagement: React.FC = () => {
                                 )}
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">نام واحد (اختیاری - مثلاً متر مکعب، قالب، بوتل)</label>
-                            <input 
-                                name="unitName" 
-                                defaultValue={editingCompany?.unitName}
-                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-                                placeholder="مثلاً: قالب یخ"
-                            />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">نام واحد (اختیاری - مثلاً متر مکعب، قالب، بوتل)</label>
+                                <input 
+                                    name="unitName" 
+                                    defaultValue={editingCompany?.unitName}
+                                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                    placeholder="مثلاً: قالب یخ"
+                                />
+                            </div>
+                            {companyType === CompanyType.WATER && (
+                                <div className="flex flex-col justify-center">
+                                    <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-xl border border-slate-100 hover:bg-blue-50 transition-all">
+                                        <div className="relative flex items-center">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={hasPrintFee}
+                                                onChange={(e) => setHasPrintFee(e.target.checked)}
+                                                className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 transition-all cursor-pointer"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-bold text-slate-700">حق‌الاشاعه (۱۰ افغانی)</span>
+                                            <span className="text-[10px] text-slate-400">افزودن هزینه چاپ بل به مبلغ نهایی</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            )}
                         </div>
                         {amountInWords && <p className="text-xs text-blue-600 font-bold">{amountInWords} افغانی</p>}
 
@@ -4282,7 +4330,7 @@ const CompanyManagement: React.FC = () => {
                                 {formatCurrency(
                                     Math.floor(selectedCompany?.type === CompanyType.WATER 
                                         ? (invoiceUnits / 1000) * invoicePricePerUnit 
-                                        : invoiceUnits * invoicePricePerUnit), 
+                                        : invoiceUnits * invoicePricePerUnit) + (selectedCompany?.hasPrintFee ? 10 : 0), 
                                     storeSettings, 
                                     'AFN'
                                 )}

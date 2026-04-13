@@ -326,6 +326,7 @@ export interface ManagedCompany {
     slotNumber: number; // 1-20
     type: CompanyType;
     shareholders: Shareholder[];
+    hasPrintFee?: boolean; // NEW: 10 AFN print fee for water companies
 }
 
 export interface ManagedCompanyCustomer {
