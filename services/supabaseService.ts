@@ -219,10 +219,26 @@ export const api = {
 
     // --- ACTIVITY LOGS ---
     getActivities: async () => {
-        return handleResponse(supabase.from('activity_logs').select('*').order('timestamp', { ascending: false }).limit(100));
+        const data = await handleResponse<any[]>(supabase.from('activity_logs').select('*').order('timestamp', { ascending: false }).limit(100));
+        return (data || []).map((item: any) => ({
+            ...item,
+            refId: item.ref_id,
+            refType: item.ref_type,
+            companyId: item.company_id
+        }));
     },
     addActivity: async (log: ActivityLog) => {
-        await supabase.from('activity_logs').insert([log]);
+        const mappedLog = {
+            id: log.id,
+            type: log.type,
+            description: log.description,
+            timestamp: log.timestamp,
+            user: log.user,
+            ref_id: log.refId,
+            ref_type: log.refType,
+            company_id: log.companyId
+        };
+        await supabase.from('activity_logs').insert([mappedLog]);
     },
 
     // --- WASTAGE ---
