@@ -49,7 +49,11 @@ const Login: React.FC = () => {
                 </div>
 
                 <div className="px-8 pb-10">
-                    <form className="space-y-5" onSubmit={handleSubmit}>
+                    <form className="space-y-5" onSubmit={handleSubmit} autoComplete="off">
+                        {/* Dummy fields to trick browser autocomplete */}
+                        <input type="text" name="fake_username" style={{ display: 'none' }} tabIndex={-1} aria-hidden="true" />
+                        <input type="password" name="fake_password" style={{ display: 'none' }} tabIndex={-1} aria-hidden="true" />
+                        
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-2 mr-1">
@@ -60,6 +64,7 @@ const Login: React.FC = () => {
                                     required
                                     value={identifier}
                                     onChange={(e) => setIdentifier(e.target.value)}
+                                    autoComplete="off"
                                     className="w-full px-4 py-3.5 bg-slate-100 border-transparent rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none text-slate-800 font-medium"
                                     placeholder="نام کاربری"
                                     disabled={isSubmitting}
@@ -73,6 +78,7 @@ const Login: React.FC = () => {
                                         required
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
+                                        autoComplete="new-password"
                                         className="w-full px-4 py-3.5 bg-slate-100 border-transparent rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none text-slate-800 font-medium"
                                         placeholder="••••••••"
                                         disabled={isSubmitting}
