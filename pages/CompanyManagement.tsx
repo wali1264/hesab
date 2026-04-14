@@ -4,7 +4,7 @@ import { useAppContext } from '../AppContext';
 import type { ManagedCompany, CompanyLedgerEntry, LedgerEntryType, ManagedCompanyCustomer, CustomerBillingRecord, OwnerTransaction, OwnerTransactionType, Shareholder, ManagedCompanyInvoice } from '../types';
 import { CompanyType } from '../types';
 import { PlusIcon, XIcon, EyeIcon, TrashIcon, UserGroupIcon, EditIcon, BuildingIcon, ArrowLeftIcon, WalletIcon, TrendingUpIcon, TrendingDownIcon, ChartBarIcon, ClipboardDocumentListIcon, CheckCircleIcon, CalendarIcon, PrintIcon, HistoryIcon, CurrencyDollarIcon, ExclamationCircleIcon, MapIcon, MapPinIcon, ArrowPathIcon, LocateIcon, DownloadIcon } from '../components/icons';
-import { formatCurrency, numberToPersianWords } from '../utils/formatters';
+import { formatCurrency, numberToPersianWords, toEnglishDigits } from '../utils/formatters';
 import { formatJalaliDate } from '../utils/jalali';
 import JalaliDateInput from '../components/JalaliDateInput';
 import CompanyPrintModal from '../components/CompanyPrintModal';
@@ -437,6 +437,7 @@ const CompanyManagement: React.FC = () => {
     const [salesEmployeeFilter, setSalesEmployeeFilter] = useState<string>('all');
 
     const [chartsTimeRange, setChartsTimeRange] = useState<'30days' | '6months' | 'year'>('30days');
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
     // Report States
     const [selectedReportType, setSelectedReportType] = useState<string>('profit_loss');
@@ -1116,7 +1117,8 @@ const CompanyManagement: React.FC = () => {
 
     const handleAddCustomer = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!selectedCompanyId || !selectedCompany) return;
+        if (!selectedCompanyId || !selectedCompany || isSubmitting) return;
+        setIsSubmitting(true);
         const formData = new FormData(e.currentTarget);
         
         const isWaterCompany = selectedCompany?.type === CompanyType.WATER;
@@ -1132,30 +1134,37 @@ const CompanyManagement: React.FC = () => {
 
         if (isWaterCompany) {
             customerData.meterNumber = formData.get('meterNumber') as string;
-            customerData.initialReading = Number(formData.get('initialReading'));
+            customerData.initialReading = Number(toEnglishDigits(formData.get('initialReading') as string));
         } else {
-            customerData.initialBalance = Number(formData.get('initialBalance')) || 0;
+            customerData.initialBalance = Number(toEnglishDigits(formData.get('initialBalance') as string)) || 0;
             customerData.initialBalanceType = formData.get('initialBalanceType') as 'we_request' | 'they_request';
             customerData.customerType = 'invoiced';
         }
 
-        let result;
-        if (editingCustomer) {
-            result = await updateManagedCompanyCustomer({ ...editingCustomer, ...customerData });
-            if (result.success) {
-                await logActivity('company', `ویرایش اطلاعات مشتری: ${customerData.name}`, editingCustomer.id, 'company', selectedCompanyId);
+        try {
+            let result;
+            if (editingCustomer) {
+                result = await updateManagedCompanyCustomer({ ...editingCustomer, ...customerData });
+                if (result.success) {
+                    await logActivity('company', `ویرایش اطلاعات مشتری: ${customerData.name}`, editingCustomer.id, 'company', selectedCompanyId);
+                }
+            } else {
+                result = await addManagedCompanyCustomer(customerData);
+                if (result.success) {
+                    await logActivity('company', `ثبت مشتری جدید: ${customerData.name}`, undefined, 'company', selectedCompanyId);
+                }
             }
-        } else {
-            result = await addManagedCompanyCustomer(customerData);
+            
+            showToast(result.message);
             if (result.success) {
-                await logActivity('company', `ثبت مشتری جدید: ${customerData.name}`, undefined, 'company', selectedCompanyId);
+                setIsAddCustomerModalOpen(false);
+                setEditingCustomer(null);
             }
-        }
-        
-        showToast(result.message);
-        if (result.success) {
-            setIsAddCustomerModalOpen(false);
-            setEditingCustomer(null);
+        } catch (error) {
+            console.error("Error adding customer:", error);
+            showToast("خطا در برقراری ارتباط با سرور");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -1202,10 +1211,11 @@ const CompanyManagement: React.FC = () => {
 
     const handleAddBillingRecord = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!selectedCompanyId || !selectedCustomerForBilling) return;
+        if (!selectedCompanyId || !selectedCustomerForBilling || isSubmitting) return;
+        setIsSubmitting(true);
         const formData = new FormData(e.currentTarget);
-        const currentReading = Number(formData.get('currentReading'));
-        const previousReading = Number(formData.get('previousReading'));
+        const currentReading = Number(toEnglishDigits(formData.get('currentReading') as string));
+        const previousReading = Number(toEnglishDigits(formData.get('previousReading') as string));
         const consumption = currentReading - previousReading;
         
         const isWaterSupply = selectedCompany?.type === CompanyType.WATER;
@@ -1247,27 +1257,34 @@ const CompanyManagement: React.FC = () => {
             collectorName: currentUser?.username || 'System',
         };
 
-        let result;
-        if (editingBillingRecord) {
-            result = await updateCustomerBillingRecord({ 
-                id: editingBillingRecord.id,
-                ...billingData 
-            });
-            if (result.success) {
-                await logActivity('company', `ویرایش میترخوانی مشتری: ${selectedCustomerForBilling.name}`, editingBillingRecord.id, 'company', selectedCompanyId);
+        try {
+            let result;
+            if (editingBillingRecord) {
+                result = await updateCustomerBillingRecord({ 
+                    id: editingBillingRecord.id,
+                    ...billingData 
+                });
+                if (result.success) {
+                    await logActivity('company', `ویرایش میترخوانی مشتری: ${selectedCustomerForBilling.name}`, editingBillingRecord.id, 'company', selectedCompanyId);
+                }
+            } else {
+                result = await addCustomerBillingRecord(billingData);
+                if (result.success) {
+                    await logActivity('company', `ثبت میترخوانی جدید: ${selectedCustomerForBilling.name}`, undefined, 'company', selectedCompanyId);
+                }
             }
-        } else {
-            result = await addCustomerBillingRecord(billingData);
+            
+            showToast(result.message);
             if (result.success) {
-                await logActivity('company', `ثبت میترخوانی جدید برای مشتری: ${selectedCustomerForBilling.name} (قراءت: ${currentReading})`, undefined, 'company', selectedCompanyId);
+                setIsBillingModalOpen(false);
+                setEditingBillingRecord(null);
+                setSelectedCustomerForBilling(null);
             }
-        }
-        
-        showToast(result.message);
-        if (result.success) {
-            setIsBillingModalOpen(false);
-            setEditingBillingRecord(null);
-            setSelectedCustomerForBilling(null);
+        } catch (error) {
+            console.error("Error adding billing record:", error);
+            showToast("خطا در برقراری ارتباط با سرور");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -4512,16 +4529,44 @@ const CompanyManagement: React.FC = () => {
                         {selectedCompany?.type === CompanyType.WATER ? (
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">قراءت اولیه میتر</label>
-                                <input name="initialReading" type="number" required defaultValue={editingCustomer?.initialReading} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" />
+                                <input 
+                                    name="initialReading" 
+                                    type="text" 
+                                    inputMode="numeric"
+                                    required 
+                                    defaultValue={editingCustomer?.initialReading} 
+                                    onInput={(e) => e.currentTarget.value = toEnglishDigits(e.currentTarget.value)}
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                />
                             </div>
                         ) : (
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">باقی سابق (افغانی)</label>
-                                <input name="initialBalance" type="number" required defaultValue={editingCustomer?.initialBalance || 0} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" />
+                                <input 
+                                    name="initialBalance" 
+                                    type="text" 
+                                    inputMode="numeric"
+                                    required 
+                                    defaultValue={editingCustomer?.initialBalance || 0} 
+                                    onInput={(e) => e.currentTarget.value = toEnglishDigits(e.currentTarget.value)}
+                                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                    placeholder="0" 
+                                />
                             </div>
                         )}
-                        <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
-                            {editingCustomer ? 'بروزرسانی اطلاعات' : 'ثبت مشتری'}
+                        <button 
+                            type="submit" 
+                            disabled={isSubmitting}
+                            className={`w-full p-4 text-white rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                                    در حال ثبت...
+                                </>
+                            ) : (
+                                editingCustomer ? 'بروزرسانی اطلاعات' : 'ثبت مشتری'
+                            )}
                         </button>
                     </form>
                 </Modal>
@@ -4564,7 +4609,16 @@ const CompanyManagement: React.FC = () => {
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-slate-700 mb-1">قراءت فعلی</label>
-                                            <input name="currentReading" type="number" required defaultValue={editingBillingRecord?.currentReading} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" autoFocus />
+                                            <input 
+                                                name="currentReading" 
+                                                type="text" 
+                                                inputMode="numeric"
+                                                required 
+                                                defaultValue={editingBillingRecord?.currentReading} 
+                                                onInput={(e) => e.currentTarget.value = toEnglishDigits(e.currentTarget.value)}
+                                                className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500" 
+                                                autoFocus 
+                                            />
                                         </div>
                                     </div>
                                     <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
@@ -4581,8 +4635,19 @@ const CompanyManagement: React.FC = () => {
                                         <input type="checkbox" name="isPaid" id="isPaid" defaultChecked={editingBillingRecord?.isPaid} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
                                         <label htmlFor="isPaid" className="text-sm font-bold text-slate-700 cursor-pointer">مبلغ پرداخت شده است</label>
                                     </div>
-                                    <button type="submit" className="w-full p-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
-                                        ثبت و محاسبه بل
+                                    <button 
+                                        type="submit" 
+                                        disabled={isSubmitting}
+                                        className={`w-full p-4 text-white rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                                                در حال ثبت...
+                                            </>
+                                        ) : (
+                                            'ثبت و محاسبه بل'
+                                        )}
                                     </button>
                                 </>
                             );
