@@ -53,6 +53,7 @@ const SalaryManagement: React.FC = () => {
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [showConfirmDelete, setShowConfirmDelete] = useState<{ type: 'employee' | 'payment', id: string } | null>(null);
     const [showConfirmSettle, setShowConfirmSettle] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
     // Payroll state
     const [currentYear, setCurrentYear] = useState(new Date().toLocaleDateString('fa-IR-u-nu-latn', { year: 'numeric' }));
@@ -128,47 +129,71 @@ const SalaryManagement: React.FC = () => {
 
     // Handlers
     const handleSaveEmployee = async () => {
+        if (isSubmitting) return;
         if (!employeeFormData.name || employeeFormData.monthlySalary <= 0) {
             showToast('لطفاً نام و مبلغ حقوق را وارد کنید.');
             return;
         }
 
-        let result;
-        if (selectedEmployee) {
-            result = await updateCompanyEmployee({ ...selectedEmployee, ...employeeFormData });
-        } else {
-            result = await addCompanyEmployee(employeeFormData);
-        }
-        
-        showToast(result.message);
-        if (result.success) {
-            setShowEmployeeModal(false);
-            setSelectedEmployee(null);
+        setIsSubmitting(true);
+        try {
+            let result;
+            if (selectedEmployee) {
+                result = await updateCompanyEmployee({ ...selectedEmployee, ...employeeFormData });
+            } else {
+                result = await addCompanyEmployee(employeeFormData);
+            }
+            
+            showToast(result.message);
+            if (result.success) {
+                setShowEmployeeModal(false);
+                setSelectedEmployee(null);
+            }
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     const handleSavePayment = async () => {
+        if (isSubmitting) return;
         if (paymentFormData.amount <= 0) {
             showToast('مبلغ پرداختی باید بیشتر از صفر باشد.');
             return;
         }
 
-        const amountInWords = numberToPersianWords(paymentFormData.amount);
-        const result = await addSalaryPayment({ ...paymentFormData, amountInWords });
-        showToast(result.message);
-        if (result.success) {
-            setShowPaymentModal(false);
+        setIsSubmitting(true);
+        try {
+            const amountInWords = numberToPersianWords(paymentFormData.amount);
+            const result = await addSalaryPayment({ ...paymentFormData, amountInWords });
+            showToast(result.message);
+            if (result.success) {
+                setShowPaymentModal(false);
+            }
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     const handleGenerateRecords = async () => {
-        const res = await generateMonthlySalaryRecords(jalaliYear, jalaliMonth);
-        showToast(res.message);
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            const res = await generateMonthlySalaryRecords(jalaliYear, jalaliMonth);
+            showToast(res.message);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleSettle = async (recordId: string) => {
-        const res = await settleSalaryMonth(recordId);
-        showToast(res.message);
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            const res = await settleSalaryMonth(recordId);
+            showToast(res.message);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -280,10 +305,11 @@ const SalaryManagement: React.FC = () => {
 
                             <button 
                                 onClick={handleGenerateRecords}
-                                className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-5 py-2.5 rounded-xl font-bold hover:bg-emerald-100 transition-all"
+                                disabled={isSubmitting}
+                                className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-5 py-2.5 rounded-xl font-bold hover:bg-emerald-100 transition-all disabled:opacity-50"
                             >
-                                <ArrowPathIcon className="w-5 h-5" />
-                                بروزرسانی لیست ماه
+                                <ArrowPathIcon className={`w-5 h-5 ${isSubmitting ? 'animate-spin' : ''}`} />
+                                {isSubmitting ? 'در حال بروزرسانی...' : 'بروزرسانی لیست ماه'}
                             </button>
                         </div>
 
@@ -319,6 +345,8 @@ const SalaryManagement: React.FC = () => {
                                                 const payments = getEmployeePayments(record.employeeId, record.id);
                                                 const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
 
+                                                const isPartialMonth = employee && record.baseSalary < employee.monthlySalary;
+
                                                 return (
                                                     <tr key={record.id} className="hover:bg-slate-50/50 transition-colors group">
                                                         <td className="p-5">
@@ -333,7 +361,14 @@ const SalaryManagement: React.FC = () => {
                                                             </div>
                                                         </td>
                                                         <td className="p-5 font-bold text-slate-700">
-                                                            {record.baseSalary.toLocaleString()} <span className="text-[10px] text-slate-400">{record.currency}</span>
+                                                            <div className="flex flex-col">
+                                                                <span>{record.baseSalary.toLocaleString()} <span className="text-[10px] text-slate-400">{record.currency}</span></span>
+                                                                {isPartialMonth && (
+                                                                    <span className="text-[9px] text-amber-600 font-black bg-amber-50 px-1.5 py-0.5 rounded-md w-fit mt-1">
+                                                                        ماه ناقص (کارکرد قسمتی)
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                         <td className="p-5">
                                                             <button 
@@ -602,13 +637,16 @@ const SalaryManagement: React.FC = () => {
                         <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex gap-3">
                             <button 
                                 onClick={handleSaveEmployee}
-                                className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
+                                disabled={isSubmitting}
+                                className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:bg-blue-400 flex items-center justify-center gap-2"
                             >
-                                ذخیره اطلاعات
+                                {isSubmitting && <ArrowPathIcon className="w-5 h-5 animate-spin" />}
+                                {isSubmitting ? 'در حال ذخیره...' : 'ذخیره اطلاعات'}
                             </button>
                             <button 
                                 onClick={() => setShowEmployeeModal(false)}
-                                className="flex-1 bg-white text-slate-600 py-4 rounded-2xl font-bold border border-slate-200 hover:bg-slate-50 transition-all"
+                                disabled={isSubmitting}
+                                className="flex-1 bg-white text-slate-600 py-4 rounded-2xl font-bold border border-slate-200 hover:bg-slate-50 transition-all disabled:opacity-50"
                             >
                                 انصراف
                             </button>
@@ -694,13 +732,16 @@ const SalaryManagement: React.FC = () => {
                         <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex gap-3">
                             <button 
                                 onClick={handleSavePayment}
-                                className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all"
+                                disabled={isSubmitting}
+                                className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all disabled:bg-emerald-400 flex items-center justify-center gap-2"
                             >
-                                ثبت پرداخت
+                                {isSubmitting && <ArrowPathIcon className="w-5 h-5 animate-spin" />}
+                                {isSubmitting ? 'در حال ثبت...' : 'ثبت پرداخت'}
                             </button>
                             <button 
                                 onClick={() => setShowPaymentModal(false)}
-                                className="flex-1 bg-white text-slate-600 py-4 rounded-2xl font-bold border border-slate-200 hover:bg-slate-50 transition-all"
+                                disabled={isSubmitting}
+                                className="flex-1 bg-white text-slate-600 py-4 rounded-2xl font-bold border border-slate-200 hover:bg-slate-50 transition-all disabled:opacity-50"
                             >
                                 انصراف
                             </button>

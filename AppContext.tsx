@@ -14,6 +14,7 @@ import type {
 } from './types';
 import { api } from './services/supabaseService';
 import { supabase } from './utils/supabaseClient';
+import { getJalaliDate } from './utils/jalali';
 
 interface AppContextType extends AppState {
     showToast: (message: string) => void;
@@ -3074,7 +3075,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             
             const newRecords: SalaryMonthRecord[] = [];
             for (const emp of activeEmployees) {
-                if (!existingEmployeeIds.has(emp.id)) {
+                if (existingEmployeeIds.has(emp.id)) continue;
+
+                // Parse employee start date to Jalali
+                const startD = new Date(emp.startDate);
+                if (isNaN(startD.getTime())) {
                     newRecords.push({
                         id: crypto.randomUUID(),
                         employeeId: emp.id,
@@ -3085,7 +3090,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         status: 'pending',
                         totalPaid: 0
                     });
+                    continue;
                 }
+
+                const { jy: startYear, jm: startMonth, jd: startDay } = getJalaliDate(startD);
+
+                // 1. Don't generate records for months before employment
+                if (year < startYear || (year === startYear && month < startMonth)) {
+                    continue;
+                }
+
+                let baseSalary = emp.monthlySalary;
+                
+                // 2. Calculate proportional salary for the first month
+                if (year === startYear && month === startMonth) {
+                    // Jalali month days: 1-6 = 31, 7-11 = 30, 12 = 29/30
+                    let daysInMonth = month <= 6 ? 31 : 30;
+                    if (month === 12) {
+                        const isLeap = [1, 5, 9, 13, 17, 22, 26, 30].includes(year % 33);
+                        daysInMonth = isLeap ? 30 : 29;
+                    }
+                    
+                    const workedDays = daysInMonth - startDay + 1;
+                    if (workedDays < daysInMonth && workedDays > 0) {
+                        baseSalary = Math.round((emp.monthlySalary / daysInMonth) * workedDays);
+                    } else if (workedDays <= 0) {
+                        continue;
+                    }
+                }
+
+                newRecords.push({
+                    id: crypto.randomUUID(),
+                    employeeId: emp.id,
+                    year,
+                    month,
+                    baseSalary,
+                    currency: emp.salaryCurrency,
+                    status: 'pending',
+                    totalPaid: 0
+                });
             }
             
             if (newRecords.length > 0) {
