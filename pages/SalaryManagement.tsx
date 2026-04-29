@@ -23,6 +23,7 @@ import JalaliDateInput from '../components/JalaliDateInput';
 import ConfirmModal from '../components/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { numberToPersianWords } from '../utils/numberToWords';
+import { toEnglishDigits } from '../utils/formatters';
 
 const SalaryManagement: React.FC = () => {
     const { 
@@ -605,10 +606,17 @@ const SalaryManagement: React.FC = () => {
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-slate-600 mr-1">حقوق ماهانه</label>
                                     <input 
-                                        type="number"
-                                        value={employeeFormData.monthlySalary}
-                                        onChange={e => setEmployeeFormData(prev => ({ ...prev, monthlySalary: parseFloat(e.target.value) }))}
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 focus:ring-2 focus:ring-blue-500 transition-all font-bold"
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={employeeFormData.monthlySalary === 0 ? '' : employeeFormData.monthlySalary}
+                                        onChange={e => {
+                                            const val = toEnglishDigits(e.target.value);
+                                            const cleaned = val.replace(/[^0-9.]/g, '');
+                                            setEmployeeFormData(prev => ({ ...prev, monthlySalary: parseFloat(cleaned) || 0 }));
+                                        }}
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 focus:ring-2 focus:ring-blue-500 transition-all font-bold text-lg"
+                                        style={{ direction: 'ltr', textAlign: 'right' }}
+                                        placeholder="0"
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -678,10 +686,17 @@ const SalaryManagement: React.FC = () => {
                                 <label className="text-sm font-bold text-slate-600 mr-1">مبلغ پرداختی</label>
                                 <div className="relative">
                                     <input 
-                                        type="number"
-                                        value={paymentFormData.amount}
-                                        onChange={e => setPaymentFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 pr-12 focus:ring-2 focus:ring-blue-500 transition-all font-bold text-2xl"
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={paymentFormData.amount === 0 ? '' : paymentFormData.amount}
+                                        onChange={e => {
+                                            const val = toEnglishDigits(e.target.value);
+                                            const cleaned = val.replace(/[^0-9.]/g, '');
+                                            setPaymentFormData(prev => ({ ...prev, amount: parseFloat(cleaned) || 0 }));
+                                        }}
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 pl-14 focus:ring-2 focus:ring-blue-500 transition-all font-bold text-2xl"
+                                        style={{ direction: 'ltr', textAlign: 'right' }}
+                                        placeholder="0"
                                     />
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">{paymentFormData.currency}</span>
                                 </div>

@@ -309,7 +309,7 @@ const Dashboard: React.FC = () => {
             <h1 className="text-2xl md:text-4xl mb-2 font-black text-slate-800">داشبورد مدیریتی</h1>
             <p className="text-md md:text-lg text-slate-500 font-medium">خوش آمدید، {currentUser?.username}!</p>
         </div>
-        <div className="relative hidden md:block" ref={alertsRef}>
+        <div className="relative hidden" ref={alertsRef}>
             <button onClick={() => setIsAlertsOpen(prev => !prev)} className="p-3 rounded-full hover:bg-slate-200/50 transition-colors relative group">
                 <BellIcon className="w-8 h-8 text-slate-600 group-hover:text-blue-600 transition-colors"/>
                 {totalAlerts > 0 && (
@@ -357,34 +357,36 @@ const Dashboard: React.FC = () => {
       </div>
 
        {/* Mobile Health Bar */}
-       <button 
-           onClick={() => setIsMobileAlertsOpen(true)}
-           className={`md:hidden w-full p-4 mb-8 rounded-2xl flex items-center justify-between shadow-lg border-2 transition-all active:scale-95 ${
-               totalAlerts > 0 ? 'bg-orange-50 border-orange-200 text-orange-800' : 'bg-green-50 border-green-200 text-green-800'
-           }`}
-       >
-           <div className="flex items-center gap-3">
-               <div className={`p-2.5 rounded-xl ${totalAlerts > 0 ? 'bg-orange-100' : 'bg-green-100'}`}>
-                   {totalAlerts > 0 ? <WarningIcon className="w-6 h-6 text-orange-600" /> : <CheckIcon className="w-6 h-6 text-green-600" />}
+       <div className="hidden">
+           <button 
+               onClick={() => setIsMobileAlertsOpen(true)}
+               className={`md:hidden w-full p-4 mb-8 rounded-2xl flex items-center justify-between shadow-lg border-2 transition-all active:scale-95 ${
+                   totalAlerts > 0 ? 'bg-orange-50 border-orange-200 text-orange-800' : 'bg-green-50 border-green-200 text-green-800'
+               }`}
+           >
+               <div className="flex items-center gap-3">
+                   <div className={`p-2.5 rounded-xl ${totalAlerts > 0 ? 'bg-orange-100' : 'bg-green-100'}`}>
+                       {totalAlerts > 0 ? <WarningIcon className="w-6 h-6 text-orange-600" /> : <CheckIcon className="w-6 h-6 text-green-600" />}
+                   </div>
+                   <div className="text-right">
+                       <p className="text-base font-black">{totalAlerts > 0 ? `${totalAlerts} هشدار انبار` : 'وضعیت انبار عالی است'}</p>
+                       <p className="text-[11px] opacity-70 font-semibold">{totalAlerts > 0 ? 'نیاز به بررسی موجودی و انقضا' : 'موجودی و انقضا تحت کنترل است'}</p>
+                   </div>
                </div>
-               <div className="text-right">
-                   <p className="text-base font-black">{totalAlerts > 0 ? `${totalAlerts} هشدار انبار` : 'وضعیت انبار عالی است'}</p>
-                   <p className="text-[11px] opacity-70 font-semibold">{totalAlerts > 0 ? 'نیاز به بررسی موجودی و انقضا' : 'موجودی و انقضا تحت کنترل است'}</p>
+               <div className="bg-white/50 p-1 rounded-lg">
+                    <ChevronDownIcon className="w-5 h-5 opacity-40 rotate-180" />
                </div>
-           </div>
-           <div className="bg-white/50 p-1 rounded-lg">
-                <ChevronDownIcon className="w-5 h-5 opacity-40 rotate-180" />
-           </div>
-       </button>
+           </button>
+       </div>
 
        {/* Desktop Alert Cards */}
-       <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+       <div className="hidden">
           {lowStockProducts.length > 0 && <AlertCard title="کالاهای رو به اتمام" items={lowStockProducts.map(p => ({...p, stock: p.totalStock}))} color="amber" type="stock" settings={storeSettings} />}
           {expiringSoonProducts.length > 0 && <AlertCard title="کالاهای با انقضای نزدیک" items={expiringSoonProducts} color="red" type="expiry" settings={storeSettings} />}
        </div>
       
-      {/* Vital Stats - Horizontal Carousel on Mobile, Grid on Desktop */}
-      <div className="flex md:grid md:grid-cols-3 gap-4 md:gap-6 mb-10 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-4 -mx-4 px-4 md:mx-0 md:px-0">
+      {/* Vital Stats - Hidden */}
+      <div className="hidden">
         <StatCard 
             title="فروش نقدی امروز" 
             value={totalCashSalesToday.toLocaleString('fa-IR', { maximumFractionDigits: 3 })} 
@@ -409,14 +411,14 @@ const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* Recent Activity Redesign */}
-      <div className="bg-white/60 backdrop-blur-xl p-5 md:p-8 rounded-3xl shadow-xl border border-gray-200/60 mb-10">
+      {/* Recent Activity Expanded */}
+      <div className="bg-white/60 backdrop-blur-xl p-5 md:p-8 rounded-3xl shadow-xl border border-gray-200/60 transition-all duration-500 min-h-[70vh]">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-              <h3 className="font-black text-slate-800 text-xl md:text-2xl">آخرین فعالیت‌های فروشگاه</h3>
+              <h3 className="font-black text-slate-800 text-xl md:text-2xl italic tracking-tight">رصد لحظه‌ای فعالیت‌های فروشگاه</h3>
               <DateRangeFilter onFilterChange={useCallback((start, end) => setDateRange({ start, end }), [])} />
           </div>
           
-          <div className="space-y-4 max-h-[500px] overflow-y-auto no-scrollbar">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto no-scrollbar pb-10">
               {filteredActivities.length > 0 ? (
                   filteredActivities.map(activity => {
                       const isSale = activity.type === 'sale';

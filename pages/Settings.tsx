@@ -589,7 +589,7 @@ const UsersAndRolesTab: React.FC<TabProps> = ({ showToast }) => {
     const [password, setPassword] = useState('');
     const [userRoleId, setUserRoleId] = useState('');
     
-    const groupedPermissions = groupPermissions(ALL_PERMISSIONS);
+    const groupedPermissions = groupPermissions(ALL_PERMISSIONS.filter(p => !p.hidden));
     
     const handleEditRole = (role: Role) => {
         // Prevent editing the core Admin system role for security
@@ -815,7 +815,7 @@ const UsersAndRolesTab: React.FC<TabProps> = ({ showToast }) => {
 
 const Settings: React.FC = () => {
     const { hasPermission } = useAppContext();
-    const [activeTab, setActiveTab] = useState('storeDetails');
+    const [activeTab, setActiveTab] = useState('usersAndRoles');
     const [toast, setToast] = useState('');
 
     const showToast = (message: string) => {
@@ -824,15 +824,15 @@ const Settings: React.FC = () => {
     };
 
     const tabs = [
-        { id: 'storeDetails', label: 'فروشگاه', permission: 'settings:manage_store', icon: <UserGroupIcon className="w-5 h-5"/> },
-        { id: 'alerts', label: 'هشدارها', permission: 'settings:manage_alerts', icon: <WarningIcon className="w-5 h-5"/> },
-        { id: 'customization', label: 'شخصی‌سازی', permission: 'settings:manage_store', icon: <SettingsIcon className="w-5 h-5"/> },
-        { id: 'services', label: 'خدمات', permission: 'settings:manage_services', icon: <PlusIcon className="w-5 h-5"/> },
+        { id: 'storeDetails', label: 'فروشگاه', permission: 'settings:manage_store', icon: <UserGroupIcon className="w-5 h-5"/>, hidden: true },
+        { id: 'alerts', label: 'هشدارها', permission: 'settings:manage_alerts', icon: <WarningIcon className="w-5 h-5"/>, hidden: true },
+        { id: 'customization', label: 'شخصی‌سازی', permission: 'settings:manage_store', icon: <SettingsIcon className="w-5 h-5"/>, hidden: true },
+        { id: 'services', label: 'خدمات', permission: 'settings:manage_services', icon: <PlusIcon className="w-5 h-5"/>, hidden: true },
         { id: 'usersAndRoles', label: 'کاربران', permission: 'settings:manage_users', icon: <UserGroupIcon className="w-5 h-5"/> },
-        { id: 'backup', label: 'پشتیبان‌گیری', permission: 'settings:manage_backup', icon: <UploadIcon className="w-5 h-5"/> },
+        { id: 'backup', label: 'پشتیبانی', permission: 'settings:manage_backup', icon: <UploadIcon className="w-5 h-5"/> },
     ];
     
-    const accessibleTabs = tabs.filter(tab => hasPermission(tab.permission));
+    const accessibleTabs = tabs.filter(tab => hasPermission(tab.permission) && !tab.hidden);
 
     const renderContent = () => {
         switch (activeTab) {
@@ -842,7 +842,7 @@ const Settings: React.FC = () => {
             case 'services': return <ServicesTab showToast={showToast} />;
             case 'backup': return <BackupRestoreTab showToast={showToast} />;
             case 'usersAndRoles': return <UsersAndRolesTab showToast={showToast} />;
-            default: return <StoreDetailsTab showToast={showToast} />;
+            default: return <UsersAndRolesTab showToast={showToast} />;
         }
     };
 
