@@ -60,20 +60,21 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                                 .print-title { font-size: 32pt !important; }
                                 .print-subtitle { font-size: 14pt !important; }
                                 .print-header-title { font-size: 24pt !important; }
-                                .print-metadata { font-size: 12pt !important; }
-                                .print-label { font-size: 10pt !important; }
-                                .print-customer-name { font-size: 36pt !important; font-weight: 950 !important; }
-                                .print-customer-code { font-size: 18pt !important; }
-                                .print-item-title { font-size: 24pt !important; }
+                                .print-metadata { font-size: 14pt !important; font-weight: 800 !important; color: #000 !important; }
+                                .print-label { font-size: 12pt !important; font-weight: 900 !important; color: #334155 !important; }
+                                .print-customer-name { font-size: 24pt !important; font-weight: 900 !important; margin-bottom: 2mm !important; }
+                                .print-customer-code { font-size: 16pt !important; font-weight: 900 !important; }
+                                .print-item-title { font-size: 24pt !important; font-weight: 900 !important; }
                                 .print-readings { font-size: 18pt !important; font-weight: 900 !important; color: #000 !important; margin-top: 5mm !important; border: 1px solid #000; padding: 2mm; border-radius: 4px; display: inline-block; }
                                 .print-unit-row { font-size: 22pt !important; }
                                 .print-fee-info { font-size: 14pt !important; font-weight: 900 !important; color: #000 !important; }
-                                .print-total-label { font-size: 16pt !important; }
+                                .print-total-label { font-size: 18pt !important; font-weight: 900 !important; color: #000 !important; }
                                 .print-amount-big { font-size: 64pt !important; line-height: 1 !important; margin: 10mm 0 !important; }
                                 .print-amount-words { font-size: 18pt !important; font-weight: 900 !important; }
                                 .print-status-stamp { font-size: 36pt !important; padding: 4mm 10mm !important; border-width: 4px !important; }
-                                .print-footer-text { font-size: 14pt !important; }
-                                .print-contact-info { font-size: 12pt !important; }
+                                .print-footer-text { font-size: 16pt !important; font-weight: 900 !important; }
+                                .print-contact-info { font-size: 14pt !important; font-weight: 900 !important; color: #000 !important; }
+                                .print-registrar-box { font-size: 14pt !important; font-weight: 900 !important; }
                             }
                         ` }} />
                         {/* Global Standard Frame - Flexible Height for Printing */}
@@ -159,11 +160,11 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             {/* Users Info - Centered */}
                             <div className="mb-2 space-y-1 border-t border-slate-900 pt-2">
                                 <div className="flex justify-center gap-8">
-                                    <div>
+                                    <div className="print-registrar-box">
                                         <p className="text-[8px] font-black text-slate-400 uppercase mb-0 print-label">ثبت‌کننده</p>
                                         <p className="text-xs font-black print-metadata">{registrarValue || '---'}</p>
                                     </div>
-                                    <div>
+                                    <div className="print-registrar-box">
                                         <p className="text-[8px] font-black text-slate-400 uppercase mb-0 print-label">وصول‌کننده</p>
                                         <p className="text-xs font-black print-metadata">{collectorValue}</p>
                                     </div>
