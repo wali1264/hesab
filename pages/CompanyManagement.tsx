@@ -656,7 +656,8 @@ const CompanyManagement: React.FC = () => {
             filtered = filtered.filter(c => 
                 c.name.toLowerCase().includes(query) || 
                 c.phone.includes(query) || 
-                c.meterNumber.includes(query)
+                c.meterNumber?.includes(query) ||
+                c.address.toLowerCase().includes(query)
             );
         }
         return filtered;
@@ -669,8 +670,9 @@ const CompanyManagement: React.FC = () => {
             filtered = filtered.filter(r => {
                 const customer = managedCompanyCustomers.find(c => c.id === r.customerId);
                 return customer?.name.toLowerCase().includes(query) || 
-                       customer?.meterNumber.includes(query) ||
-                       customer?.phone.includes(query);
+                       customer?.meterNumber?.includes(query) ||
+                       customer?.phone.includes(query) ||
+                       customer?.address.toLowerCase().includes(query);
             });
         }
         return filtered;
@@ -823,7 +825,10 @@ const CompanyManagement: React.FC = () => {
             filtered = filtered.filter(inv => {
                 const customer = managedCompanyCustomers.find(c => c.id === inv.customerId);
                 const customerName = customer?.name || 'مشتری گذری';
-                return customerName.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) || inv.id.includes(invoiceSearchQuery);
+                const customerAddress = customer?.address || '';
+                return customerName.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) || 
+                       inv.id.includes(invoiceSearchQuery) ||
+                       customerAddress.toLowerCase().includes(invoiceSearchQuery.toLowerCase());
             });
         }
 
@@ -873,8 +878,9 @@ const CompanyManagement: React.FC = () => {
             filtered = filtered.filter(r => {
                 const customer = managedCompanyCustomers.find(c => c.id === r.customerId);
                 return customer?.name.toLowerCase().includes(collectionSearchQuery.toLowerCase()) || 
-                       customer?.meterNumber.includes(collectionSearchQuery) ||
-                       customer?.phone.includes(collectionSearchQuery);
+                       customer?.meterNumber?.includes(collectionSearchQuery) ||
+                       customer?.phone.includes(collectionSearchQuery) ||
+                       customer?.address.toLowerCase().includes(collectionSearchQuery.toLowerCase());
             });
         }
 
