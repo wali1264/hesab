@@ -107,7 +107,7 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             {/* Customer Info - Reduced Size & Centered */}
                             <div className="mb-2">
                                 <p className="text-[8px] font-black text-slate-400 mb-0 uppercase tracking-widest print-label">نام مشتری / مشترک</p>
-                                <h3 className="text-xl font-black print-customer-name leading-tight">{customer.name} {customer.fatherName ? `فرزند ${customer.fatherName}` : ''}</h3>
+                                <h3 className="text-xl font-black print-customer-name leading-tight">{customer.name} {customer.fatherName ? `ولد ${customer.fatherName}` : ''}</h3>
                                 {isBillingRecord && (
                                     <p className="text-sm font-mono font-black mt-1 print-customer-code">کد اشتراک: {customer.meterNumber || '---'}</p>
                                 )}

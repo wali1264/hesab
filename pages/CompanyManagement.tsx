@@ -394,10 +394,16 @@ const CompanyManagement: React.FC = () => {
     }, [managedCompanyCustomers, customerBillingRecords, managedCompanyInvoices, selectedCompanyId]);
 
     const debtorsDetail = useMemo(() => {
-        if (!selectedCompanyId) return [];
-        const companyCustomers = managedCompanyCustomers.filter(c => c.companyId === selectedCompanyId);
-        const companyBilling = customerBillingRecords.filter(r => r.companyId === selectedCompanyId && r.status === 'unpaid');
-        const companyInvoices = managedCompanyInvoices.filter(i => i.companyId === selectedCompanyId && i.status === 'unpaid');
+        const companyCustomers = selectedCompanyId 
+            ? managedCompanyCustomers.filter(c => c.companyId === selectedCompanyId)
+            : managedCompanyCustomers;
+        
+        const companyBilling = customerBillingRecords.filter(r => 
+            (!selectedCompanyId || r.companyId === selectedCompanyId) && r.status === 'unpaid'
+        );
+        const companyInvoices = managedCompanyInvoices.filter(i => 
+            (!selectedCompanyId || i.companyId === selectedCompanyId) && i.status === 'unpaid'
+        );
         
         return companyCustomers.map(customer => {
             const unpaidBilling = companyBilling.filter(r => r.customerId === customer.id);
@@ -2109,7 +2115,7 @@ const CompanyManagement: React.FC = () => {
                                         <div className="flex justify-between items-start mb-4">
                                             <div>
                                                 <h3 className="font-bold text-slate-800">{customer.name}</h3>
-                                                <p className="text-xs text-slate-500">فرزند: {customer.fatherName}</p>
+                                                <p className="text-xs text-slate-500">ولد: {customer.fatherName}</p>
                                                 <p className="text-xs text-slate-500">موبایل: {customer.phone}</p>
                                             </div>
                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -3244,15 +3250,19 @@ const CompanyManagement: React.FC = () => {
                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">مجموع مصارف شخصی</span>
                                 <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(ownerStats.expenses, storeSettings, 'AFN')}</h3>
                             </div>
-                            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                            <button 
+                                onClick={() => setIsReceivablesModalOpen(true)}
+                                className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm transition-all hover:border-red-200 hover:shadow-lg hover:shadow-red-600/5 cursor-pointer active:scale-95 group text-right"
+                            >
                                 <div className="flex justify-between items-start mb-4">
-                                    <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
+                                    <div className="p-3 bg-blue-50 rounded-2xl text-blue-600 group-hover:bg-red-50 group-hover:text-red-600 transition-colors">
                                         <WalletIcon className="w-6 h-6" />
                                     </div>
+                                    <ArrowLeftIcon className="w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
                                 </div>
-                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">مجموع طلبات</span>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider group-hover:text-red-500 transition-colors">مجموع طلبات</span>
                                 <h3 className="text-2xl font-black text-slate-800 mt-1">{formatCurrency(ownerStats.receivables, storeSettings, 'AFN')}</h3>
-                            </div>
+                            </button>
                             <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="p-3 bg-orange-50 rounded-2xl text-orange-600">
@@ -4737,6 +4747,9 @@ const CompanyManagement: React.FC = () => {
                                 <div 
                                     key={debtor.id}
                                     onClick={() => {
+                                        if (!selectedCompanyId) {
+                                            setSelectedCompanyId(debtor.companyId);
+                                        }
                                         setCompanyDetailTab('customers');
                                         setCustomerSearchQuery(debtor.name);
                                         setIsReceivablesModalOpen(false);
