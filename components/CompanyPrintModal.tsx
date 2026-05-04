@@ -64,23 +64,23 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                                 /* Scaled up text for print while maintaining structure */
                                 .print-title { font-size: 28pt !important; margin-bottom: 1mm !important; }
                                 .print-subtitle { font-size: 13pt !important; opacity: 0.8; }
-                                .print-header-title { font-size: 24pt !important; margin: 3mm 0 !important; }
-                                .print-metadata { font-size: 14pt !important; font-weight: 950 !important; color: #000 !important; }
-                                .print-metadata span { font-size: 14pt !important; }
-                                .print-label { font-size: 13pt !important; font-weight: 950 !important; color: #000 !important; opacity: 0.8; }
-                                .print-customer-name { font-size: 24pt !important; font-weight: 950 !important; margin: 1.5mm 0 !important; }
-                                .print-customer-code { font-size: 17pt !important; font-weight: 950 !important; }
-                                .print-item-title { font-size: 24pt !important; font-weight: 950 !important; }
-                                .print-readings { font-size: 19pt !important; font-weight: 950 !important; color: #000 !important; margin-top: 4mm !important; border: 2px solid #000; padding: 2mm 5mm; border-radius: 5px; display: inline-block; width: 100%; max-width: 14cm; }
-                                .print-unit-row { font-size: 22pt !important; font-weight: 950 !important; margin-top: 2mm !important; }
-                                .print-fee-info { font-size: 13pt !important; font-weight: 950 !important; color: #000 !important; }
-                                .print-total-label { font-size: 17pt !important; font-weight: 950 !important; color: #000 !important; margin-bottom: 0.5mm !important; }
-                                .print-amount-big { font-size: 65pt !important; line-height: 1 !important; margin: 6mm 0 !important; font-weight: 950 !important; }
-                                .print-amount-words { font-size: 17pt !important; font-weight: 950 !important; color: #000 !important; display: inline-block; width: 100%; max-width: 14cm; overflow-wrap: break-word; }
-                                .print-status-stamp { font-size: 34pt !important; padding: 3mm 10mm !important; border-width: 4px !important; font-weight: 950 !important; margin: 3mm 0 !important; }
-                                .print-registrar-box { font-size: 14pt !important; font-weight: 950 !important; white-space: nowrap !important; }
-                                .print-footer-text { font-size: 17pt !important; font-weight: 950 !important; color: #000 !important; margin: 2mm 0 !important; }
-                                .print-contact-info { font-size: 13pt !important; font-weight: 950 !important; color: #000 !important; }
+                                .print-header-title { font-size: 24pt !important; margin: 3mm 0 !important; font-weight: 950 !important; }
+                                .print-metadata { font-size: 16pt !important; font-weight: 950 !important; color: #000 !important; }
+                                .print-metadata span { font-size: 16pt !important; font-weight: 950 !important; }
+                                .print-label { font-size: 14pt !important; font-weight: 950 !important; color: #000 !important; opacity: 0.9; }
+                                .print-customer-name { font-size: 26pt !important; font-weight: 950 !important; margin: 1.5mm 0 !important; }
+                                .print-customer-code { font-size: 20pt !important; font-weight: 950 !important; }
+                                .print-item-title { font-size: 26pt !important; font-weight: 950 !important; }
+                                .print-readings { font-size: 20pt !important; font-weight: 950 !important; color: #000 !important; margin-top: 4mm !important; border: 2.5px solid #000; padding: 2mm 5mm; border-radius: 5px; display: inline-block; width: 100%; max-width: 14cm; }
+                                .print-unit-row { font-size: 24pt !important; font-weight: 950 !important; margin-top: 2mm !important; }
+                                .print-fee-info { font-size: 14pt !important; font-weight: 950 !important; color: #000 !important; }
+                                .print-total-label { font-size: 18pt !important; font-weight: 950 !important; color: #000 !important; margin-bottom: 0.5mm !important; }
+                                .print-amount-big { font-size: 72pt !important; line-height: 1 !important; margin: 6mm 0 !important; font-weight: 950 !important; }
+                                .print-amount-words { font-size: 18pt !important; font-weight: 950 !important; color: #000 !important; display: inline-block; width: 100%; max-width: 14cm; overflow-wrap: break-word; }
+                                .print-status-stamp { font-size: 36pt !important; padding: 3mm 10mm !important; border-width: 4px !important; font-weight: 950 !important; margin: 3mm 0 !important; }
+                                .print-registrar-box { font-size: 16pt !important; font-weight: 950 !important; white-space: nowrap !important; }
+                                .print-footer-text { font-size: 18pt !important; font-weight: 950 !important; color: #000 !important; margin: 2mm 0 !important; }
+                                .print-contact-info { font-size: 16pt !important; font-weight: 950 !important; color: #000 !important; }
                             }
                         ` }} />
                         {/* Global Standard Frame - Flexible Height for Printing */}
@@ -97,9 +97,9 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             {/* Title & Metadata - Centered */}
                             <div className="mb-2 space-y-0">
                                 <h2 className="text-lg font-black border-y border-slate-900 py-1 inline-block px-12 print-header-title">{headerTitle}</h2>
-                                <div className="text-[10px] font-bold space-y-1 mt-1 print-metadata">
-                                    <p>تاریخ: <span className="font-mono text-xs">{new Date(record.date).toLocaleDateString('fa-IR')}</span></p>
-                                    <p>ساعت: <span className="font-mono text-xs">{new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span></p>
+                                <div className="text-[10px] space-y-1 mt-1 print-metadata">
+                                    <p>تاریخ: <span className="font-mono text-xs">{new Date(record.date).toLocaleDateString('fa-IR', { numberingSystem: 'latn' })}</span></p>
+                                    <p>ساعت: <span className="font-mono text-xs">{new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', numberingSystem: 'latn' })}</span></p>
                                     <p>شماره فاکتور: <span className="font-mono text-xs">{record.id.slice(-6).toUpperCase()}</span></p>
                                 </div>
                             </div>
@@ -121,25 +121,25 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                                     </div>
                                     {isBillingRecord && (
                                         <div className="text-xs text-slate-500 font-mono print-readings leading-relaxed">
-                                            قراءت: {(record as CustomerBillingRecord).previousReading} الی {(record as CustomerBillingRecord).currentReading}
+                                            قراءت: {(record as CustomerBillingRecord).previousReading.toLocaleString('en-US')} الی {(record as CustomerBillingRecord).currentReading.toLocaleString('en-US')}
                                         </div>
                                     )}
                                     <div className="text-base font-mono font-black text-slate-700 print-unit-row">
-                                        {isBillingRecord ? (record as CustomerBillingRecord).consumption : (record as ManagedCompanyInvoice).units} 
+                                        {(isBillingRecord ? (record as CustomerBillingRecord).consumption : (record as ManagedCompanyInvoice).units).toLocaleString('en-US')} 
                                         {' '} × {' '}
                                         {company.type === CompanyType.WATER ? (
                                             <span className="inline-flex items-center gap-2">
-                                                <span>{((isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit) / 1000).toLocaleString('fa-IR', { maximumFractionDigits: 4 })}</span>
-                                                <span className="text-[10px] print-fee-info">(فی ۱۰۰۰ واحد: {(isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('fa-IR')})</span>
+                                                <span>{((isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit) / 1000).toLocaleString('en-US', { maximumFractionDigits: 4 })}</span>
+                                                <span className="text-[10px] print-fee-info">(فی ۱۰۰۰ واحد: {(isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('en-US')})</span>
                                             </span>
                                         ) : (
-                                            (isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('fa-IR')
+                                            (isBillingRecord ? company.unitPrice || 0 : (record as ManagedCompanyInvoice).pricePerUnit).toLocaleString('en-US')
                                         )}
                                     </div>
                                     {company.hasPrintFee && (
                                         <div className="mt-2 pt-1 border-t border-slate-200 flex justify-between items-center print:border-slate-900 border-dashed">
                                             <span className="text-[10px] font-bold text-slate-500 print-label">خدمات چاپ فاکتور:</span>
-                                            <span className="text-xs font-black text-slate-700 print-metadata">۱۰ افغانی</span>
+                                            <span className="text-xs font-black text-slate-700 print-metadata">10 افغانی</span>
                                         </div>
                                     )}
                                 </div>
@@ -149,7 +149,7 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             <div className="mb-4">
                                 <p className="text-xs font-black text-slate-500 mb-1 uppercase tracking-widest print-total-label">مبلغ قابل پرداخت</p>
                                 <div className="text-4xl font-black font-mono mb-1 leading-none print-amount-big" dir="ltr">
-                                    {Math.floor(totalAmount).toLocaleString('fa-IR')}
+                                    {Math.floor(totalAmount).toLocaleString('en-US')}
                                 </div>
                                 <div className="print-amount-words leading-snug">
                                     {numberToPersianWords(totalAmount)} افغانی
@@ -179,12 +179,11 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
 
                             {/* Footer - Address Replacement */}
                             <div className="mt-auto pt-2 border-t-2 border-dashed border-slate-900">
-                                <p className="text-xs font-black mb-1 print-footer-text">
-                                    آدرس: {customer.address || "---"}
+                                <p className="text-xs font-black mb-1 print-footer-text leading-relaxed">
+                                    آدرس مشترک: {customer.address || "---"}
                                 </p>
                                 <div className="flex justify-center items-center gap-10 text-[10px] font-black text-slate-600 print-contact-info">
-                                    <p>تماس: <span className="font-mono">{company.phone || storeSettings.phone}</span></p>
-                                    {company.managerName && <p>مسئول: <span>{company.managerName}</span></p>}
+                                    <p>شماره تماس مشترک: <span className="font-mono">{customer.phone || '---'}</span></p>
                                 </div>
                             </div>
                         </div>
