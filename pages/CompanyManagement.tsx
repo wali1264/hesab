@@ -4639,7 +4639,10 @@ const CompanyManagement: React.FC = () => {
                             const lastRecord = [...currentCompanyBillingRecords]
                                 .filter(r => r.customerId === selectedCustomerForBilling.id)
                                 .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-                            const prevReading = lastRecord ? lastRecord.currentReading : selectedCustomerForBilling.initialReading;
+                            
+                            const prevReading = editingBillingRecord 
+                                ? editingBillingRecord.previousReading 
+                                : (lastRecord ? lastRecord.currentReading : selectedCustomerForBilling.initialReading);
                             
                             // Calculate current arrears
                             const unpaidRecords = currentCompanyBillingRecords.filter(r => r.customerId === selectedCustomerForBilling.id && r.status === 'unpaid');
@@ -4677,7 +4680,7 @@ const CompanyManagement: React.FC = () => {
                                         <JalaliDateInput value={billingDate} onChange={setBillingDate} />
                                     </div>
                                     <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                                        <input type="checkbox" name="isPaid" id="isPaid" defaultChecked={editingBillingRecord?.isPaid} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                                        <input type="checkbox" name="isPaid" id="isPaid" defaultChecked={editingBillingRecord ? editingBillingRecord.status === 'paid' : false} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
                                         <label htmlFor="isPaid" className="text-sm font-bold text-slate-700 cursor-pointer">مبلغ پرداخت شده است</label>
                                     </div>
                                     <button 
