@@ -46,43 +46,48 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                         <style dangerouslySetInnerHTML={{ __html: `
                             @media print {
                                 @page {
-                                    margin: 2mm !important;
+                                    margin: 0 !important;
                                     size: auto;
                                 }
+                                body { margin: 0 !important; padding: 0 !important; }
                                 .printable-area {
                                     width: 100% !important;
                                     max-width: none !important;
-                                    padding: 8mm !important;
+                                    padding: 12mm 10mm !important;
                                     border: none !important;
                                     box-shadow: none !important;
+                                    margin: 0 !important;
+                                    min-height: 297mm;
+                                    display: flex;
+                                    flex-direction: column;
                                 }
                                 /* Scaled up text for print while maintaining structure */
-                                .print-title { font-size: 30pt !important; margin-bottom: 1mm !important; }
-                                .print-subtitle { font-size: 14pt !important; }
-                                .print-header-title { font-size: 26pt !important; margin: 3mm 0 !important; }
-                                .print-metadata { font-size: 16pt !important; font-weight: 950 !important; color: #000 !important; }
-                                .print-metadata span { font-size: 16pt !important; }
-                                .print-label { font-size: 14pt !important; font-weight: 950 !important; color: #000 !important; opacity: 0.8; }
-                                .print-customer-name { font-size: 26pt !important; font-weight: 950 !important; margin: 2mm 0 !important; }
-                                .print-customer-code { font-size: 18pt !important; font-weight: 950 !important; }
-                                .print-item-title { font-size: 26pt !important; font-weight: 950 !important; }
-                                .print-readings { font-size: 20pt !important; font-weight: 950 !important; color: #000 !important; margin-top: 5mm !important; border: 2.5px solid #000; padding: 3mm 6mm; border-radius: 5px; display: inline-block; width: 100%; max-width: 15cm; }
-                                .print-unit-row { font-size: 24pt !important; font-weight: 950 !important; margin-top: 3mm !important; }
-                                .print-fee-info { font-size: 14pt !important; font-weight: 950 !important; color: #000 !important; }
-                                .print-total-label { font-size: 18pt !important; font-weight: 950 !important; color: #000 !important; margin-bottom: 1mm !important; }
-                                .print-amount-big { font-size: 70pt !important; line-height: 1 !important; margin: 8mm 0 !important; font-weight: 950 !important; }
-                                .print-amount-words { font-size: 18pt !important; font-weight: 950 !important; color: #000 !important; display: inline-block; width: 100%; max-width: 15cm; overflow-wrap: break-word; }
-                                .print-status-stamp { font-size: 36pt !important; padding: 4mm 12mm !important; border-width: 5px !important; font-weight: 950 !important; margin: 4mm 0 !important; }
-                                .print-registrar-box { font-size: 16pt !important; font-weight: 950 !important; }
-                                .print-footer-text { font-size: 18pt !important; font-weight: 950 !important; color: #000 !important; margin: 3mm 0 !important; }
-                                .print-contact-info { font-size: 14pt !important; font-weight: 950 !important; color: #000 !important; }
+                                .print-title { font-size: 28pt !important; margin-bottom: 1mm !important; }
+                                .print-subtitle { font-size: 13pt !important; opacity: 0.8; }
+                                .print-header-title { font-size: 24pt !important; margin: 3mm 0 !important; }
+                                .print-metadata { font-size: 14pt !important; font-weight: 950 !important; color: #000 !important; }
+                                .print-metadata span { font-size: 14pt !important; }
+                                .print-label { font-size: 13pt !important; font-weight: 950 !important; color: #000 !important; opacity: 0.8; }
+                                .print-customer-name { font-size: 24pt !important; font-weight: 950 !important; margin: 1.5mm 0 !important; }
+                                .print-customer-code { font-size: 17pt !important; font-weight: 950 !important; }
+                                .print-item-title { font-size: 24pt !important; font-weight: 950 !important; }
+                                .print-readings { font-size: 19pt !important; font-weight: 950 !important; color: #000 !important; margin-top: 4mm !important; border: 2px solid #000; padding: 2mm 5mm; border-radius: 5px; display: inline-block; width: 100%; max-width: 14cm; }
+                                .print-unit-row { font-size: 22pt !important; font-weight: 950 !important; margin-top: 2mm !important; }
+                                .print-fee-info { font-size: 13pt !important; font-weight: 950 !important; color: #000 !important; }
+                                .print-total-label { font-size: 17pt !important; font-weight: 950 !important; color: #000 !important; margin-bottom: 0.5mm !important; }
+                                .print-amount-big { font-size: 65pt !important; line-height: 1 !important; margin: 6mm 0 !important; font-weight: 950 !important; }
+                                .print-amount-words { font-size: 17pt !important; font-weight: 950 !important; color: #000 !important; display: inline-block; width: 100%; max-width: 14cm; overflow-wrap: break-word; }
+                                .print-status-stamp { font-size: 34pt !important; padding: 3mm 10mm !important; border-width: 4px !important; font-weight: 950 !important; margin: 3mm 0 !important; }
+                                .print-registrar-box { font-size: 14pt !important; font-weight: 950 !important; white-space: nowrap !important; }
+                                .print-footer-text { font-size: 17pt !important; font-weight: 950 !important; color: #000 !important; margin: 2mm 0 !important; }
+                                .print-contact-info { font-size: 13pt !important; font-weight: 950 !important; color: #000 !important; }
                             }
                         ` }} />
                         {/* Global Standard Frame - Flexible Height for Printing */}
                         <div className="printable-area bg-white mx-auto p-[2mm] rounded-sm w-full max-w-[21cm] text-slate-900 print:p-[2mm] print:m-0 print:w-full print:max-w-none print:min-h-0 font-sans text-center" dir="rtl" style={{ minHeight: '100%' }}>
                             
                             {/* Company Header - Reduced Size & Centered */}
-                            <div className="mb-2 mt-2 print:mt-4">
+                            <div className="mb-2 mt-2 print:mt-0 print:pt-2">
                                 <h1 className="text-2xl font-black tracking-tight mb-0 print-title leading-tight">{company.name}</h1>
                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest print-subtitle">
                                     {isBillingRecord ? 'مدیریت آبرسانی و خدمات فنی' : 'تولید و توزیع محصولات'}
@@ -100,7 +105,7 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             </div>
 
                             {/* Customer Info - Reduced Size & Centered */}
-                            <div className="mb-4">
+                            <div className="mb-2">
                                 <p className="text-[8px] font-black text-slate-400 mb-0 uppercase tracking-widest print-label">نام مشتری / مشترک</p>
                                 <h3 className="text-xl font-black print-customer-name leading-tight">{customer.name} {customer.fatherName ? `فرزند ${customer.fatherName}` : ''}</h3>
                                 {isBillingRecord && (
@@ -109,7 +114,7 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             </div>
 
                             {/* Items Section - Centered */}
-                            <div className="mb-6 space-y-2">
+                            <div className="mb-4 space-y-2">
                                 <div className="space-y-0">
                                     <div className="text-lg font-black print-item-title">
                                         {isBillingRecord ? 'مقدار مصرف آب دوره' : (record as ManagedCompanyInvoice).description || 'فروش محصول'}
@@ -132,7 +137,7 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                                         )}
                                     </div>
                                     {company.hasPrintFee && (
-                                        <div className="mt-4 pt-2 border-t border-slate-200 flex justify-between items-center print:border-slate-900 border-dashed">
+                                        <div className="mt-2 pt-1 border-t border-slate-200 flex justify-between items-center print:border-slate-900 border-dashed">
                                             <span className="text-[10px] font-bold text-slate-500 print-label">خدمات چاپ فاکتور:</span>
                                             <span className="text-xs font-black text-slate-700 print-metadata">۱۰ افغانی</span>
                                         </div>
@@ -141,9 +146,9 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             </div>
 
                             {/* Total Amount - Optimized Size & Centered */}
-                            <div className="mb-6">
+                            <div className="mb-4">
                                 <p className="text-xs font-black text-slate-500 mb-1 uppercase tracking-widest print-total-label">مبلغ قابل پرداخت</p>
-                                <div className="text-4xl font-black font-mono mb-2 leading-none print-amount-big" dir="ltr">
+                                <div className="text-4xl font-black font-mono mb-1 leading-none print-amount-big" dir="ltr">
                                     {Math.floor(totalAmount).toLocaleString('fa-IR')}
                                 </div>
                                 <div className="print-amount-words leading-snug">
@@ -153,19 +158,19 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
 
                             {/* Status - Centered */}
                             {record.status === 'paid' && (
-                                <div className="mb-6">
+                                <div className="mb-4">
                                     <span className="text-2xl font-black border-2 border-slate-900 px-12 py-2 rounded-xl inline-block rotate-[-3deg] print-status-stamp uppercase">وصول شد</span>
                                 </div>
                             )}
 
                             {/* Users Info - Centered */}
-                            <div className="mb-6 space-y-2 border-t-2 border-slate-900 pt-4">
-                                <div className="flex justify-center gap-12">
-                                    <div className="print-registrar-box">
+                            <div className="mb-4 space-y-2 border-t-2 border-slate-900 pt-2">
+                                <div className="flex justify-center gap-12 flex-nowrap">
+                                    <div className="print-registrar-box flex flex-col items-center">
                                         <p className="text-[8px] font-black text-slate-400 uppercase mb-0 print-label">{registrarLabel}</p>
                                         <p className="text-xs font-black print-metadata">{registrarValue || '---'}</p>
                                     </div>
-                                    <div className="print-registrar-box">
+                                    <div className="print-registrar-box flex flex-col items-center">
                                         <p className="text-[8px] font-black text-slate-400 uppercase mb-0 print-label">مدیریت / وصول</p>
                                         <p className="text-xs font-black print-metadata">{collectorValue}</p>
                                     </div>
@@ -173,8 +178,8 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             </div>
 
                             {/* Footer - Address Replacement */}
-                            <div className="pt-2 border-t-2 border-dashed border-slate-900 print:mt-4">
-                                <p className="text-xs font-black mb-2 print-footer-text">
+                            <div className="mt-auto pt-2 border-t-2 border-dashed border-slate-900">
+                                <p className="text-xs font-black mb-1 print-footer-text">
                                     آدرس: {customer.address || "---"}
                                 </p>
                                 <div className="flex justify-center items-center gap-10 text-[10px] font-black text-slate-600 print-contact-info">
@@ -184,6 +189,7 @@ const CompanyPrintModal: React.FC<CompanyPrintModalProps> = ({ record, company, 
                             </div>
                         </div>
                     </div>
+
 
                 <div className="p-4 bg-white border-t border-slate-100 flex justify-end gap-3 no-print">
                     <button 
