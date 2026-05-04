@@ -1,0 +1,3184 @@
+
+import React, { createContext, useContext, ReactNode, useState, useEffect, useCallback, useRef } from 'react';
+import type {
+    Product, ProductBatch, SaleInvoice, PurchaseInvoice, InTransitInvoice, PurchaseInvoiceItem, InvoiceItem,
+    Customer, Supplier, Employee, Expense, Service, StoreSettings, CartItem, Company, Partner, WastageRecord,
+    CustomerTransaction, SupplierTransaction, PayrollTransaction, ActivityLog,
+    User, Role, Permission, AppState, DepositHolder, DepositTransaction,
+    Order, OrderStatus, OrderPayment,
+    ManagedCompany, CompanyLedgerEntry, LedgerEntryType,
+    ManagedCompanyCustomer, CustomerBillingRecord,
+    ManagedCompanyInvoice, ManagedCompanyProductionLog,
+    OwnerTransaction, OwnerTransactionType, OwnerExpenseCategory,
+    CompanyEmployee, SalaryMonthRecord, SalaryPayment, LegalRecord
+} from './types';
+import { api } from './services/supabaseService';
+import { supabase } from './utils/supabaseClient';
+import { getJalaliDate } from './utils/jalali';
+
+interface AppContextType extends AppState {
+    showToast: (message: string) => void;
+    isLoading: boolean;
+    isLoggingOut: boolean;
+    isShopActive: boolean;
+    
+    // Auth
+    login: (username: string, password: string) => Promise<{ success: boolean; message: string; locked?: boolean }>;
+    logout: () => Promise<{ success: boolean; message: string }>;
+    hasPermission: (permission: Permission) => boolean;
+    hasCompanyAccess: (slotNumber: number) => boolean;
+    
+    // Backup & Restore
+    exportData: () => void;
+    importData: (file: File) => void;
+    cloudBackup: (isSilent?: boolean) => Promise<boolean>;
+    cloudRestore: () => Promise<boolean>;
+    autoBackupEnabled: boolean;
+    setAutoBackupEnabled: (enabled: boolean) => void;
+
+    // Data Fetching
+    fetchSectionData: (sections: string[]) => Promise<void>;
+    fetchData: (isSilent?: boolean) => Promise<void>;
+
+    // Users & Roles
+    addUser: (user: Omit<User, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateUser: (user: Partial<User> & { id: string }) => Promise<{ success: boolean; message: string }>;
+    deleteUser: (userId: string) => Promise<void>;
+    addRole: (role: Omit<Role, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateRole: (role: Role) => Promise<{ success: boolean; message: string }>;
+    deleteRole: (roleId: string) => Promise<void>;
+
+    // Inventory Actions
+    addProduct: (product: Omit<Product, 'id' | 'batches'>, firstBatch: Omit<ProductBatch, 'id'>) => { success: boolean; message: string }; 
+    updateProduct: (product: Product) => { success: boolean; message: string };
+    deleteProduct: (productId: string) => void;
+    registerWastage: (productId: string, quantity: number, reason: string) => { success: boolean; message: string };
+
+    // Orders Actions
+    addOrder: (orderData: Omit<Order, 'id' | 'createdAt' | 'payments'>) => Promise<{ success: boolean; message: string }>;
+    updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; message: string }>;
+    updateOrder: (order: Order) => Promise<{ success: boolean; message: string }>;
+    deleteOrder: (orderId: string) => Promise<{ success: boolean; message: string }>;
+    addOrderPayment: (orderId: string, amount: number) => Promise<{ success: boolean; message: string }>;
+
+    // POS Actions
+    addToCart: (itemToAdd: Product | Service, type: 'product' | 'service') => { success: boolean; message: string };
+    updateCartItemQuantity: (itemId: string, itemType: 'product' | 'service', newQuantity: number) => { success: boolean; message: string };
+    updateCartItemFinalPrice: (itemId: string, itemType: 'product' | 'service', finalPrice: number) => void;
+    removeFromCart: (itemId: string, itemType: 'product' | 'service') => void;
+    completeSale: (cashier: string, customerId?: string, currency?: 'AFN'|'USD'|'IRT', exchangeRate?: number, supplierIntermediaryId?: string, enableActivity?: boolean, receivedAmount?: number) => Promise<{ success: boolean; invoice?: SaleInvoice; message: string }>;
+    beginEditSale: (invoiceId: string) => { success: boolean; message: string; customerId?: string; supplierIntermediaryId?: string; };
+    cancelEditSale: () => void;
+    deleteSaleInvoice: (invoiceId: string) => Promise<{ success: boolean; message: string }>;
+    addSaleReturn: (originalInvoiceId: string, returnItems: { id: string; type: 'product' | 'service'; quantity: number }[], cashier: string) => Promise<{ success: boolean, message: string }>;
+    setInvoiceTransientCustomer: (invoiceId: string, customerName: string) => Promise<void>;
+    
+    // Purchase Actions
+    addPurchaseInvoice: (invoiceData: Omit<PurchaseInvoice, 'id' | 'totalAmount' | 'items' | 'type' | 'originalInvoiceId'> & { items: Omit<PurchaseInvoiceItem, 'productName' | 'atFactoryQty' | 'inTransitQty' | 'receivedQty'>[], sourceInTransitId?: string, additionalCost?: number, costDescription?: string }) => Promise<{ success: boolean, message: string, invoice?: PurchaseInvoice }>;
+    beginEditPurchase: (invoiceId: string) => { success: boolean; message: string };
+    cancelEditPurchase: () => void;
+    updatePurchaseInvoice: (invoiceData: Omit<PurchaseInvoice, 'id' | 'totalAmount' | 'items' | 'type' | 'originalInvoiceId'> & { items: Omit<PurchaseInvoiceItem, 'productName' | 'atFactoryQty' | 'inTransitQty' | 'receivedQty'>[], additionalCost?: number, costDescription?: string }) => Promise<{ success: boolean, message: string }>;
+    addPurchaseReturn: (originalInvoiceId: string, returnItems: { productId: string; lotNumber: string, quantity: number }[]) => Promise<{ success: boolean, message: string }>;
+
+    // In-Transit Actions
+    addInTransitInvoice: (invoiceData: Omit<InTransitInvoice, 'id' | 'totalAmount' | 'items' | 'type'> & { items: Omit<PurchaseInvoiceItem, 'productName' | 'atFactoryQty' | 'inTransitQty' | 'receivedQty'>[] }) => { success: boolean, message: string };
+    updateInTransitInvoice: (invoiceData: Omit<InTransitInvoice, 'totalAmount' | 'items' | 'type'> & { items: Omit<PurchaseInvoiceItem, 'productName' | 'atFactoryQty' | 'inTransitQty' | 'receivedQty'>[] }) => { success: boolean, message: string };
+    deleteInTransitInvoice: (id: string) => void;
+    archiveInTransitInvoice: (id: string) => Promise<void>;
+    moveInTransitItems: (invoiceId: string, movements: { [pid: string]: { toTransit: number, toReceived: number, lotNumber: string, expiryDate?: string } }, additionalCost?: number, costDescription?: string) => Promise<{ success: boolean, message: string }>;
+    addInTransitPayment: (invoiceId: string, amount: number, description: string, currency?: 'AFN' | 'USD' | 'IRT', exchangeRate?: number) => Promise<SupplierTransaction | null>;
+
+    // Settings
+    updateSettings: (newSettings: StoreSettings) => void;
+    
+    // Services
+    addService: (service: Omit<Service, 'id'>) => void;
+    deleteService: (serviceId: string) => void;
+    
+    // Companies
+    addCompany: (name: string, initialProfit?: { amount: number, currency: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, date?: string, description?: string }) => Promise<{ success: boolean; message: string }>;
+    updateCompany: (id: string, name: string, initialProfit?: { amount: number, currency: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, date?: string, description?: string }) => Promise<{ success: boolean; message: string }>;
+    deleteCompany: (id: string) => void;
+    setSelectedCompanyId: (id: string | null) => void;
+    
+    // Accounting
+    addSupplier: (supplier: Omit<Supplier, 'id' | 'balance' | 'balanceAFN' | 'balanceUSD' | 'balanceIRT'>, initialBalance?: { amount: number, type: 'creditor' | 'debtor', currency: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, date?: string, description?: string }) => void;
+    updateSupplier: (supplier: Supplier, initialBalance?: { amount: number, type: 'creditor' | 'debtor', currency: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, date?: string, description?: string }) => Promise<void>;
+    deleteSupplier: (id: string) => void;
+    addSupplierPayment: (supplierId: string, amount: number, description: string, currency?: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, type?: 'payment' | 'receipt', customDate?: string, isHistorical?: boolean) => Promise<SupplierTransaction>;
+    updateSupplierTransaction: (transaction: SupplierTransaction) => Promise<void>;
+    deleteSupplierTransaction: (transactionId: string) => Promise<void>;
+    
+    addCustomer: (customer: Omit<Customer, 'id' | 'balance' | 'balanceAFN' | 'balanceUSD' | 'balanceIRT'>, initialBalance?: { amount: number, type: 'creditor' | 'debtor', currency: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, date?: string, description?: string }) => void;
+    updateCustomer: (customer: Customer, initialBalance?: { amount: number, type: 'creditor' | 'debtor', currency: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, date?: string, description?: string }) => Promise<void>;
+    deleteCustomer: (id: string) => void;
+    addCustomerPayment: (customerId: string, amount: number, description: string, currency?: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, trusteeId?: string, type?: 'payment' | 'receipt', customDate?: string, isHistorical?: boolean, invoiceId?: string) => Promise<CustomerTransaction | null>;
+    updateCustomerTransaction: (transaction: CustomerTransaction) => Promise<void>;
+    deleteCustomerTransaction: (transactionId: string) => Promise<void>;
+    
+    addEmployee: (employee: Omit<Employee, 'id'|'balance'|'balanceAFN'|'balanceUSD'|'balanceIRT'>) => void;
+    updateEmployee: (employee: Employee) => void;
+    deleteEmployee: (id: string) => void;
+    toggleEmployeeActive: (id: string) => void;
+    addEmployeeAdvance: (employeeId: string, amount: number, description: string, currency?: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, customDate?: string) => void;
+    processAndPaySalaries: () => { success: boolean; message: string };
+    addEmployeeAdvanceToEmployee: (employeeId: string, amount: number, description: string, currency?: 'AFN' | 'USD' | 'IRT', exchangeRate?: number) => void;
+    addExpense: (expense: Omit<Expense, 'id'>) => void;
+    updateExpense: (expense: Expense) => void;
+    deleteExpense: (id: string) => void;
+
+    // Security Deposits
+    addDepositHolder: (holder: Omit<DepositHolder, 'id' | 'balance' | 'balanceAFN' | 'balanceUSD' | 'balanceIRT' | 'createdAt'>) => Promise<void>;
+    deleteDepositHolder: (id: string) => Promise<void>;
+    processDepositTransaction: (holderId: string, type: 'deposit' | 'withdrawal', amount: number, currency: 'AFN' | 'USD' | 'IRT', description: string, exchangeRate?: number, isCash?: boolean, date?: string, isHistorical?: boolean, isManual?: boolean) => Promise<{ success: boolean; message: string }>;
+    updateDepositTransaction: (transaction: DepositTransaction) => Promise<{ success: boolean; message: string }>;
+    deleteDepositTransaction: (id: string) => Promise<void>;
+
+    // Partners
+    addPartner: (name: string, shares: { companyId: string; percentage: number }[]) => Promise<{ success: boolean; message: string }>;
+    updatePartner: (id: string, name: string, shares: { companyId: string; percentage: number }[]) => Promise<{ success: boolean; message: string }>;
+    deletePartner: (id: string) => Promise<{ success: boolean; message: string }>;
+    recordPartnerWithdrawal: (partnerId: string, companyId: string, amount: number, currency: 'AFN' | 'USD' | 'IRT', rate: number, description: string, date?: string, isHistorical?: boolean) => Promise<{ success: boolean; message: string }>;
+    updatePartnerWithdrawal: (expenseId: string, updates: Partial<Expense>) => Promise<{ success: boolean; message: string }>;
+    deletePartnerWithdrawal: (expenseId: string) => Promise<{ success: boolean; message: string }>;
+
+    // Managed Companies
+    addManagedCompany: (company: Omit<ManagedCompany, 'id' | 'createdAt' | 'slotNumber'>) => Promise<{ success: boolean; message: string }>;
+    updateManagedCompany: (company: ManagedCompany) => Promise<{ success: boolean; message: string }>;
+    deleteManagedCompany: (id: string) => Promise<{ success: boolean; message: string }>;
+    addLedgerEntry: (entry: Omit<CompanyLedgerEntry, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateLedgerEntry: (entry: CompanyLedgerEntry) => Promise<{ success: boolean; message: string }>;
+    deleteLedgerEntry: (id: string) => Promise<{ success: boolean; message: string }>;
+
+    // Managed Company Customers
+    addManagedCompanyCustomer: (customer: Omit<ManagedCompanyCustomer, 'id' | 'createdAt'>) => Promise<{ success: boolean; message: string }>;
+    updateManagedCompanyCustomer: (customer: ManagedCompanyCustomer) => Promise<{ success: boolean; message: string }>;
+    deleteManagedCompanyCustomer: (id: string) => Promise<{ success: boolean; message: string }>;
+
+    // Customer Billing Records
+    addCustomerBillingRecord: (record: Omit<CustomerBillingRecord, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateCustomerBillingRecord: (record: CustomerBillingRecord) => Promise<{ success: boolean; message: string }>;
+    deleteCustomerBillingRecord: (id: string) => Promise<{ success: boolean; message: string }>;
+    addManagedCompanyInvoice: (invoice: Omit<ManagedCompanyInvoice, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateManagedCompanyInvoice: (invoice: ManagedCompanyInvoice) => Promise<{ success: boolean; message: string }>;
+    deleteManagedCompanyInvoice: (id: string) => Promise<{ success: boolean; message: string }>;
+    addManagedCompanyProductionLog: (log: Omit<ManagedCompanyProductionLog, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateManagedCompanyProductionLog: (log: ManagedCompanyProductionLog) => Promise<{ success: boolean; message: string }>;
+    deleteManagedCompanyProductionLog: (id: string) => Promise<{ success: boolean; message: string }>;
+
+    // Owner Transactions
+    addOwnerTransaction: (tx: Omit<OwnerTransaction, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateOwnerTransaction: (tx: OwnerTransaction) => Promise<{ success: boolean; message: string }>;
+    deleteOwnerTransaction: (id: string) => Promise<{ success: boolean; message: string }>;
+
+    // Owner Expense Categories
+    addOwnerExpenseCategory: (name: string) => Promise<{ success: boolean; message: string }>;
+    updateOwnerExpenseCategory: (category: OwnerExpenseCategory) => Promise<{ success: boolean; message: string }>;
+    deleteOwnerExpenseCategory: (id: string) => Promise<{ success: boolean; message: string }>;
+
+    // Company Salary Management
+    addCompanyEmployee: (employee: Omit<CompanyEmployee, 'id' | 'isActive'>) => Promise<{ success: boolean; message: string }>;
+    updateCompanyEmployee: (employee: CompanyEmployee) => Promise<{ success: boolean; message: string }>;
+    deleteCompanyEmployee: (id: string) => Promise<{ success: boolean; message: string }>;
+    addSalaryPayment: (payment: Omit<SalaryPayment, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateSalaryPayment: (payment: SalaryPayment) => Promise<{ success: boolean; message: string }>;
+    deleteSalaryPayment: (id: string) => Promise<{ success: boolean; message: string }>;
+    settleSalaryMonth: (recordId: string) => Promise<{ success: boolean; message: string }>;
+    generateMonthlySalaryRecords: (year: number, month: number) => Promise<{ success: boolean; message: string }>;
+    
+    // Legal Records
+    addLegalRecord: (record: Omit<LegalRecord, 'id'>) => Promise<{ success: boolean; message: string }>;
+    updateLegalRecord: (record: LegalRecord) => Promise<{ success: boolean; message: string }>;
+    deleteLegalRecord: (id: string) => Promise<{ success: boolean; message: string }>;
+
+    logActivity: (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType'], companyId?: string) => Promise<void>;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const SYSTEM_SUPER_OWNER_ID = 'system-super-owner';
+
+const getDeviceId = () => {
+    let id = localStorage.getItem('kasebyar_device_id');
+    if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem('kasebyar_device_id', id);
+    }
+    return id;
+};
+
+const getDefaultState = (): AppState => {
+    return {
+        products: [], saleInvoices: [], purchaseInvoices: [], inTransitInvoices: [], customers: [],
+        suppliers: [], employees: [], expenses: [], services: [], depositHolders: [], depositTransactions: [],
+        companies: [], partners: [],
+        companyEmployees: [], salaryRecords: [], salaryPayments: [], legalRecords: [],
+        storeSettings: {
+        storeName: 'Vendura', address: '', phone: '', lowStockThreshold: 10,
+            expiryThresholdMonths: 3, currencyName: 'افغانی', currencySymbol: 'AFN',
+            packageLabel: 'بسته', unitLabel: 'عدد',
+            baseCurrency: 'AFN',
+            logoLeftSize: 80,
+            logoRightSize: 80,
+            currencyConfigs: {
+                AFN: { code: 'AFN', name: 'افغانی', symbol: 'AFN', method: 'multiply' },
+                USD: { code: 'USD', name: 'دلار', symbol: 'USD', method: 'divide' },
+                IRT: { code: 'IRT', name: 'تومان', symbol: 'IRT', method: 'multiply' }
+            },
+            expenseCategories: ['rent', 'utilities', 'supplies', 'salary', 'other']
+        },
+        cart: [], customerTransactions: [], supplierTransactions: [], payrollTransactions: [],
+        activities: [], wastageRecords: [], orders: [], saleInvoiceCounter: 0, editingSaleInvoiceId: null, editingPurchaseInvoiceId: null,
+        selectedCompanyId: null,
+        isDataLoaded: false,
+        managedCompanies: [],
+        managedCompanyLedger: [],
+        managedCompanyCustomers: [],
+        managedCompanyInvoices: [],
+        managedCompanyProductionLogs: [],
+        customerBillingRecords: [],
+        ownerTransactions: [],
+        ownerExpenseCategories: [],
+        isAuthenticated: false, currentUser: null,
+        users: [],
+        roles: [],
+    };
+};
+
+const generateNextId = (prefix: string, ids: string[]): string => {
+    let max = 0;
+    const regex = new RegExp(`^${prefix}(\\d+)$`); 
+    for (const id of ids) {
+        const match = id.match(regex);
+        if (match) {
+             const num = parseInt(match[1], 10);
+             if (!isNaN(num)) {
+                 if (num > max) max = num;
+             }
+        }
+    }
+    return `${prefix}${max + 1}`;
+};
+
+export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [state, setState] = useState<AppState>(getDefaultState());
+    const [isLoading, setIsLoading] = useState(true);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [isShopActive, setIsShopActive] = useState(() => localStorage.getItem('kasebyar_shop_active') === 'true');
+    const [autoBackupEnabled, setAutoBackupEnabled] = useState(() => localStorage.getItem('kasebyar_auto_backup') === 'true');
+    const authRetryCount = useRef(0);
+
+    const showToast = useCallback((message: string) => {
+        console.log("Toast:", message);
+    }, []);
+
+    const checkOnline = useCallback(() => {
+        if (!navigator.onLine) {
+            showToast("خطا: اتصال اینترنت برقرار نیست. برای ذخیره تغییرات و همگام‌سازی با پایگاه داده، به اینترنت نیاز دارید.");
+            return false;
+        }
+        return true;
+    }, [showToast]);
+
+    const fetchSectionData = useCallback(async (sections: string[]) => {
+        try {
+            const fetchMap: { [key: string]: () => Promise<any> } = {
+                transactions: () => api.getTransactions(),
+                invoices: () => api.getInvoices(),
+                activities: () => api.getActivities(),
+                wastageRecords: () => api.getWastageRecords(),
+                orders: () => api.getOrders(),
+                managedCompanies: () => api.getManagedCompanies(),
+                managedLedger: () => api.getManagedCompanyLedger(),
+                managedCustomers: () => api.getManagedCompanyCustomers(),
+                managedInvoices: () => api.getManagedCompanyInvoices(),
+                managedProductionLogs: () => api.getManagedCompanyProductionLogs(),
+                billingRecords: () => api.getCustomerBillingRecords(),
+                ownerTransactions: () => api.getOwnerTransactions(),
+                ownerExpenseCategories: () => api.getOwnerExpenseCategories(),
+                companyEmployees: () => api.getCompanyEmployees(),
+                salaryRecords: () => api.getSalaryRecords(),
+                salaryPayments: () => api.getSalaryPayments(),
+                legalRecords: () => api.getLegalRecords()
+            };
+
+            const promises = sections.map(s => fetchMap[s]?.().catch(() => null));
+            const results = await Promise.all(promises);
+
+            setState(prev => {
+                const newState = { ...prev };
+                sections.forEach((s, i) => {
+                    const data = results[i];
+                    if (data === null) return;
+
+                    if (s === 'transactions') {
+                        newState.customerTransactions = data.customerTransactions || [];
+                        newState.supplierTransactions = data.supplierTransactions || [];
+                        newState.payrollTransactions = data.payrollTransactions || [];
+                        newState.depositTransactions = data.depositTransactions || [];
+                    } else if (s === 'invoices') {
+                        newState.saleInvoices = data.saleInvoices || [];
+                        newState.purchaseInvoices = data.purchaseInvoices || [];
+                        newState.inTransitInvoices = data.inTransitInvoices || [];
+                    } else if (s === 'managedCompanies') {
+                        newState.managedCompanies = data || [];
+                    } else if (s === 'managedLedger') {
+                        newState.managedCompanyLedger = data || [];
+                    } else if (s === 'managedCustomers') {
+                        newState.managedCompanyCustomers = data || [];
+                    } else if (s === 'managedInvoices') {
+                        newState.managedCompanyInvoices = data || [];
+                    } else if (s === 'managedProductionLogs') {
+                        newState.managedCompanyProductionLogs = data || [];
+                    } else if (s === 'billingRecords') {
+                        newState.customerBillingRecords = data || [];
+                    } else if (s === 'ownerTransactions') {
+                        newState.ownerTransactions = data || [];
+                    } else if (s === 'ownerExpenseCategories') {
+                        newState.ownerExpenseCategories = data || [];
+                    } else if (s === 'companyEmployees') {
+                        newState.companyEmployees = data || [];
+                    } else if (s === 'salaryRecords') {
+                        newState.salaryRecords = data || [];
+                    } else if (s === 'salaryPayments') {
+                        newState.salaryPayments = data || [];
+                    } else if (s === 'legalRecords') {
+                        newState.legalRecords = data || [];
+                    } else if (s === 'activities') {
+                        newState.activities = data || [];
+                    } else if (s === 'wastageRecords') {
+                        newState.wastageRecords = data || [];
+                    } else if (s === 'orders') {
+                        newState.orders = data || [];
+                    }
+                });
+                return newState;
+            });
+        } catch (error) {
+            console.error("Error fetching section data:", error);
+        }
+    }, []);
+
+    const fetchData = useCallback(async (isSilent = false) => {
+        if (!isSilent) setIsLoading(true);
+        try {
+            // Only fetch essential data initially for speed
+            const [settings, users, roles, products, services, entities] = await Promise.all([
+                api.getSettings().catch(() => ({})),
+                api.getUsers().catch(() => []),
+                api.getRoles().catch(() => []),
+                api.getProducts().catch(() => []),
+                api.getServices().catch(() => []),
+                api.getEntities().catch(() => ({ customers: [], suppliers: [], employees: [], expenses: [], depositHolders: [], companies: [], partners: [] }))
+            ]) as any[];
+
+            setState(prev => {
+                const localLogoLeft = localStorage.getItem('v_store_logo_left');
+                const localLogoRight = localStorage.getItem('v_store_logo_right');
+                
+                const mergedSettings = (settings as StoreSettings)?.storeName 
+                    ? { 
+                        ...prev.storeSettings, 
+                        ...settings,
+                        logoLeft: localLogoLeft || (settings as StoreSettings).logoLeft,
+                        logoRight: localLogoRight || (settings as StoreSettings).logoRight
+                      } 
+                    : {
+                        ...prev.storeSettings,
+                        logoLeft: localLogoLeft || prev.storeSettings.logoLeft,
+                        logoRight: localLogoRight || prev.storeSettings.logoRight
+                    };
+                
+                // Patch products if needed
+                const patchedProducts = (products || []).map((p: any) => ({
+                    ...p,
+                    minStock: p.minStock ?? 0,
+                    isArchived: p.isArchived ?? false,
+                    costPrice: p.costPrice ?? 0,
+                    salePrice: p.salePrice ?? 0
+                }));
+
+                // Patch employees
+                const patchedEmployees = (entities.employees || []).map((e: any) => ({
+                    ...e,
+                    isActive: e.isActive ?? true,
+                    salaryCurrency: e.salaryCurrency || mergedSettings.baseCurrency || 'AFN'
+                }));
+
+                // Patch customers/suppliers
+                const patchedCustomers = (entities.customers || []).map((c: any) => ({
+                    ...c,
+                    balance: c.balance ?? 0,
+                    balanceAFN: c.balanceAFN ?? 0,
+                    balanceUSD: c.balanceUSD ?? 0,
+                    balanceIRT: c.balanceIRT ?? 0
+                }));
+
+                const patchedSuppliers = (entities.suppliers || []).map((s: any) => ({
+                    ...s,
+                    balance: s.balance ?? 0,
+                    balanceAFN: s.balanceAFN ?? 0,
+                    balanceUSD: s.balanceUSD ?? 0,
+                    balanceIRT: s.balanceIRT ?? 0
+                }));
+
+                return {
+                    ...prev,
+                    isDataLoaded: true,
+                    storeSettings: mergedSettings,
+                    users: users || [],
+                    roles: (roles && roles.length > 0) ? roles : [{ id: 'admin-role', name: 'Admin', permissions: ['page:dashboard', 'page:inventory', 'page:pos', 'page:purchases', 'page:accounting', 'page:reports', 'page:settings', 'page:in_transit', 'page:deposits', 'page:orders', 'orders:create', 'orders:edit', 'orders:delete', 'orders:add_payment', 'page:special_reports'] }],
+                    products: patchedProducts, 
+                    services: services || [], 
+                    customers: patchedCustomers, 
+                    suppliers: patchedSuppliers,
+                    employees: patchedEmployees, 
+                    expenses: entities.expenses || [],
+                    depositHolders: entities.depositHolders || [],
+                    companies: entities.companies || [],
+                    partners: entities.partners || []
+                };
+            });
+        } catch (error) {
+            console.error("Critical Error fetching data:", error);
+            showToast("⚠️ خطا در بارگذاری برنامه. لطفاً صفحه را رفرش کنید.");
+        } finally {
+            if (!isSilent) setIsLoading(false);
+        }
+    }, [showToast]);
+
+    useEffect(() => {
+        const checkSession = async () => {
+            const savedUser = localStorage.getItem('app_session_user');
+            if (savedUser) {
+                try {
+                    let user = JSON.parse(savedUser);
+                    setState(prev => ({ ...prev, isAuthenticated: true, currentUser: user }));
+                    await fetchData();
+                } catch (e) {
+                    localStorage.removeItem('app_session_user');
+                }
+            }
+            setIsLoading(false);
+        };
+        checkSession();
+    }, [fetchData]);
+
+    const checkAuthorization = useCallback(async () => {
+        if (!navigator.onLine || !state.currentUser) return;
+
+        try {
+            const { data: user, error } = await supabase.from('users').select('*').eq('id', state.currentUser.id).maybeSingle();
+            
+            // 1. Check if user still exists
+            if (!user) {
+                authRetryCount.current += 1;
+                if (authRetryCount.current >= 2) {
+                    showToast("⚠️ حساب کاربری شما یافت نشد یا حذف شده است.");
+                    localStorage.removeItem('app_session_user');
+                    setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
+                    authRetryCount.current = 0;
+                }
+                return;
+            }
+
+            // 2. Check if account is still approved
+            if (user.isApproved === false) {
+                showToast("🚫 حساب کاربری شما مسدود شده است.");
+                localStorage.removeItem('app_session_user');
+                setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
+                authRetryCount.current = 0;
+                return;
+            }
+
+            // 3. Check if password has changed
+            // Only check if we have a password in our local session to compare with
+            if (state.currentUser.password && user.password !== state.currentUser.password) {
+                showToast("🔐 رمز عبور شما تغییر یافته است. لطفاً دوباره وارد شوید.");
+                localStorage.removeItem('app_session_user');
+                setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
+                authRetryCount.current = 0;
+                return;
+            }
+
+            // 4. Check if role has changed
+            if (user.roleId !== state.currentUser.roleId) {
+                setState(prev => ({
+                    ...prev,
+                    currentUser: {
+                        ...prev.currentUser!,
+                        roleId: user.roleId
+                    }
+                }));
+                // Update local storage too so it persists on refresh
+                const updatedUser = { ...state.currentUser, roleId: user.roleId };
+                localStorage.setItem('app_session_user', JSON.stringify(updatedUser));
+            }
+            
+            authRetryCount.current = 0;
+        } catch (e) {
+            console.error("Auth check error:", e);
+        }
+    }, [state.currentUser, showToast]);
+
+    useEffect(() => {
+        let interval: any;
+        let initialTimeout: any;
+
+        if (isShopActive) {
+            initialTimeout = setTimeout(checkAuthorization, 5000);
+            // Check every 20 minutes (1,200,000 ms)
+            interval = setInterval(checkAuthorization, 1200000);
+        }
+
+        return () => {
+            if (initialTimeout) clearTimeout(initialTimeout);
+            if (interval) clearInterval(interval);
+        };
+    }, [isShopActive, checkAuthorization]);
+
+    useEffect(() => {
+        const handleOnline = () => checkAuthorization();
+        window.addEventListener('online', handleOnline);
+        return () => window.removeEventListener('online', handleOnline);
+    }, [checkAuthorization]);
+
+    const addLegalRecord = async (record: Omit<LegalRecord, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const newRecord: LegalRecord = {
+                ...record,
+                id: crypto.randomUUID()
+            };
+            await api.addLegalRecord(newRecord);
+            setState(prev => ({ ...prev, legalRecords: [newRecord, ...prev.legalRecords] }));
+            return { success: true, message: 'سند با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding legal record:", error);
+            return { success: false, message: error.message || 'خطا در ثبت سند' };
+        }
+    };
+
+    const updateLegalRecord = async (record: LegalRecord) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.updateLegalRecord(record);
+            setState(prev => ({
+                ...prev,
+                legalRecords: prev.legalRecords.map(r => r.id === record.id ? record : r)
+            }));
+            return { success: true, message: 'سند با موفقیت بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating legal record:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی سند' };
+        }
+    };
+
+    const deleteLegalRecord = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.deleteLegalRecord(id);
+            setState(prev => ({
+                ...prev,
+                legalRecords: prev.legalRecords.filter(r => r.id !== id)
+            }));
+            return { success: true, message: 'سند حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting legal record:", error);
+            return { success: false, message: error.message || 'خطا در حذف سند' };
+        }
+    };
+
+    const logActivity = useCallback(async (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType'], companyId?: string) => {
+        if (!state.currentUser) return;
+        const displayName = state.currentUser.roleId === SYSTEM_SUPER_OWNER_ID ? 'صاحب فروشگاه' : state.currentUser.username;
+        const newActivity: ActivityLog = { id: crypto.randomUUID(), type, description, timestamp: new Date().toISOString(), user: displayName, refId, refType, companyId };
+        setState(prev => ({ ...prev, activities: [newActivity, ...prev.activities] }));
+        try { await api.addActivity(newActivity); } catch (e) {}
+    }, [state.currentUser]);
+
+    const login = async (username: string, password: string): Promise<{ success: boolean; message: string; locked?: boolean }> => {
+        setIsLoading(true);
+        try {
+            const user = await api.verifyUserLogin(username, password);
+            
+            if (!user) {
+                setIsLoading(false);
+                return { success: false, message: 'نام کاربری یا رمز عبور اشتباه است.' };
+            }
+
+            if (user.isApproved === false) {
+                setIsLoading(false);
+                return { success: false, message: 'حساب در انتظار تایید است.' };
+            }
+
+            // Ensure the password is included in the session user object for security checks
+            const sessionUser = { ...user, password: password };
+
+            localStorage.setItem('app_session_user', JSON.stringify(sessionUser));
+            
+            // If admin logs in, ensure shop is active
+            if (user.roleId === 'admin-role' || user.roleId === SYSTEM_SUPER_OWNER_ID) {
+                localStorage.setItem('kasebyar_shop_active', 'true');
+                setIsShopActive(true);
+            }
+
+            setState(prev => ({ ...prev, isAuthenticated: true, currentUser: sessionUser }));
+            await fetchData();
+            return { success: true, message: `✅ خوش آمدید ${user.username}` };
+        } catch (e) {
+            setIsLoading(false);
+            return { success: false, message: '❌ خطا در اتصال به سرور.' };
+        }
+    };
+
+    const logout = async (): Promise<{ success: boolean; message: string }> => {
+        setIsLoggingOut(true);
+        
+        localStorage.removeItem('app_session_user');
+        setState(prev => ({ ...prev, isAuthenticated: false, currentUser: null }));
+        setIsLoggingOut(false);
+        return { success: true, message: '✅ از سیستم خارج شدید.' };
+    };
+
+    const hasPermission = useCallback((permission: Permission): boolean => {
+        if (!state.currentUser) return false;
+        const roleId = state.currentUser.roleId;
+        if (roleId === SYSTEM_SUPER_OWNER_ID) return true;
+        if (roleId === 'admin-role') return true;
+        const userRole = (state.roles || []).find(r => r.id === roleId);
+        if (!userRole || !userRole.permissions) return false;
+        return userRole.permissions.includes(permission);
+    }, [state.currentUser, state.roles]);
+
+    const hasCompanyAccess = useCallback((slotNumber: number): boolean => {
+        if (!state.currentUser) return false;
+        const roleId = state.currentUser.roleId;
+        if (roleId === SYSTEM_SUPER_OWNER_ID) return true;
+        if (roleId === 'admin-role') return true;
+        const userRole = (state.roles || []).find(r => r.id === roleId);
+        if (!userRole) return false;
+        if (!userRole.companyAccess) return false;
+        return userRole.companyAccess.includes(slotNumber);
+    }, [state.currentUser, state.roles]);
+
+    const addUser = async (userData: Omit<User, 'id'>) => {
+        const newUser = await api.addUser(userData);
+        setState(prev => ({ ...prev, users: [...prev.users, newUser] }));
+        logActivity('login', `کاربر جدید اضافه شد: ${userData.username}`);
+        return { success: true, message: '✅ کاربر اضافه شد.' };
+    };
+
+    const updateUser = async (userData: Partial<User> & { id: string }) => {
+        await api.updateUser(userData);
+        setState(prev => {
+            const updatedUsers = prev.users.map(u => u.id === userData.id ? { ...u, ...userData } : u);
+            let updatedCurrentUser = prev.currentUser;
+            if (prev.currentUser?.id === userData.id) {
+                updatedCurrentUser = { ...prev.currentUser, ...userData };
+                if (localStorage.getItem('kasebyar_staff_user')) localStorage.setItem('kasebyar_staff_user', JSON.stringify(updatedCurrentUser));
+            }
+            return { ...prev, users: updatedUsers, currentUser: updatedCurrentUser };
+        });
+        logActivity('login', `اطلاعات کاربر ${userData.username || ''} بروزرسانی شد.`);
+        return { success: true, message: '✅ بروزرسانی شد.' };
+    };
+
+    const addRole = async (roleData: Omit<Role, 'id'>) => {
+        const newRole = await api.addRole(roleData);
+        setState(prev => ({ ...prev, roles: [...prev.roles, newRole] }));
+        logActivity('login', `نقش جدید تعریف شد: ${roleData.name}`);
+        return { success: true, message: '✅ نقش اضافه شد.' };
+    };
+
+    const updateRole = async (roleData: Role) => {
+        await api.updateRole(roleData);
+        setState(prev => ({ ...prev, roles: (prev.roles || []).map(r => r.id === roleData.id ? roleData : r) }));
+        logActivity('login', `دسترسی‌های نقش ${roleData.name} تغییر یافت.`);
+        return { success: true, message: '✅ نقش بروزرسانی شد.' };
+    };
+
+    const deleteRole = async (roleId: string) => {
+        if (roleId === 'admin-role') return;
+        await api.deleteRole(roleId);
+        setState(prev => ({ ...prev, roles: (prev.roles || []).filter(r => r.id !== roleId) }));
+    };
+
+    const exportData = () => {
+        const localLogoLeft = localStorage.getItem('v_store_logo_left');
+        const localLogoRight = localStorage.getItem('v_store_logo_right');
+        const localMemos = localStorage.getItem('v_pos_memos');
+
+        const backupData = { 
+            ...state, 
+            isAuthenticated: false, 
+            currentUser: null, 
+            cart: [],
+            localStorageData: {
+                logoLeft: localLogoLeft,
+                logoRight: localLogoRight,
+                memos: localMemos ? JSON.parse(localMemos) : []
+            }
+        };
+
+        const dataStr = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `Vendura_Backup_${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const importData = async (file: File) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = JSON.parse(e.target?.result as string) as any;
+                
+                // Restore localStorage data if present
+                if (data.localStorageData) {
+                    if (data.localStorageData.logoLeft) localStorage.setItem('v_store_logo_left', data.localStorageData.logoLeft);
+                    if (data.localStorageData.logoRight) localStorage.setItem('v_store_logo_right', data.localStorageData.logoRight);
+                    if (data.localStorageData.memos) localStorage.setItem('v_pos_memos', JSON.stringify(data.localStorageData.memos));
+                }
+
+                await api.clearAndRestoreData(data);
+                await fetchData();
+                showToast("✅ بازیابی با موفقیت انجام شد.");
+            } catch (err) { showToast("❌ خطا در ساختار فایل."); }
+        };
+        reader.readAsText(file);
+    };
+
+    const cloudBackup = async (isSilent = false) => {
+        if (!navigator.onLine || !state.currentUser) return false;
+        try {
+            const success = await api.saveCloudBackup(state.currentUser.id, { ...state, isAuthenticated: false, currentUser: null, cart: [] });
+            if (success) localStorage.setItem('kasebyar_last_backup', Date.now().toString());
+            return success;
+        } catch (error) { return false; }
+    };
+
+    const cloudRestore = async () => {
+        if (!navigator.onLine || !state.currentUser) return false;
+        try {
+            const data = await api.getCloudBackup(state.currentUser.id);
+            if (data) { await api.clearAndRestoreData(data); await fetchData(); return true; }
+            return false;
+        } catch (error) { return false; }
+    };
+
+    const addProduct = (p: any, b: any) => { 
+        api.addProduct(p, b).then(np => { setState(prev => ({ ...prev, products: [...prev.products, np] })); logActivity('inventory', `محصول جدید: ${p.name}`, np.id, 'product'); }); 
+        return { success: true, message: 'ذخیره شد.' }; 
+    };
+    const updateProduct = (p: any) => { 
+        api.updateProduct(p).then(() => { setState(prev => ({ ...prev, products: prev.products.map(x => x.id === p.id ? p : x) })); logActivity('inventory', `ویرایش: ${p.name}`, p.id, 'product'); }); 
+        return { success: true, message: 'ویرایش شد.' }; 
+    };
+    const deleteProduct = (id: string) => { api.deleteProduct(id).then(() => setState(prev => ({ ...prev, products: prev.products.filter(p => p.id !== id) }))); };
+
+    const registerWastage = (productId: string, quantity: number, reason: string) => {
+        let success = false;
+        let message = '';
+
+        setState(prevState => {
+            const productIndex = prevState.products.findIndex(p => p.id === productId);
+            if (productIndex === -1) return prevState;
+
+            const product = prevState.products[productIndex];
+            const totalStock = (product.batches || []).reduce((sum, b) => sum + b.stock, 0);
+
+            if (quantity > totalStock) {
+                message = 'مقدار ضایعات نمی‌تواند بیشتر از موجودی باشد.';
+                return prevState;
+            }
+
+            let remainingWastage = quantity;
+            let totalWastageCost = 0;
+            // Create a deep copy of batches to prevent double deduction in React StrictMode
+            const updatedBatches = product.batches.map(b => ({ ...b })).sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+
+            for (let i = 0; i < updatedBatches.length && remainingWastage > 0; i++) {
+                const batch = updatedBatches[i];
+                if (batch.stock > 0) {
+                    const deductAmount = Math.min(batch.stock, remainingWastage);
+                    batch.stock -= deductAmount;
+                    remainingWastage -= deductAmount;
+                    totalWastageCost += (deductAmount * batch.purchasePrice);
+                }
+            }
+
+            const updatedProduct = { ...product, batches: updatedBatches };
+            const updatedProducts = [...prevState.products];
+            updatedProducts[productIndex] = updatedProduct;
+
+            const newWastageRecord: WastageRecord = {
+                id: Date.now().toString(),
+                productId: product.id,
+                productName: product.name,
+                quantity: quantity,
+                totalCost: totalWastageCost,
+                reason: reason,
+                timestamp: new Date().toISOString(),
+                user: prevState.currentUser?.username || 'System',
+                companyId: product.companyId
+            };
+
+            success = true;
+            message = 'ضایعات با موفقیت ثبت شد.';
+
+            api.updateProduct(updatedProduct);
+            api.addWastageRecord(newWastageRecord);
+            
+            const activityLog: ActivityLog = {
+                id: Date.now().toString(),
+                type: 'wastage',
+                description: `ثبت ${quantity} عدد ضایعات برای ${product.name}`,
+                timestamp: new Date().toISOString(),
+                user: prevState.currentUser?.username || 'System',
+                refId: newWastageRecord.id,
+                refType: 'wastageRecord'
+            };
+            api.addActivity(activityLog);
+
+            return {
+                ...prevState,
+                products: updatedProducts,
+                wastageRecords: [newWastageRecord, ...(prevState.wastageRecords || [])],
+                activities: [activityLog, ...prevState.activities]
+            };
+        });
+
+        return { success, message };
+    };
+
+    // --- Orders Functions ---
+    const addOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'payments'>) => {
+        if (!hasPermission('orders:create')) return { success: false, message: 'عدم دسترسی' };
+        
+        const newOrder: Order = {
+            ...orderData,
+            id: Date.now().toString(),
+            createdAt: new Date().toISOString(),
+            payments: []
+        };
+
+        await api.addOrder(newOrder);
+        
+        setState(prev => ({
+            ...prev,
+            orders: [newOrder, ...prev.orders]
+        }));
+        
+        return { success: true, message: 'سفارش با موفقیت ثبت شد.' };
+    };
+
+    const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
+        if (!hasPermission('orders:edit')) return { success: false, message: 'عدم دسترسی' };
+        
+        const order = (state.orders || []).find(o => o.id === orderId);
+        if (!order) return { success: false, message: 'سفارش یافت نشد.' };
+        
+        const updatedOrder = { ...order, status };
+        await api.updateOrder(updatedOrder);
+        
+        setState(prev => ({
+            ...prev,
+            orders: (prev.orders || []).map(o => o.id === orderId ? updatedOrder : o)
+        }));
+        
+        return { success: true, message: 'وضعیت سفارش بروزرسانی شد.' };
+    };
+
+    const updateOrder = async (updatedOrder: Order) => {
+        if (!hasPermission('orders:edit')) return { success: false, message: 'عدم دسترسی' };
+        
+        await api.updateOrder(updatedOrder);
+        
+        setState(prev => ({
+            ...prev,
+            orders: (prev.orders || []).map(o => o.id === updatedOrder.id ? updatedOrder : o)
+        }));
+        
+        return { success: true, message: 'سفارش با موفقیت بروزرسانی شد.' };
+    };
+
+    const deleteOrder = async (orderId: string) => {
+        if (!hasPermission('orders:delete')) return { success: false, message: 'عدم دسترسی' };
+        
+        await api.deleteOrder(orderId);
+        
+        setState(prev => ({
+            ...prev,
+            orders: (prev.orders || []).filter(o => o.id !== orderId)
+        }));
+        
+        return { success: true, message: 'سفارش حذف شد.' };
+    };
+
+    const addOrderPayment = async (orderId: string, amount: number) => {
+        if (!hasPermission('orders:add_payment')) return { success: false, message: 'عدم دسترسی' };
+        
+        const order = state.orders.find(o => o.id === orderId);
+        if (!order) return { success: false, message: 'سفارش یافت نشد.' };
+        
+        const totalPaid = (order.payments || []).reduce((sum, p) => sum + p.amount, 0);
+        const remaining = order.totalAmount - totalPaid;
+        
+        if (amount > remaining) {
+            return { success: false, message: `مبلغ پرداختی نمی‌تواند بیشتر از بدهی ( ${remaining} ) باشد.` };
+        }
+        
+        const newPayment: OrderPayment = {
+            id: Date.now().toString(),
+            amount,
+            date: new Date().toISOString()
+        };
+        
+        const updatedOrder = {
+            ...order,
+            payments: [...order.payments, newPayment]
+        };
+        
+        await api.updateOrder(updatedOrder);
+        
+        setState(prev => ({
+            ...prev,
+            orders: prev.orders.map(o => o.id === orderId ? updatedOrder : o)
+        }));
+        
+        return { success: true, message: 'پرداخت با موفقیت ثبت شد.' };
+    };
+
+    const addToCart = (item: any, type: any) => {
+        let success = true;
+        let message = '';
+        
+        if (type === 'product') {
+            const product = state.products.find(p => p.id === item.id);
+            const totalStock = (product?.batches || []).reduce((sum, b) => sum + b.stock, 0) || 0;
+            const inCart = state.cart.find(i => i.id === item.id && i.type === 'product')?.quantity || 0;
+            
+            if (inCart + 1 > totalStock) {
+                return { success: false, message: `موجودی کافی نیست! (موجودی کل: ${totalStock})` };
+            }
+        }
+
+        setState(prev => {
+            const existingIndex = prev.cart.findIndex(i => i.id === item.id && i.type === type);
+            let newCart = [...prev.cart];
+            if (existingIndex > -1) {
+                newCart[existingIndex].quantity += 1;
+            } else {
+                newCart.push({ ...item, quantity: 1, type } as any);
+            }
+
+            // Apply FIFO logic to all products in cart
+            const updatedCart = newCart.map(cartItem => {
+                if (cartItem.type === 'product') {
+                    const product = prev.products.find(p => p.id === cartItem.id);
+                    if (product) {
+                        // Simple FIFO for UI display
+                        let remaining = cartItem.quantity;
+                        const deductions: { batchId: string, quantity: number }[] = [];
+                        const sortedBatches = [...product.batches].sort((a,b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+                        
+                        for (const b of sortedBatches) {
+                            if (remaining <= 0) break;
+                            const deduct = Math.min(b.stock, remaining);
+                            if (deduct > 0) {
+                                deductions.push({ batchId: b.id, quantity: deduct });
+                                remaining -= deduct;
+                            }
+                        }
+                        const totalCost = (deductions || []).reduce((s, d) => s + (d.quantity * (product.batches.find(bx => bx.id === d.batchId)?.purchasePrice || 0)), 0);
+                        return { ...cartItem, batchDeductions: deductions, purchasePrice: deductions.length > 0 ? totalCost / cartItem.quantity : 0 };
+                    }
+                }
+                return cartItem;
+            });
+
+            return { ...prev, cart: updatedCart };
+        });
+        return { success, message: '' };
+    };
+
+    const updateCartItemQuantity = (id: string, type: any, qty: number) => {
+        if (type === 'product') {
+            const product = state.products.find(p => p.id === id);
+            const totalStock = (product?.batches || []).reduce((sum, b) => sum + b.stock, 0) || 0;
+            if (qty > totalStock) {
+                return { success: false, message: `تعداد انتخابی (${qty}) از موجودی انبار (${totalStock}) بیشتر است!` };
+            }
+        }
+
+        setState(prev => {
+            const newCart = prev.cart.map(i => (i.id === id && i.type === type) ? { ...i, quantity: qty } : i).filter(i => i.quantity > 0);
+            
+            // Re-apply FIFO logic
+            const updatedCart = newCart.map(cartItem => {
+                if (cartItem.type === 'product') {
+                    const product = prev.products.find(p => p.id === cartItem.id);
+                    if (product) {
+                        let remaining = cartItem.quantity;
+                        const deductions: { batchId: string, quantity: number }[] = [];
+                        const sortedBatches = [...product.batches].sort((a,b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+                        
+                        for (const b of sortedBatches) {
+                            if (remaining <= 0) break;
+                            const deduct = Math.min(b.stock, remaining);
+                            if (deduct > 0) {
+                                deductions.push({ batchId: b.id, quantity: deduct });
+                                remaining -= deduct;
+                            }
+                        }
+                        const totalCost = (deductions || []).reduce((s, d) => s + (d.quantity * (product.batches.find(bx => bx.id === d.batchId)?.purchasePrice || 0)), 0);
+                        return { ...cartItem, batchDeductions: deductions, purchasePrice: deductions.length > 0 ? totalCost / cartItem.quantity : 0 };
+                    }
+                }
+                return cartItem;
+            });
+
+            return { ...prev, cart: updatedCart };
+        });
+        return { success: true, message: '' };
+    };
+
+    const updateCartItemFinalPrice = (id: string, type: any, price: number) => {
+        setState(prev => ({ ...prev, cart: prev.cart.map(i => (i.id === id && i.type === type) ? { ...i, finalPrice: price } : i) }));
+    };
+
+    const removeFromCart = (id: string, type: any) => {
+        setState(prev => ({ ...prev, cart: prev.cart.filter(i => !(i.id === id && i.type === type)) }));
+    };
+
+    // --- Standardized POS Logic: Sales with FIFO Stock Updates and Atomic Replacement ---
+    const completeSale = async (cashier: string, customerId?: string, currency: 'AFN'|'USD'|'IRT' = 'AFN', exchangeRate: number = 1, supplierIntermediaryId?: string, enableActivity: boolean = true, receivedAmount: number = 0): Promise<{ success: boolean; invoice?: SaleInvoice; message: string }> => {
+        const { cart, products, editingSaleInvoiceId, saleInvoices, customers, suppliers } = state;
+        if (cart.length === 0) return { success: false, message: "سبد خالی است!" };
+
+        const oldInv = editingSaleInvoiceId ? saleInvoices.find(inv => inv.id === editingSaleInvoiceId) : null;
+        
+        // 1. Virtual Inventory Restoration for FIFO Calculation
+        const virtualProducts = JSON.parse(JSON.stringify(products)) as Product[];
+        const stockRestores: any[] = [];
+        if (oldInv) {
+            oldInv.items.forEach(item => {
+                if (item.type === 'product' && item.batchDeductions) {
+                    item.batchDeductions.forEach(d => {
+                        const vp = virtualProducts.find(p => p.batches.some(b => b.id === d.batchId));
+                        const vb = vp?.batches.find(b => b.id === d.batchId);
+                        if (vb) {
+                            vb.stock += d.quantity;
+                            stockRestores.push({ batchId: d.batchId, quantity: d.quantity });
+                        }
+                    });
+                }
+            });
+        }
+
+        // 2. Finalize Deductions and Stock Updates
+        const stockUpdates: {batchId: string, newStock: number}[] = [];
+        const itemsWithBatches = cart.map(item => {
+            if (item.type === 'product') {
+                const p = virtualProducts.find(x => x.id === item.id);
+                if (p && item.batchDeductions) {
+                    let remainingToDeduct = item.quantity;
+                    const finalDeductions: { batchId: string, quantity: number }[] = [];
+                    const sortedBatches = [...p.batches].sort((a,b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+                    
+                    for (const b of sortedBatches) {
+                        if (remainingToDeduct <= 0) break;
+                        const deduct = Math.min(b.stock, remainingToDeduct);
+                        if (deduct > 0) {
+                            finalDeductions.push({ batchId: b.id, quantity: deduct });
+                            b.stock -= deduct;
+                            
+                            const existingUpdate = stockUpdates.find(u => u.batchId === b.id);
+                            if (existingUpdate) existingUpdate.newStock = b.stock;
+                            else stockUpdates.push({ batchId: b.id, newStock: b.stock });
+                            
+                            remainingToDeduct -= deduct;
+                        }
+                    }
+                    const totalCost = (finalDeductions || []).reduce((s, d) => s + (d.quantity * (p.batches.find(bx => bx.id === d.batchId)?.purchasePrice || 0)), 0);
+                    return { ...item, batchDeductions: finalDeductions, purchasePrice: finalDeductions.length > 0 ? totalCost / item.quantity : 0 };
+                }
+            }
+            return item;
+        });
+
+        // 3. Financial Totals
+        const totalBaseAmount = (cart || []).reduce((t, i) => {
+            const price = (i.finalPrice !== undefined) ? i.finalPrice : (i.type === 'product' ? i.salePrice : i.price);
+            return (price * i.quantity) + t;
+        }, 0);
+
+        const config = state.storeSettings.currencyConfigs[currency];
+        const totalTransactional = currency === state.storeSettings.baseCurrency 
+            ? totalBaseAmount 
+            : (config.method === 'multiply' ? totalBaseAmount * exchangeRate : totalBaseAmount / exchangeRate);
+
+        const invId = editingSaleInvoiceId || generateNextId('F', saleInvoices.map(i => i.id));
+        
+        const finalInv: SaleInvoice = { 
+            id: invId, 
+            type: 'sale', 
+            items: itemsWithBatches, 
+            subtotal: totalTransactional, 
+            totalAmount: totalTransactional, 
+            totalAmountAFN: totalBaseAmount, 
+            totalDiscount: 0, 
+            timestamp: new Date().toISOString(), 
+            cashier, 
+            customerId, 
+            supplierIntermediaryId,
+            currency, 
+            exchangeRate,
+            receivedAmount
+        };
+
+        // 4. Atomic Balance Update
+        const customerUpdates: any[] = [];
+        const supplierUpdates: any[] = [];
+        const customerTxs: any[] = [];
+        const supplierTxs: any[] = [];
+        
+        if (customerId) {
+            const c = customers.find(x => x.id === customerId);
+            if (c) {
+                let bAFN = c.balanceAFN, bUSD = c.balanceUSD, bIRT = c.balanceIRT, bTotal = c.balance;
+                if (oldInv && oldInv.customerId === customerId) {
+                    if (oldInv.currency === 'USD') bUSD -= oldInv.totalAmount;
+                    else if (oldInv.currency === 'IRT') bIRT -= oldInv.totalAmount;
+                    else bAFN -= oldInv.totalAmount;
+                    bTotal -= oldInv.totalAmountAFN;
+                    if (oldInv.receivedAmount > 0) {
+                        if (oldInv.currency === 'USD') bUSD += oldInv.receivedAmount;
+                        else if (oldInv.currency === 'IRT') bIRT += oldInv.receivedAmount;
+                        else bAFN += oldInv.receivedAmount;
+                    }
+                }
+                if (currency === 'USD') bUSD += totalTransactional;
+                else if (currency === 'IRT') bIRT += totalTransactional;
+                else bAFN += totalTransactional;
+                bTotal += totalBaseAmount;
+                if (receivedAmount > 0) {
+                    if (currency === 'USD') bUSD -= receivedAmount;
+                    else if (currency === 'IRT') bIRT -= receivedAmount;
+                    else bAFN -= receivedAmount;
+                }
+                customerUpdates.push({ id: customerId, balanceAFN: bAFN, balanceUSD: bUSD, balanceIRT: bIRT, balance: bTotal });
+                customerTxs.push({ id: crypto.randomUUID(), customerId, type: 'credit_sale', amount: totalTransactional, date: finalInv.timestamp, description: `فاکتور #${invId}`, invoiceId: invId, currency, isCash: false });
+                if (receivedAmount > 0) customerTxs.push({ id: crypto.randomUUID(), customerId, type: 'payment', amount: receivedAmount, date: finalInv.timestamp, description: `پرداخت فاکتور #${invId}`, invoiceId: invId, currency, isCash: true });
+            }
+        }
+
+        if (supplierIntermediaryId) {
+            const s = suppliers.find(x => x.id === supplierIntermediaryId);
+            if (s) {
+                let bAFN = s.balanceAFN, bUSD = s.balanceUSD, bIRT = s.balanceIRT, bTotal = s.balance;
+                if (oldInv && oldInv.supplierIntermediaryId === supplierIntermediaryId) {
+                    if (oldInv.currency === 'USD') bUSD += oldInv.totalAmount;
+                    else if (oldInv.currency === 'IRT') bIRT += oldInv.totalAmount;
+                    else bAFN += oldInv.totalAmount;
+                    bTotal += oldInv.totalAmountAFN;
+                    if (oldInv.receivedAmount > 0) {
+                        if (oldInv.currency === 'USD') bUSD -= oldInv.receivedAmount;
+                        else if (oldInv.currency === 'IRT') bIRT -= oldInv.receivedAmount;
+                        else bAFN -= oldInv.receivedAmount;
+                    }
+                }
+                if (currency === 'USD') bUSD -= totalTransactional;
+                else if (currency === 'IRT') bIRT -= totalTransactional;
+                else bAFN -= totalTransactional;
+                bTotal -= totalBaseAmount;
+                if (receivedAmount > 0) {
+                    if (currency === 'USD') bUSD += receivedAmount;
+                    else if (currency === 'IRT') bIRT += receivedAmount;
+                    else bAFN += receivedAmount;
+                }
+                supplierUpdates.push({ id: supplierIntermediaryId, balanceAFN: bAFN, balanceUSD: bUSD, balanceIRT: bIRT, balance: bTotal });
+                supplierTxs.push({ id: crypto.randomUUID(), supplierId: supplierIntermediaryId, type: 'payment', amount: totalTransactional, date: finalInv.timestamp, description: `فروش واسطه #${invId}`, invoiceId: invId, currency, isCash: false });
+                if (receivedAmount > 0) supplierTxs.push({ id: crypto.randomUUID(), supplierId: supplierIntermediaryId, type: 'receipt', amount: receivedAmount, date: finalInv.timestamp, description: `دریافت واسطه #${invId}`, invoiceId: invId, currency, isCash: true });
+            }
+        }
+
+        try {
+            if (editingSaleInvoiceId) {
+                await api.updateSale(editingSaleInvoiceId, finalInv, stockRestores, stockUpdates, customerUpdates, customerTxs, supplierUpdates, supplierTxs);
+            } else {
+                await api.createSale(finalInv, stockUpdates, customerUpdates[0] ? { ...customerUpdates[0], transactions: customerTxs } : undefined, supplierUpdates[0] ? { ...supplierUpdates[0], transactions: supplierTxs } : undefined);
+            }
+            
+            await fetchData(true);
+            setState(prev => ({ ...prev, cart: [], editingSaleInvoiceId: null }));
+            if (enableActivity) logActivity('sale', `${editingSaleInvoiceId ? 'ویرایش' : 'ثبت'} فاکتور فروش: ${invId}`, invId, 'saleInvoice');
+            return { success: true, invoice: finalInv, message: 'فاکتور با موفقیت ثبت شد.' };
+        } catch (e) { 
+            console.error("Sale Error:", e);
+            return { success: false, message: 'خطا در ثبت نهایی فاکتور.' }; 
+        }
+    };
+
+    // --- Standardized POS Logic: Sale Returns with Inventory Referencing ---
+    const addSaleReturn = async (originalInvoiceId: string, returnItems: { id: string; type: 'product' | 'service'; quantity: number }[], cashier: string): Promise<{ success: boolean, message: string }> => {
+        const { saleInvoices, products, customers } = state;
+        const originalInv = saleInvoices.find(inv => inv.id === originalInvoiceId);
+        if (!originalInv) return { success: false, message: "فاکتور اصلی یافت نشد." };
+
+        const stockRestores: { batchId: string, quantity: number }[] = [];
+        let returnTotalAFN = 0;
+        let returnTotalTransactional = 0;
+
+        const returnItemsDetails: CartItem[] = returnItems.map(ret => {
+            const originalItem = originalInv.items.find(it => it.id === ret.id && it.type === ret.type);
+            if (!originalItem) throw new Error("کالا در فاکتور اصلی یافت نشد.");
+            if (ret.quantity > originalItem.quantity) throw new Error("تعداد مرجوعی بیش از تعداد فروخته شده است.");
+
+            const itemPriceBase = (originalItem.finalPrice !== undefined) ? originalItem.finalPrice : (originalItem.type === 'product' ? originalItem.salePrice : originalItem.price);
+            const rate = originalInv.exchangeRate || 1;
+            
+            // Re-calculate the transactional price for returning
+            let lineTotalTransactional = 0;
+            const config = state.storeSettings.currencyConfigs[originalInv.currency];
+            
+            if (originalInv.currency === state.storeSettings.baseCurrency) {
+                lineTotalTransactional = itemPriceBase * ret.quantity;
+            } else if (config.method === 'multiply') {
+                lineTotalTransactional = (itemPriceBase * rate) * ret.quantity;
+            } else {
+                lineTotalTransactional = (itemPriceBase / rate) * ret.quantity;
+            }
+
+            returnTotalTransactional += lineTotalTransactional;
+            returnTotalAFN += (itemPriceBase * ret.quantity);
+
+            if (originalItem.type === 'product' && originalItem.batchDeductions) {
+                let remainingToRestore = ret.quantity;
+                originalItem.batchDeductions.forEach(d => {
+                    if (remainingToRestore <= 0) return;
+                    const restoreQty = Math.min(d.quantity, remainingToRestore);
+                    stockRestores.push({ batchId: d.batchId, quantity: restoreQty });
+                    remainingToRestore -= restoreQty;
+                });
+            }
+
+            return { ...originalItem, quantity: ret.quantity } as CartItem;
+        });
+
+        const returnId = generateNextId('R', saleInvoices.map(i => i.id));
+        const returnInv: SaleInvoice = {
+            id: returnId,
+            type: 'return',
+            originalInvoiceId,
+            items: returnItemsDetails,
+            subtotal: returnTotalTransactional,
+            totalAmount: returnTotalTransactional,
+            totalAmountAFN: returnTotalAFN,
+            totalDiscount: 0,
+            timestamp: new Date().toISOString(),
+            cashier,
+            customerId: originalInv.customerId,
+            currency: originalInv.currency,
+            exchangeRate: originalInv.exchangeRate
+        };
+
+        let customerRefund = undefined;
+        if (originalInv.customerId) {
+            const customer = customers.find(c => c.id === originalInv.customerId);
+            if (customer) {
+                const newBalances = { ...customer };
+                if (originalInv.currency === 'USD') newBalances.balanceUSD -= returnTotalTransactional;
+                else if (originalInv.currency === 'IRT') newBalances.balanceIRT -= returnTotalTransactional;
+                else newBalances.balanceAFN -= returnTotalTransactional;
+                newBalances.balance -= returnTotalAFN;
+
+                customerRefund = {
+                    id: originalInv.customerId,
+                    amount: returnTotalTransactional,
+                    currency: originalInv.currency,
+                    newBalances: { AFN: newBalances.balanceAFN, USD: newBalances.balanceUSD, IRT: newBalances.balanceIRT, Total: newBalances.balance }
+                };
+            }
+        }
+
+        try {
+            await api.createSaleReturn(returnInv, stockRestores, customerRefund);
+            await fetchData(true);
+            logActivity('sale', `ثبت مرجوعی فروش: فاکتور ${returnId} (مرجع: ${originalInvoiceId})`, returnId, 'saleInvoice');
+            return { success: true, message: "مرجوعی با موفقیت ثبت و انبار بروزرسانی شد." };
+        } catch (e) {
+            return { success: false, message: "خطا در ثبت مرجوعی." };
+        }
+    };
+
+    const beginEditSale = (id: string) => {
+        const inv = state.saleInvoices.find(i => i.id === id);
+        if (!inv) return { success: false, message: "فاکتور یافت نشد." };
+        setState(prev => ({ ...prev, editingSaleInvoiceId: id, cart: [...inv.items] }));
+        return { success: true, message: "آماده ویرایش.", customerId: inv.customerId, supplierIntermediaryId: inv.supplierIntermediaryId };
+    };
+
+    const cancelEditSale = () => setState(prev => ({ ...prev, editingSaleInvoiceId: null, cart: [] }));
+
+    const deleteSaleInvoice = async (invoiceId: string): Promise<{ success: boolean; message: string }> => {
+        const invoice = state.saleInvoices.find(inv => inv.id === invoiceId);
+        if (!invoice) return { success: false, message: "فاکتور یافت نشد." };
+
+        try {
+            // 1. Calculate stock restores
+            const stockRestores: { batchId: string; quantity: number }[] = [];
+            invoice.items.forEach(item => {
+                if (item.type === 'product' && item.batchDeductions) {
+                    item.batchDeductions.forEach(deduction => {
+                        stockRestores.push({ batchId: deduction.batchId, quantity: deduction.quantity });
+                    });
+                }
+            });
+
+            // 2. Calculate customer balance update (if credit sale)
+            let customerUpdate;
+            if (invoice.customerId) {
+                const customer = state.customers.find(c => c.id === invoice.customerId);
+                if (customer) {
+                    const rate = invoice.exchangeRate || 1;
+                    const config = state.storeSettings.currencyConfigs[invoice.currency];
+                    const baseAmount = invoice.currency === state.storeSettings.baseCurrency ? invoice.totalAmount : (config.method === 'multiply' ? invoice.totalAmount / rate : invoice.totalAmount * rate);
+
+                    const newAFN = customer.balanceAFN - (invoice.currency === 'AFN' ? invoice.totalAmount : 0);
+                    const newUSD = customer.balanceUSD - (invoice.currency === 'USD' ? invoice.totalAmount : 0);
+                    const newIRT = customer.balanceIRT - (invoice.currency === 'IRT' ? invoice.totalAmount : 0);
+                    const newTotal = customer.balance - baseAmount;
+
+                    customerUpdate = {
+                        id: invoice.customerId,
+                        newBalances: { AFN: newAFN, USD: newUSD, IRT: newIRT, Total: newTotal }
+                    };
+                }
+            }
+
+            // 3. Calculate supplier intermediary balance update (if any)
+            let supplierUpdate;
+            if (invoice.supplierIntermediaryId) {
+                const supplier = state.suppliers.find(s => s.id === invoice.supplierIntermediaryId);
+                if (supplier) {
+                    const rate = invoice.exchangeRate || 1;
+                    const config = state.storeSettings.currencyConfigs[invoice.currency];
+                    const baseAmount = invoice.currency === state.storeSettings.baseCurrency ? invoice.totalAmount : (config.method === 'multiply' ? invoice.totalAmount / rate : invoice.totalAmount * rate);
+
+                    const newAFN = supplier.balanceAFN - (invoice.currency === 'AFN' ? invoice.totalAmount : 0);
+                    const newUSD = supplier.balanceUSD - (invoice.currency === 'USD' ? invoice.totalAmount : 0);
+                    const newIRT = supplier.balanceIRT - (invoice.currency === 'IRT' ? invoice.totalAmount : 0);
+                    const newTotal = supplier.balance - baseAmount;
+
+                    supplierUpdate = {
+                        id: invoice.supplierIntermediaryId,
+                        newBalances: { AFN: newAFN, USD: newUSD, IRT: newIRT, Total: newTotal }
+                    };
+                }
+            }
+
+            if (invoice.activityDepositId) {
+                await deleteDepositTransaction(invoice.activityDepositId);
+            }
+
+            await api.deleteSale(invoiceId, stockRestores, customerUpdate, supplierUpdate);
+            await fetchData(true);
+            return { success: true, message: "فاکتور با موفقیت حذف شد و موجودی انبار و حساب‌ها بروزرسانی شدند." };
+        } catch (error) {
+            console.error("Error deleting sale invoice:", error);
+            return { success: false, message: "خطا در حذف فاکتور." };
+        }
+    };
+    
+    // --- Purchase Logic: Standardized Logic with Restoration Pattern ---
+    const addPurchaseInvoice = async (data: any) => {
+        const { suppliers, products, purchaseInvoices } = state;
+        const supplier = suppliers.find(s => s.id === data.supplierId);
+        if (!supplier) return { success: false, message: "تأمین کننده یافت نشد." };
+
+        const id = data.id || generateNextId('P', purchaseInvoices.map(i => i.id));
+        const rate = data.exchangeRate || 1;
+        const totalCurrencyAmount = data.items.reduce((s: number, i: any) => s + (i.quantity * i.purchasePrice), 0);
+        
+        const config = state.storeSettings.currencyConfigs[data.currency || state.storeSettings.baseCurrency];
+        const totalAmountBase = data.currency === state.storeSettings.baseCurrency 
+            ? totalCurrencyAmount 
+            : (config.method === 'multiply' ? totalCurrencyAmount / rate : totalCurrencyAmount * rate);
+        
+        const additionalCostBase = data.additionalCost 
+            ? (data.currency === state.storeSettings.baseCurrency ? data.additionalCost : (config.method === 'multiply' ? data.additionalCost / rate : data.additionalCost * rate)) 
+            : 0;
+        
+        const totalInvoiceValueBase = data.items.reduce((s: number, it: any) => {
+            const itemPriceBase = (data.currency === state.storeSettings.baseCurrency ? it.purchasePrice : (config.method === 'multiply' ? it.purchasePrice / rate : it.purchasePrice * rate));
+            return s + (itemPriceBase * it.quantity);
+        }, 0);
+
+        const purchaseItems: PurchaseInvoiceItem[] = data.items.map((it: any) => ({
+            ...it,
+            productName: products.find(p => p.id === it.productId)?.name || 'ناشناس',
+            atFactoryQty: 0, inTransitQty: 0, receivedQty: it.quantity
+        }));
+
+        const invoice: PurchaseInvoice = { ...data, id, items: purchaseItems, totalAmount: totalCurrencyAmount, type: 'purchase' };
+        
+        const newBalances = { ...supplier };
+        if (data.currency === 'USD') newBalances.balanceUSD += totalCurrencyAmount;
+        else if (data.currency === 'IRT') newBalances.balanceIRT += totalCurrencyAmount;
+        else newBalances.balanceAFN += totalCurrencyAmount;
+        newBalances.balance += totalAmountBase;
+
+        const supplierUpdate = {
+            id: data.supplierId,
+            balanceAFN: newBalances.balanceAFN,
+            balanceUSD: newBalances.balanceUSD,
+            balanceIRT: newBalances.balanceIRT,
+            balance: newBalances.balance,
+            transaction: { id: crypto.randomUUID(), supplierId: data.supplierId, type: 'purchase', amount: totalCurrencyAmount, date: data.timestamp, description: `خرید فاکتور #${data.invoiceNumber || id}`, invoiceId: id, currency: data.currency } as SupplierTransaction
+        };
+
+        const newBatches = data.items.map((it: any) => {
+            const itemPriceBase = (data.currency === state.storeSettings.baseCurrency ? it.purchasePrice : (config.method === 'multiply' ? it.purchasePrice / rate : it.purchasePrice * rate));
+            const itemTotalValueBase = itemPriceBase * it.quantity;
+            const shareOfCostBase = totalInvoiceValueBase > 0 ? (additionalCostBase * (itemTotalValueBase / totalInvoiceValueBase)) : 0;
+            const costPerUnitBase = it.quantity > 0 ? (shareOfCostBase / it.quantity) : 0;
+
+            return {
+                id: crypto.randomUUID(),
+                productId: it.productId,
+                lotNumber: it.lotNumber,
+                stock: it.quantity,
+                purchasePrice: itemPriceBase + costPerUnitBase,
+                purchaseDate: data.timestamp,
+                expiryDate: it.expiryDate
+            };
+        });
+
+        try {
+            await api.createPurchase(invoice, supplierUpdate, newBatches);
+            
+            if (data.additionalCost > 0) {
+                const expense: Omit<Expense, 'id'> = {
+                    category: 'logistics',
+                    description: `هزینه جانبی فاکتور خرید #${data.invoiceNumber || id}: ${data.costDescription || 'بدون توضیح'}`,
+                    amount: data.additionalCost,
+                    currency: data.currency || state.storeSettings.baseCurrency,
+                    exchangeRate: rate,
+                    date: data.timestamp,
+                    relatedId: id
+                };
+                await addExpense(expense);
+            }
+
+            // Fetch data silently to update UI
+            await fetchData(true);
+            logActivity('purchase', `خرید جدید ثبت شد: ${id}`, id, 'purchaseInvoice');
+            return { success: true, message: 'خرید با موفقیت ثبت و به انبار اضافه شد.' };
+        } catch (e: any) { 
+            console.error("Purchase Error:", e);
+            const msg = e.message || 'خطا در ثبت خرید.';
+            return { success: false, message: msg }; 
+        }
+    };
+
+    const beginEditPurchase = (id: string) => {
+        const inv = state.purchaseInvoices.find(i => i.id === id);
+        if (!inv) return { success: false, message: "فاکتور یافت نشد." };
+        setState(prev => ({ ...prev, editingPurchaseInvoiceId: id }));
+        return { success: true, message: "آماده ویرایش." };
+    };
+
+    const cancelEditPurchase = () => setState(prev => ({ ...prev, editingPurchaseInvoiceId: null }));
+
+    const updatePurchaseInvoice = async (invoiceData: any) => {
+        const { purchaseInvoices, suppliers, products, editingPurchaseInvoiceId } = state;
+        if (!editingPurchaseInvoiceId) return { success: false, message: "فاکتوری برای ویرایش انتخاب نشده است." };
+
+        const oldInv = purchaseInvoices.find(inv => inv.id === editingPurchaseInvoiceId);
+        if (!oldInv) return { success: false, message: "فاکتور قدیمی یافت نشد." };
+
+        const supplier = suppliers.find(s => s.id === invoiceData.supplierId);
+        if (!supplier) return { success: false, message: "تأمین کننده یافت نشد." };
+
+        const rate = invoiceData.exchangeRate || 1;
+        const totalCurrencyAmount = invoiceData.items.reduce((s: number, i: any) => s + (i.quantity * i.purchasePrice), 0);
+        
+        const config = state.storeSettings.currencyConfigs[invoiceData.currency || state.storeSettings.baseCurrency];
+        const totalAmountBase = invoiceData.currency === state.storeSettings.baseCurrency 
+            ? totalCurrencyAmount 
+            : (config.method === 'multiply' ? totalCurrencyAmount / rate : totalCurrencyAmount * rate);
+
+        const oldRate = oldInv.exchangeRate || 1;
+        const oldConfig = state.storeSettings.currencyConfigs[oldInv.currency || state.storeSettings.baseCurrency];
+        const oldTotalBase = oldInv.currency === state.storeSettings.baseCurrency 
+            ? oldInv.totalAmount 
+            : (oldConfig.method === 'multiply' ? oldInv.totalAmount / oldRate : oldInv.totalAmount * oldRate);
+
+        let balAFN = supplier.balanceAFN, balUSD = supplier.balanceUSD, balIRT = supplier.balanceIRT, balTotal = supplier.balance;
+        if (oldInv.currency === 'USD') balUSD -= oldInv.totalAmount;
+        else if (oldInv.currency === 'IRT') balIRT -= oldInv.totalAmount;
+        else balAFN -= oldInv.totalAmount;
+        balTotal -= oldTotalBase;
+
+        if (invoiceData.currency === 'USD') balUSD += totalCurrencyAmount;
+        else if (invoiceData.currency === 'IRT') balIRT += totalCurrencyAmount;
+        else balAFN += totalCurrencyAmount;
+        balTotal += totalAmountBase;
+
+        const supplierUpdate = {
+            id: invoiceData.supplierId,
+            balanceAFN: balAFN,
+            balanceUSD: balUSD,
+            balanceIRT: balIRT,
+            balance: balTotal
+        };
+
+        const newInvoice: PurchaseInvoice = {
+            ...oldInv,
+            ...invoiceData,
+            totalAmount: totalCurrencyAmount,
+            items: invoiceData.items.map((it: any) => ({
+                ...it,
+                productName: products.find(p => p.id === it.productId)?.name || '?',
+                atFactoryQty: 0, inTransitQty: 0, receivedQty: it.quantity
+            }))
+        };
+
+        try {
+            await api.updatePurchase(editingPurchaseInvoiceId, newInvoice, supplierUpdate);
+            
+            // Sync automated expense
+            const existingExpense = state.expenses.find(ex => ex.relatedId === editingPurchaseInvoiceId);
+            if (invoiceData.additionalCost > 0) {
+                const expenseData = {
+                    category: 'logistics',
+                    description: `هزینه جانبی فاکتور خرید #${invoiceData.invoiceNumber || editingPurchaseInvoiceId}: ${invoiceData.costDescription || 'بدون توضیح'}`,
+                    amount: invoiceData.additionalCost,
+                    currency: invoiceData.currency || state.storeSettings.baseCurrency,
+                    exchangeRate: rate,
+                    date: invoiceData.timestamp || new Date().toISOString(),
+                    relatedId: editingPurchaseInvoiceId
+                };
+                if (existingExpense) {
+                    updateExpense({ ...existingExpense, ...expenseData });
+                } else {
+                    addExpense(expenseData);
+                }
+            } else if (existingExpense) {
+                deleteExpense(existingExpense.id);
+            }
+
+            await fetchData(true);
+            setState(prev => ({ ...prev, editingPurchaseInvoiceId: null }));
+            logActivity('purchase', `ویرایش فاکتور خرید: ${newInvoice.id}`, newInvoice.id, 'purchaseInvoice');
+            return { success: true, message: 'فاکتور با موفقیت بروزرسانی شد.' };
+        } catch (e: any) { 
+            console.error("Update Purchase Error:", e);
+            const msg = e.message || 'خطا در ویرایش فاکتور.';
+            return { success: false, message: msg }; 
+        }
+    };
+
+    const addPurchaseReturn = async (originalInvoiceId: string, returnItems: { productId: string; lotNumber: string, quantity: number }[]) => {
+        const { purchaseInvoices, suppliers, products } = state;
+        const originalInv = purchaseInvoices.find(inv => inv.id === originalInvoiceId);
+        if (!originalInv) return { success: false, message: "فاکتور اصلی یافت نشد." };
+
+        const supplier = suppliers.find(s => s.id === originalInv.supplierId);
+        if (!supplier) return { success: false, message: "تأمین کننده یافت نشد." };
+
+        const id = generateNextId('PR', purchaseInvoices.map(i => i.id));
+        const rate = originalInv.exchangeRate || 1;
+        
+        let returnTotalCurrency = 0;
+        const items = returnItems.map(ret => {
+            const originalItem = originalInv.items.find(it => it.productId === ret.productId && it.lotNumber === ret.lotNumber);
+            if (!originalItem) throw new Error("کالا در فاکتور یافت نشد");
+            returnTotalCurrency += (originalItem.purchasePrice * ret.quantity);
+            return { ...originalItem, quantity: ret.quantity, receivedQty: ret.quantity };
+        });
+
+        const config = state.storeSettings.currencyConfigs[originalInv.currency || state.storeSettings.baseCurrency];
+        const totalAmountBase = originalInv.currency === state.storeSettings.baseCurrency 
+            ? returnTotalCurrency 
+            : (config.method === 'multiply' ? returnTotalCurrency / rate : returnTotalCurrency * rate);
+
+        const returnInv: PurchaseInvoice = {
+            id, type: 'return', originalInvoiceId, supplierId: originalInv.supplierId,
+            invoiceNumber: `R-${originalInv.invoiceNumber || originalInv.id}`,
+            items, totalAmount: returnTotalCurrency, timestamp: new Date().toISOString(),
+            currency: originalInv.currency, exchangeRate: originalInv.exchangeRate
+        };
+
+        const newBalances = { ...supplier };
+        if (originalInv.currency === 'USD') newBalances.balanceUSD -= returnTotalCurrency;
+        else if (originalInv.currency === 'IRT') newBalances.balanceIRT -= returnTotalCurrency;
+        else newBalances.balanceAFN -= returnTotalCurrency;
+        newBalances.balance -= totalAmountBase;
+
+        const supplierRefund = {
+            id: supplier.id,
+            amount: returnTotalCurrency,
+            currency: originalInv.currency,
+            newBalances: { AFN: newBalances.balanceAFN, USD: newBalances.balanceUSD, IRT: newBalances.balanceIRT, Total: newBalances.balance }
+        };
+
+        try {
+            await api.createPurchaseReturn(returnInv, returnItems, supplierRefund);
+            await fetchData(true);
+            logActivity('purchase', `ثبت مرجوعی خرید: ${id}`, id, 'purchaseInvoice');
+            return { success: true, message: 'مرجوعی با موفقیت ثبت شد.' };
+        } catch (e) { return { success: false, message: 'خطا در ثبت مرجوعی.' }; }
+    };
+
+    // --- Logistics Logic: In-Transit Movements ---
+    const addInTransitInvoice = (d: any) => { 
+        const id = crypto.randomUUID();
+        const total = d.items.reduce((s:number, i:any) => s + (i.quantity*i.purchasePrice), 0);
+        const inv = { ...d, id, type: 'in_transit', status: 'active', totalAmount: total, items: d.items.map((it:any)=>({ ...it, productName: state.products.find(p=>p.id===it.productId)?.name || '?', atFactoryQty: it.quantity, inTransitQty: 0, receivedQty: 0 })) };
+        api.createInTransit(inv).then(() => fetchData(true)); 
+        return { success: true, message: 'سفارش در لیست انتظار ثبت شد.' }; 
+    };
+
+    const moveInTransitItems = async (invoiceId: string, movements: { [pid: string]: { toTransit: number, toReceived: number, lotNumber: string, expiryDate?: string } }, additionalCost?: number, costDescription?: string) => {
+        const inv = state.inTransitInvoices.find(i => i.id === invoiceId);
+        if (!inv) return { success: false, message: "سفارش یافت نشد." };
+
+        const receivedItemsForInvoice: any[] = [];
+        const updatedItems = inv.items.map(item => {
+            const m = movements[item.productId];
+            if (!m) return item;
+            
+            const toT = Math.min(m.toTransit, item.atFactoryQty);
+            const toR = Math.min(m.toReceived, item.inTransitQty + toT);
+            
+            if (toR > 0) {
+                receivedItemsForInvoice.push({
+                    productId: item.productId,
+                    quantity: toR,
+                    purchasePrice: item.purchasePrice,
+                    lotNumber: m.lotNumber,
+                    expiryDate: m.expiryDate
+                });
+            }
+
+            return { 
+                ...item, 
+                atFactoryQty: item.atFactoryQty - toT, 
+                inTransitQty: item.inTransitQty + toT - toR, 
+                receivedQty: item.receivedQty + toR 
+            };
+        });
+
+        if (receivedItemsForInvoice.length > 0) {
+            const subInvoiceId = generateNextId('P', state.purchaseInvoices.map(i => i.id));
+            const subInvoiceData = {
+                id: subInvoiceId,
+                supplierId: inv.supplierId,
+                invoiceNumber: `Part-${inv.invoiceNumber || inv.id.slice(0,5)}`,
+                items: receivedItemsForInvoice,
+                timestamp: new Date().toISOString(),
+                currency: inv.currency,
+                exchangeRate: inv.exchangeRate,
+                sourceInTransitId: inv.id,
+                additionalCost,
+                costDescription
+            };
+            await addPurchaseInvoice(subInvoiceData);
+        }
+
+        const isFullyReceived = updatedItems.every(i => i.atFactoryQty === 0 && i.inTransitQty === 0);
+        if (isFullyReceived) {
+            await api.updateInTransit({ ...inv, items: updatedItems, status: 'closed' });
+        } else {
+            await api.updateInTransit({ ...inv, items: updatedItems });
+        }
+        
+        await fetchData(true);
+        logActivity('inventory', `وصول محموله: ${inv.invoiceNumber || inv.id.slice(0,8)}`, inv.id, 'purchaseInvoice');
+        return { success: true, message: 'جابجایی کالا و اسناد مالی با موفقیت بروزرسانی شد.' };
+    };
+
+    const archiveInTransitInvoice = async (id: string) => {
+        const inv = state.inTransitInvoices.find(i => i.id === id);
+        if (inv) {
+            await api.updateInTransit({ ...inv, status: 'closed' });
+            await fetchData(true);
+            logActivity('inventory', `بایگانی دستی محموله: ${inv.invoiceNumber || inv.id.slice(0,8)}`, inv.id, 'purchaseInvoice');
+        }
+    };
+
+    const addInTransitPayment = async (invId: string, amount: number, description: string, currency: 'AFN' | 'USD' | 'IRT' = 'AFN', exchangeRate: number = 1) => {
+        const inv = state.inTransitInvoices.find(i => i.id === invId);
+        if (!inv) return null;
+
+        // 1. Calculate precise amount in the invoice's original currency for internal tracking
+        let amountInInvoiceCurrency = amount;
+        if (currency !== inv.currency) {
+            // First, convert the payment to base currency
+            const configPay = state.storeSettings.currencyConfigs[currency];
+            const amountInBase = currency === state.storeSettings.baseCurrency 
+                ? amount 
+                : (configPay.method === 'multiply' ? amount / exchangeRate : amount * exchangeRate);
+            
+            // Then, convert from base to invoice currency
+            const configInv = state.storeSettings.currencyConfigs[inv.currency];
+            amountInInvoiceCurrency = inv.currency === state.storeSettings.baseCurrency
+                ? amountInBase
+                : (configInv.method === 'multiply' ? amountInBase * inv.exchangeRate : amountInBase / inv.exchangeRate);
+        }
+
+        const tx = await addSupplierPayment(inv.supplierId, amount, description, currency, exchangeRate, 'payment', undefined, false);
+        if (tx) {
+            const updatedInv = { ...inv, payments: [...(inv.payments || []), { id: tx.id, amount: amountInInvoiceCurrency, date: tx.date }] };
+            await api.updateInTransit(updatedInv);
+            await fetchData(true);
+            return tx;
+        }
+        return null;
+    };
+
+    const deleteUser = async (userId: string) => {
+        await api.deleteUser(userId);
+        setState(prev => ({ ...prev, users: prev.users.filter(u => u.id !== userId) }));
+    };
+
+    const updateSettings = (newSettings: StoreSettings) => {
+        if (!checkOnline()) return;
+        // Strip logos before sending to API to save space
+        const { logoLeft, logoRight, ...textContent } = newSettings;
+        
+        // Save logos to localStorage
+        if (logoLeft !== undefined) localStorage.setItem('v_store_logo_left', logoLeft || '');
+        if (logoRight !== undefined) localStorage.setItem('v_store_logo_right', logoRight || '');
+        
+        setState(prev => ({ ...prev, storeSettings: newSettings }));
+        api.updateSettings(textContent as StoreSettings);
+    };
+
+    const addService = (service: Omit<Service, 'id'>) => {
+        api.addService(service).then(ns => {
+            setState(prev => ({ ...prev, services: [...prev.services, ns] }));
+        });
+    };
+
+    const deleteService = (serviceId: string) => {
+        api.deleteService(serviceId).then(() => {
+            setState(prev => ({ ...prev, services: prev.services.filter(s => s.id !== serviceId) }));
+        });
+    };
+
+    const addCompany = async (name: string, initialProfit?: { amount: number, currency: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, date?: string, description?: string }) => {
+        if (!name.trim()) return { success: false, message: "نام کمپانی نمی‌تواند خالی باشد." };
+        if (state.companies.some(c => c.name === name.trim())) return { success: false, message: "این کمپانی قبلاً ثبت شده است." };
+        
+        const newCompany: Company = {
+            id: Date.now().toString(),
+            name: name.trim(),
+            initialProfit: initialProfit?.amount,
+            initialProfitCurrency: initialProfit?.currency,
+            initialProfitExchangeRate: initialProfit?.exchangeRate,
+            initialProfitDate: initialProfit?.date,
+            initialProfitDescription: initialProfit?.description
+        };
+        await api.addCompany(newCompany);
+        setState(prev => ({ ...prev, companies: [...prev.companies, newCompany] }));
+        return { success: true, message: "کمپانی با موفقیت اضافه شد." };
+    };
+
+    const deleteCompany = async (id: string) => {
+        await api.deleteCompany(id);
+        setState(prev => ({ ...prev, companies: prev.companies.filter(c => c.id !== id) }));
+    };
+
+    const updateCompany = async (id: string, name: string, initialProfit?: { amount: number, currency: 'AFN' | 'USD' | 'IRT', exchangeRate?: number, date?: string, description?: string }) => {
+        if (!name.trim()) return { success: false, message: "نام کمپانی نمی‌تواند خالی باشد." };
+        const updatedCompany: Company = { 
+            id, 
+            name: name.trim(),
+            initialProfit: initialProfit?.amount,
+            initialProfitCurrency: initialProfit?.currency,
+            initialProfitExchangeRate: initialProfit?.exchangeRate,
+            initialProfitDate: initialProfit?.date,
+            initialProfitDescription: initialProfit?.description
+        };
+        await api.updateCompany(updatedCompany);
+        setState(prev => ({
+            ...prev,
+            companies: prev.companies.map(c => c.id === id ? updatedCompany : c)
+        }));
+        return { success: true, message: "کمپانی با موفقیت ویرایش شد." };
+    };
+
+    const addSupplier = (s: any, initial?: any) => {
+        api.addSupplier(s).then(ns => {
+            if (initial && initial.amount > 0) {
+                const rate = initial.exchangeRate || 1;
+                const config = state.storeSettings.currencyConfigs[initial.currency as 'AFN'|'USD'|'IRT'];
+                const baseAmount = initial.currency === state.storeSettings.baseCurrency 
+                    ? initial.amount 
+                    : (config.method === 'multiply' ? initial.amount / rate : initial.amount * rate);
+                
+                const tx: SupplierTransaction = { 
+                    id: crypto.randomUUID(), 
+                    supplierId: ns.id, 
+                    type: initial.type === 'creditor' ? 'purchase' : 'payment', 
+                    amount: initial.amount, 
+                    date: initial.date ? new Date(initial.date).toISOString() : new Date().toISOString(), 
+                    description: initial.description || 'تراز اول دوره', 
+                    currency: initial.currency,
+                    exchangeRate: rate,
+                    isManual: true,
+                    isInitial: true,
+                    isHistorical: true
+                };
+                const multiplierNew = initial.type === 'creditor' ? 1 : -1;
+                const newB = { 
+                    AFN: initial.currency === 'AFN' ? initial.amount * multiplierNew : 0, 
+                    USD: initial.currency === 'USD' ? initial.amount * multiplierNew : 0, 
+                    IRT: initial.currency === 'IRT' ? initial.amount * multiplierNew : 0, 
+                    Total: baseAmount * multiplierNew 
+                };
+                api.processPayment('supplier', ns.id, newB, tx).then(() => fetchData(true));
+            } else fetchData(true);
+        });
+    };
+
+    const updateSupplier = async (s: Supplier, initial?: any) => {
+        await api.updateSupplier(s);
+        
+        if (initial) {
+            const oldInitial = state.supplierTransactions.find(t => t.supplierId === s.id && t.isInitial);
+            
+            // Revert old initial if it exists
+            let balAFN = s.balanceAFN;
+            let balUSD = s.balanceUSD;
+            let balIRT = s.balanceIRT;
+            let balTotal = s.balance;
+
+            if (oldInitial) {
+                const configOld = state.storeSettings.currencyConfigs[oldInitial.currency as 'AFN'|'USD'|'IRT'];
+                const baseAmountOld = oldInitial.currency === state.storeSettings.baseCurrency ? oldInitial.amount : (configOld.method === 'multiply' ? oldInitial.amount / (oldInitial.exchangeRate || 1) : oldInitial.amount * (oldInitial.exchangeRate || 1));
+                const multiplierOld = (oldInitial.type === 'payment' || oldInitial.type === 'purchase_return') ? -1 : 1;
+
+                balAFN -= (oldInitial.currency === 'AFN' ? oldInitial.amount * multiplierOld : 0);
+                balUSD -= (oldInitial.currency === 'USD' ? oldInitial.amount * multiplierOld : 0);
+                balIRT -= (oldInitial.currency === 'IRT' ? oldInitial.amount * multiplierOld : 0);
+                balTotal -= (baseAmountOld * multiplierOld);
+                
+                await api.deleteTransaction('supplier', s.id, oldInitial.id, { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal });
+            }
+
+            // Apply new initial
+            if (initial.amount > 0) {
+                const rate = initial.exchangeRate || 1;
+                const configNew = state.storeSettings.currencyConfigs[initial.currency as 'AFN'|'USD'|'IRT'];
+                const baseAmountNew = initial.currency === state.storeSettings.baseCurrency 
+                    ? initial.amount 
+                    : (configNew.method === 'multiply' ? initial.amount / rate : initial.amount * rate);
+                
+                const tx: SupplierTransaction = { 
+                    id: crypto.randomUUID(), 
+                    supplierId: s.id, 
+                    type: initial.type === 'creditor' ? 'purchase' : 'payment', 
+                    amount: initial.amount, 
+                    date: initial.date ? new Date(initial.date).toISOString() : new Date().toISOString(), 
+                    description: initial.description || 'تراز اول دوره', 
+                    currency: initial.currency,
+                    isManual: true,
+                    isInitial: true,
+                    isHistorical: true
+                };
+                
+                const multiplierNew = initial.type === 'creditor' ? 1 : -1;
+                balAFN += (initial.currency === 'AFN' ? initial.amount * multiplierNew : 0);
+                balUSD += (initial.currency === 'USD' ? initial.amount * multiplierNew : 0);
+                balIRT += (initial.currency === 'IRT' ? initial.amount * multiplierNew : 0);
+                balTotal += (baseAmountNew * multiplierNew);
+
+                await api.processPayment('supplier', s.id, { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal }, tx);
+            }
+        }
+        await fetchData(true);
+    };
+
+    const deleteSupplier = (id: string) => { api.deleteSupplier(id).then(() => fetchData(true)); };
+
+    const updateSupplierTransaction = async (tx: SupplierTransaction) => {
+        const s = state.suppliers.find(x => x.id === tx.supplierId);
+        if (!s) return;
+        
+        const oldTx = state.supplierTransactions.find(t => t.id === tx.id);
+        if (!oldTx) return;
+
+        // 1. Revert old transaction impact
+        const configOld = state.storeSettings.currencyConfigs[oldTx.currency as 'AFN'|'USD'|'IRT'];
+        const baseAmountOld = oldTx.currency === state.storeSettings.baseCurrency ? oldTx.amount : (configOld.method === 'multiply' ? oldTx.amount / (oldTx.exchangeRate || 1) : oldTx.amount * (oldTx.exchangeRate || 1));
+        const multiplierOld = (oldTx.type === 'payment' || oldTx.type === 'purchase_return') ? -1 : 1;
+
+        let balAFN = s.balanceAFN - (oldTx.currency === 'AFN' ? oldTx.amount * multiplierOld : 0);
+        let balUSD = s.balanceUSD - (oldTx.currency === 'USD' ? oldTx.amount * multiplierOld : 0);
+        let balIRT = s.balanceIRT - (oldTx.currency === 'IRT' ? oldTx.amount * multiplierOld : 0);
+        let balTotal = s.balance - (baseAmountOld * multiplierOld);
+
+        // 2. Apply new transaction impact
+        const configNew = state.storeSettings.currencyConfigs[tx.currency as 'AFN'|'USD'|'IRT'];
+        const baseAmountNew = tx.currency === state.storeSettings.baseCurrency ? tx.amount : (configNew.method === 'multiply' ? tx.amount / (tx.exchangeRate || 1) : tx.amount * (tx.exchangeRate || 1));
+        const multiplierNew = (tx.type === 'payment' || tx.type === 'purchase_return') ? -1 : 1;
+
+        balAFN += (tx.currency === 'AFN' ? tx.amount * multiplierNew : 0);
+        balUSD += (tx.currency === 'USD' ? tx.amount * multiplierNew : 0);
+        balIRT += (tx.currency === 'IRT' ? tx.amount * multiplierNew : 0);
+        balTotal += (baseAmountNew * multiplierNew);
+
+        const newB = { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal };
+        await api.processPayment('supplier', tx.supplierId, newB, tx);
+        await fetchData(true);
+    };
+
+    const deleteSupplierTransaction = async (id: string) => {
+        const tx = state.supplierTransactions.find(t => t.id === id);
+        if (!tx) return;
+        const s = state.suppliers.find(x => x.id === tx.supplierId);
+        if (!s) return;
+
+        const config = state.storeSettings.currencyConfigs[tx.currency as 'AFN'|'USD'|'IRT'];
+        const baseAmount = tx.currency === state.storeSettings.baseCurrency ? tx.amount : (config.method === 'multiply' ? tx.amount / (tx.exchangeRate || 1) : tx.amount * (tx.exchangeRate || 1));
+        const multiplier = (tx.type === 'payment' || tx.type === 'purchase_return') ? -1 : 1;
+
+        const newB = { 
+            AFN: s.balanceAFN - (tx.currency === 'AFN' ? tx.amount * multiplier : 0), 
+            USD: s.balanceUSD - (tx.currency === 'USD' ? tx.amount * multiplier : 0), 
+            IRT: s.balanceIRT - (tx.currency === 'IRT' ? tx.amount * multiplier : 0), 
+            Total: s.balance - (baseAmount * multiplier) 
+        };
+
+        await api.deleteTransaction('supplier', tx.supplierId, id, newB);
+        await fetchData(true);
+    };
+
+    const addSupplierPayment = async (sid: string, a: number, d: string, cur: any = 'AFN', rate: number = 1, type: 'payment' | 'receipt' = 'payment', customDate?: string, isHistorical?: boolean) => {
+        const s = state.suppliers.find(x => x.id === sid);
+        const config = state.storeSettings.currencyConfigs[cur as 'AFN'|'USD'|'IRT'];
+        const baseAmount = cur === state.storeSettings.baseCurrency ? a : (config.method === 'multiply' ? a / rate : a * rate);
+        const tx: SupplierTransaction = { 
+            id: crypto.randomUUID(), 
+            supplierId: sid, 
+            type: type, 
+            amount: a, 
+            date: customDate ? new Date(customDate).toISOString() : new Date().toISOString(), 
+            description: d, 
+            currency: cur,
+            exchangeRate: rate,
+            isCash: true,
+            isManual: true,
+            isHistorical: isHistorical
+        };
+        
+        // If payment: we pay them -> our debt decreases -> balance decreases
+        // If receipt: they pay us -> our debt increases -> balance increases
+        const multiplier = type === 'payment' ? -1 : 1;
+        
+        const newB = { 
+            AFN: s!.balanceAFN + (cur === 'AFN' ? a * multiplier : 0), 
+            USD: s!.balanceUSD + (cur === 'USD' ? a * multiplier : 0), 
+            IRT: s!.balanceIRT + (cur === 'IRT' ? a * multiplier : 0), 
+            Total: s!.balance + (baseAmount * multiplier) 
+        };
+        await api.processPayment('supplier', sid, newB, tx);
+        await fetchData(true);
+        return tx;
+    };
+
+    const addCustomer = (c: any, initial?: any) => {
+        api.addCustomer(c).then(nc => {
+            if (initial && initial.amount > 0) {
+                const rate = initial.exchangeRate || 1;
+                const config = state.storeSettings.currencyConfigs[initial.currency as 'AFN'|'USD'|'IRT'];
+                const baseAmount = initial.currency === state.storeSettings.baseCurrency 
+                    ? initial.amount 
+                    : (config.method === 'multiply' ? initial.amount / rate : initial.amount * rate);
+                
+                const tx: CustomerTransaction = { 
+                    id: crypto.randomUUID(), 
+                    customerId: nc.id, 
+                    type: initial.type === 'debtor' ? 'credit_sale' : 'payment', 
+                    amount: initial.amount, 
+                    date: initial.date ? new Date(initial.date).toISOString() : new Date().toISOString(), 
+                    description: initial.description || 'تراز اول دوره', 
+                    currency: initial.currency,
+                    exchangeRate: rate,
+                    isManual: true,
+                    isInitial: true,
+                    isHistorical: true
+                };
+                const multiplierNew = initial.type === 'debtor' ? 1 : -1;
+                const newB = { 
+                    AFN: initial.currency === 'AFN' ? initial.amount * multiplierNew : 0, 
+                    USD: initial.currency === 'USD' ? initial.amount * multiplierNew : 0, 
+                    IRT: initial.currency === 'IRT' ? initial.amount * multiplierNew : 0, 
+                    Total: baseAmount * multiplierNew 
+                };
+                api.processPayment('customer', nc.id, newB, tx).then(() => fetchData(true));
+            } else fetchData(true);
+        });
+    };
+
+    const updateCustomer = async (c: Customer, initial?: any) => {
+        await api.updateCustomer(c);
+        
+        if (initial) {
+            const oldInitial = state.customerTransactions.find(t => t.customerId === c.id && t.isInitial);
+            
+            // Revert old initial if it exists
+            let balAFN = c.balanceAFN;
+            let balUSD = c.balanceUSD;
+            let balIRT = c.balanceIRT;
+            let balTotal = c.balance;
+
+            if (oldInitial) {
+                const configOld = state.storeSettings.currencyConfigs[oldInitial.currency as 'AFN'|'USD'|'IRT'];
+                const baseAmountOld = oldInitial.currency === state.storeSettings.baseCurrency ? oldInitial.amount : (configOld.method === 'multiply' ? oldInitial.amount / (oldInitial.exchangeRate || 1) : oldInitial.amount * (oldInitial.exchangeRate || 1));
+                const multiplierOld = (oldInitial.type === 'payment' || oldInitial.type === 'sale_return') ? -1 : 1;
+
+                balAFN -= (oldInitial.currency === 'AFN' ? oldInitial.amount * multiplierOld : 0);
+                balUSD -= (oldInitial.currency === 'USD' ? oldInitial.amount * multiplierOld : 0);
+                balIRT -= (oldInitial.currency === 'IRT' ? oldInitial.amount * multiplierOld : 0);
+                balTotal -= (baseAmountOld * multiplierOld);
+                
+                await api.deleteTransaction('customer', c.id, oldInitial.id, { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal });
+            }
+
+            // Apply new initial
+            if (initial.amount > 0) {
+                const rate = initial.exchangeRate || 1;
+                const configNew = state.storeSettings.currencyConfigs[initial.currency as 'AFN'|'USD'|'IRT'];
+                const baseAmountNew = initial.currency === state.storeSettings.baseCurrency 
+                    ? initial.amount 
+                    : (configNew.method === 'multiply' ? initial.amount / rate : initial.amount * rate);
+                
+                const tx: CustomerTransaction = { 
+                    id: crypto.randomUUID(), 
+                    customerId: c.id, 
+                    type: initial.type === 'debtor' ? 'credit_sale' : 'payment', 
+                    amount: initial.amount, 
+                    date: initial.date ? new Date(initial.date).toISOString() : new Date().toISOString(), 
+                    description: initial.description || 'تراز اول دوره', 
+                    currency: initial.currency,
+                    isManual: true,
+                    isInitial: true,
+                    isHistorical: true
+                };
+                
+                const multiplierNew = initial.type === 'debtor' ? 1 : -1;
+                balAFN += (initial.currency === 'AFN' ? initial.amount * multiplierNew : 0);
+                balUSD += (initial.currency === 'USD' ? initial.amount * multiplierNew : 0);
+                balIRT += (initial.currency === 'IRT' ? initial.amount * multiplierNew : 0);
+                balTotal += (baseAmountNew * multiplierNew);
+
+                await api.processPayment('customer', c.id, { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal }, tx);
+            }
+        }
+        await fetchData(true);
+    };
+
+    const deleteCustomer = (id: string) => { api.deleteCustomer(id).then(() => fetchData(true)); };
+
+    const updateCustomerTransaction = async (tx: CustomerTransaction) => {
+        const c = state.customers.find(x => x.id === tx.customerId);
+        if (!c) return;
+        
+        const oldTx = state.customerTransactions.find(t => t.id === tx.id);
+        if (!oldTx) return;
+
+        // 1. Revert old transaction impact
+        const configOld = state.storeSettings.currencyConfigs[oldTx.currency as 'AFN'|'USD'|'IRT'];
+        const baseAmountOld = oldTx.currency === state.storeSettings.baseCurrency ? oldTx.amount : (configOld.method === 'multiply' ? oldTx.amount / (oldTx.exchangeRate || 1) : oldTx.amount * (oldTx.exchangeRate || 1));
+        const multiplierOld = (oldTx.type === 'payment' || oldTx.type === 'sale_return') ? -1 : 1;
+
+        let balAFN = c.balanceAFN - (oldTx.currency === 'AFN' ? oldTx.amount * multiplierOld : 0);
+        let balUSD = c.balanceUSD - (oldTx.currency === 'USD' ? oldTx.amount * multiplierOld : 0);
+        let balIRT = c.balanceIRT - (oldTx.currency === 'IRT' ? oldTx.amount * multiplierOld : 0);
+        let balTotal = c.balance - (baseAmountOld * multiplierOld);
+
+        // 2. Apply new transaction impact
+        const configNew = state.storeSettings.currencyConfigs[tx.currency as 'AFN'|'USD'|'IRT'];
+        const baseAmountNew = tx.currency === state.storeSettings.baseCurrency ? tx.amount : (configNew.method === 'multiply' ? tx.amount / (tx.exchangeRate || 1) : tx.amount * (tx.exchangeRate || 1));
+        const multiplierNew = (tx.type === 'payment' || tx.type === 'sale_return') ? -1 : 1;
+
+        balAFN += (tx.currency === 'AFN' ? tx.amount * multiplierNew : 0);
+        balUSD += (tx.currency === 'USD' ? tx.amount * multiplierNew : 0);
+        balIRT += (tx.currency === 'IRT' ? tx.amount * multiplierNew : 0);
+        balTotal += (baseAmountNew * multiplierNew);
+
+        const newB = { AFN: balAFN, USD: balUSD, IRT: balIRT, Total: balTotal };
+        await api.processPayment('customer', tx.customerId, newB, tx);
+        await fetchData(true);
+    };
+
+    const deleteCustomerTransaction = async (id: string) => {
+        const tx = state.customerTransactions.find(t => t.id === id);
+        if (!tx) return;
+        const c = state.customers.find(x => x.id === tx.customerId);
+        if (!c) return;
+
+        const config = state.storeSettings.currencyConfigs[tx.currency as 'AFN'|'USD'|'IRT'];
+        const baseAmount = tx.currency === state.storeSettings.baseCurrency ? tx.amount : (config.method === 'multiply' ? tx.amount / (tx.exchangeRate || 1) : tx.amount * (tx.exchangeRate || 1));
+        const multiplier = (tx.type === 'payment' || tx.type === 'sale_return') ? -1 : 1;
+
+        const newB = { 
+            AFN: c.balanceAFN - (tx.currency === 'AFN' ? tx.amount * multiplier : 0), 
+            USD: c.balanceUSD - (tx.currency === 'USD' ? tx.amount * multiplier : 0), 
+            IRT: c.balanceIRT - (tx.currency === 'IRT' ? tx.amount * multiplier : 0), 
+            Total: c.balance - (baseAmount * multiplier) 
+        };
+
+        await api.deleteTransaction('customer', tx.customerId, id, newB);
+        await fetchData(true);
+    };
+
+    const addCustomerPayment = async (cid: string, a: number, d: string, cur: any = 'AFN', rate: number = 1, trusteeId?: string, type: 'payment' | 'receipt' = 'payment', customDate?: string, isHistorical?: boolean, invoiceId?: string) => {
+        const c = state.customers.find(x => x.id === cid);
+        if (!c) return null;
+        
+        const config = state.storeSettings.currencyConfigs[cur as 'AFN'|'USD'|'IRT'];
+        const baseAmount = cur === state.storeSettings.baseCurrency ? a : (config.method === 'multiply' ? a / rate : a * rate);
+        const tx: CustomerTransaction = { 
+            id: crypto.randomUUID(), 
+            customerId: cid, 
+            type: type, 
+            amount: a, 
+            date: customDate ? new Date(customDate).toISOString() : new Date().toISOString(), 
+            description: d + (invoiceId ? ` (بابت فاکتور #${invoiceId})` : '') + (trusteeId ? ' (تحویل به واسطه)' : ''), 
+            currency: cur,
+            exchangeRate: rate,
+            isCash: !trusteeId, // If trustee is involved, it's not physical cash for us
+            isManual: true,
+            isHistorical: isHistorical,
+            invoiceId: invoiceId
+        };
+        
+        if (invoiceId) {
+            const inv = state.saleInvoices.find(i => i.id === invoiceId);
+            if (inv) {
+                // Calculate how much to add to receivedAmount in invoice's currency
+                let amountToAdd = 0;
+                if (cur === inv.currency) {
+                    amountToAdd = a;
+                } else {
+                    // Convert 'a' (in 'cur') to base, then to 'inv.currency'
+                    const baseAmount = cur === state.storeSettings.baseCurrency ? a : (state.storeSettings.currencyConfigs[cur as 'AFN'|'USD'|'IRT'].method === 'multiply' ? a / rate : a * rate);
+                    const invConfig = state.storeSettings.currencyConfigs[inv.currency];
+                    amountToAdd = inv.currency === state.storeSettings.baseCurrency ? baseAmount : (invConfig.method === 'multiply' ? baseAmount * inv.exchangeRate : baseAmount / inv.exchangeRate);
+                }
+                
+                const updatedInv = { ...inv, receivedAmount: (inv.receivedAmount || 0) + amountToAdd };
+                await api.updateSaleInvoice(updatedInv);
+                
+                // Update local state
+                setState(prev => ({
+                    ...prev,
+                    saleInvoices: prev.saleInvoices.map(i => i.id === invoiceId ? updatedInv : i)
+                }));
+            }
+        }
+        
+        // If payment (receipt from customer): they pay us -> their debt decreases -> balance decreases
+        // If receipt (payment to customer): we pay them -> their debt increases -> balance increases
+        // Wait, the user terminology: 
+        // Customer "Submit Receipt" (دریافت) -> We receive money -> Balance decreases
+        // Customer "Submit Payment" (پرداخت) -> We pay them -> Balance increases
+        
+        // In the existing code, addCustomerPayment used type: 'payment' for receiving money.
+        // So for customers: 'payment' means "Receipt from customer" (Balance decreases)
+        // I'll add 'receipt' for "Payment to customer" (Balance increases)
+        
+        const multiplier = type === 'payment' ? -1 : 1;
+        
+        const newB = { 
+            AFN: c.balanceAFN + (cur === 'AFN' ? a * multiplier : 0), 
+            USD: c.balanceUSD + (cur === 'USD' ? a * multiplier : 0), 
+            IRT: c.balanceIRT + (cur === 'IRT' ? a * multiplier : 0), 
+            Total: c.balance + (baseAmount * multiplier) 
+        };
+
+        const extraFields = (type === 'payment' && c.activityConfig) ? { activityConfig: null } : {};
+
+        await api.processPayment('customer', cid, newB, tx, extraFields);
+        
+        if (trusteeId) {
+            await processDepositTransaction(
+                trusteeId, 
+                'withdrawal', 
+                a, 
+                cur, 
+                `دریافتی از مشتری: ${c.name} - بابت: ${d}`,
+                rate,
+                false // isCash = false
+            );
+        }
+
+        await fetchData(true);
+        return tx;
+    };
+
+            // --- Employee Management ---
+            const addEmployee = (e: any) => { api.addEmployee(e).then(() => fetchData(true)); };
+            const updateEmployee = (e: Employee) => { api.updateEmployee(e).then(() => fetchData(true)); };
+            const deleteEmployee = (id: string) => { api.deleteEmployee(id).then(() => fetchData(true)); };
+            const toggleEmployeeActive = (id: string) => {
+                const emp = state.employees.find(x => x.id === id);
+                if (emp) {
+                    api.updateEmployee({ ...emp, isActive: !emp.isActive }).then(() => fetchData(true));
+                }
+            };
+
+            const addEmployeeAdvance = async (eid: string, a: number, d: string, cur: 'AFN' | 'USD' | 'IRT' = 'AFN', rate: number = 1, customDate?: string) => {
+                const emp = state.employees.find(x => x.id === eid);
+                if (!emp) return;
+                const now = customDate || new Date().toISOString();
+                const tx: PayrollTransaction = { id: crypto.randomUUID(), employeeId: eid, type: 'advance', amount: a, currency: cur, exchangeRate: rate, date: now, description: d };
+                
+                const config = state.storeSettings.currencyConfigs[cur];
+                const baseAmount = cur === state.storeSettings.baseCurrency ? a : (config.method === 'multiply' ? a / rate : a * rate);
+
+                // Auto-log to Expenses to ensure reports are accurate
+                const expense: Expense = { 
+                    id: crypto.randomUUID(), 
+                    category: 'salary', 
+                    amount: a, 
+                    currency: cur,
+                    exchangeRate: rate,
+                    amountBase: baseAmount,
+                    description: `مساعده/تسویه میان‌دوره به ${emp.name}: ${d}`, 
+                    date: now 
+                };
+
+                // Deduction logic:
+                // We deduct from the specific currency balance if it matches, 
+                // but primarily we track the "Remaining Salary" in the employee's base salary currency.
+                const newBalances = {
+                    AFN: emp.balanceAFN - (emp.salaryCurrency === 'AFN' ? baseAmount : (cur === 'AFN' ? a : 0)),
+                    USD: emp.balanceUSD - (emp.salaryCurrency === 'USD' ? (cur === 'USD' ? a : (config.method === 'multiply' ? a / rate : a * rate)) : (cur === 'USD' ? a : 0)),
+                    IRT: emp.balanceIRT - (emp.salaryCurrency === 'IRT' ? (cur === 'IRT' ? a : (config.method === 'multiply' ? a / rate : a * rate)) : (cur === 'IRT' ? a : 0)),
+                    Total: emp.balance - baseAmount
+                };
+
+                await api.processPayment('employee', eid, newBalances, tx);
+                await api.addExpense(expense);
+                await fetchData(true);
+                const currencyName = state.storeSettings.currencyConfigs[cur]?.name || cur;
+                logActivity('payroll', `ثبت مساعده/تسویه برای ${emp.name}: ${a.toLocaleString()} ${currencyName}`);
+            };
+
+            const processAndPaySalaries = () => {
+                const txs: PayrollTransaction[] = [];
+                const updates: {id: string, newBalances: any}[] = [];
+                
+                state.employees.filter(e => e.isActive).forEach(e => {
+                    const newTotal = e.balance + e.monthlySalary;
+                    const newAFN = e.balanceAFN + (e.salaryCurrency === 'AFN' ? e.monthlySalary : 0);
+                    const newUSD = e.balanceUSD + (e.salaryCurrency === 'USD' ? e.monthlySalary : 0);
+                    const newIRT = e.balanceIRT + (e.salaryCurrency === 'IRT' ? e.monthlySalary : 0);
+                    
+                    updates.push({ 
+                        id: e.id, 
+                        newBalances: { 
+                            AFN: newAFN, 
+                            USD: newUSD, 
+                            IRT: newIRT, 
+                            Total: newTotal 
+                        } 
+                    });
+
+                    txs.push({ 
+                        id: crypto.randomUUID(), 
+                        employeeId: e.id, 
+                        type: 'salary_payment', 
+                        amount: e.monthlySalary, 
+                        currency: e.salaryCurrency,
+                        exchangeRate: 1,
+                        date: new Date().toISOString(), 
+                        description: 'افزودن حقوق ماهانه به حساب' 
+                    });
+                });
+
+                api.processPayroll(updates, txs, { id: 'dummy', category: 'salary', amount: 0, currency: 'AFN', exchangeRate: 1, date: new Date().toISOString(), description: 'پردازش حقوق ماهانه' }).then(() => fetchData(true));
+                logActivity('payroll', `پردازش حقوق ماهانه برای ${state.employees.length} کارمند انجام شد.`);
+                return { success: true, message: 'حقوق ماهانه به حساب تمام کارکنان فعال اضافه شد.' };
+            };
+
+    const addPartner = async (name: string, shares: { companyId: string; percentage: number }[]) => {
+        const newPartner: Partner = {
+            id: crypto.randomUUID(),
+            name,
+            shares
+        };
+        await api.addPartner(newPartner);
+        setState(prev => ({ ...prev, partners: [...prev.partners, newPartner] }));
+        return { success: true, message: "شریک با موفقیت اضافه شد." };
+    };
+
+    const updatePartner = async (id: string, name: string, shares: { companyId: string; percentage: number }[]) => {
+        const updatedPartner: Partner = { id, name, shares };
+        await api.updatePartner(updatedPartner);
+        setState(prev => ({
+            ...prev,
+            partners: prev.partners.map(p => p.id === id ? updatedPartner : p)
+        }));
+        return { success: true, message: "اطلاعات شریک با موفقیت بروزرسانی شد." };
+    };
+
+    const deletePartner = async (id: string) => {
+        await api.deletePartner(id);
+        setState(prev => ({ ...prev, partners: prev.partners.filter(p => p.id !== id) }));
+        return { success: true, message: "شریک با موفقیت حذف شد." };
+    };
+
+    const recordPartnerWithdrawal = async (partnerId: string, companyId: string, amount: number, currency: 'AFN' | 'USD' | 'IRT', rate: number, description: string, date?: string, isHistorical?: boolean) => {
+        const partner = state.partners.find(p => p.id === partnerId);
+        if (!partner) return { success: false, message: "شریک یافت نشد." };
+
+        const config = state.storeSettings.currencyConfigs[currency];
+        const baseAmount = currency === state.storeSettings.baseCurrency ? amount : (config.method === 'multiply' ? amount / rate : amount * rate);
+
+        const expense: Expense = {
+            id: crypto.randomUUID(),
+            category: 'partner_withdrawal',
+            amount,
+            currency,
+            exchangeRate: rate,
+            amountBase: baseAmount,
+            description: `برداشت شریک (${partner.name}): ${description}`,
+            date: date || new Date().toISOString(),
+            companyId,
+            partnerId,
+            isHistorical: isHistorical || false
+        };
+
+        await api.addExpense(expense);
+        await fetchData(true);
+        return { success: true, message: "برداشت شریک با موفقیت ثبت شد." };
+    };
+
+    const updatePartnerWithdrawal = async (expenseId: string, updates: Partial<Expense>) => {
+        const existing = state.expenses.find(e => e.id === expenseId);
+        if (!existing) return { success: false, message: "رکورد یافت نشد." };
+
+        const updatedExpense = { ...existing, ...updates };
+        
+        // Recalculate base amount if amount, currency or rate changed
+        if (updates.amount !== undefined || updates.currency !== undefined || updates.exchangeRate !== undefined) {
+            const cur = updatedExpense.currency;
+            const rate = updatedExpense.exchangeRate;
+            const config = state.storeSettings.currencyConfigs[cur];
+            updatedExpense.amountBase = cur === state.storeSettings.baseCurrency ? updatedExpense.amount : (config.method === 'multiply' ? updatedExpense.amount / rate : updatedExpense.amount * rate);
+        }
+
+        await api.updateExpense(updatedExpense);
+        await fetchData(true);
+        return { success: true, message: "برداشت شریک با موفقیت بروزرسانی شد." };
+    };
+
+    const deletePartnerWithdrawal = async (expenseId: string) => {
+        await api.deleteExpense(expenseId);
+        await fetchData(true);
+        return { success: true, message: "برداشت شریک با موفقیت حذف شد." };
+    };
+
+    const addExpense = (e: any) => { 
+        const rate = e.exchangeRate || 1;
+        const cur = e.currency || state.storeSettings.baseCurrency;
+        const config = state.storeSettings.currencyConfigs[cur as 'AFN'|'IRT'|'USD'];
+        const baseAmount = cur === state.storeSettings.baseCurrency ? e.amount : (config.method === 'multiply' ? e.amount / rate : e.amount * rate);
+        
+        const finalExpense = { 
+            ...e, 
+            amountBase: baseAmount, 
+            date: e.date || new Date().toISOString(),
+            companyId: e.companyId || null,
+            partnerId: e.partnerId || null
+        };
+        api.addExpense(finalExpense).then(() => fetchData(true)); 
+    };
+
+    const updateExpense = (e: Expense) => {
+        const rate = e.exchangeRate || 1;
+        const cur = e.currency || state.storeSettings.baseCurrency;
+        const config = state.storeSettings.currencyConfigs[cur as 'AFN'|'IRT'|'USD'];
+        const baseAmount = cur === state.storeSettings.baseCurrency ? e.amount : (config.method === 'multiply' ? e.amount / rate : e.amount * rate);
+        
+        const finalExpense = { 
+            ...e, 
+            amountBase: baseAmount,
+            companyId: e.companyId || null,
+            partnerId: e.partnerId || null
+        };
+        api.updateExpense(finalExpense).then(() => fetchData(true));
+    };
+
+    const deleteExpense = (id: string) => {
+        api.deleteExpense(id).then(() => fetchData(true));
+    };
+    const addDepositHolder = async (h: any) => { await api.addDepositHolder(h); await fetchData(true); };
+    const deleteDepositHolder = async (id: string) => { await api.deleteDepositHolder(id); await fetchData(true); };
+    const processDepositTransaction = async (hid: string, t: any, a: number, c: any, d: string, rate: number = 1, isCash: boolean = true, date?: string, isHistorical: boolean = false, isManual: boolean = false) => {
+        const holder = state.depositHolders.find(x => x.id === hid);
+        const tx: DepositTransaction = { 
+            id: crypto.randomUUID(), 
+            holderId: hid, 
+            type: t, 
+            amount: a, 
+            currency: c, 
+            description: d, 
+            date: date ? new Date(date).toISOString() : new Date().toISOString(),
+            exchangeRate: rate,
+            isCash,
+            isHistorical,
+            isManual
+        };
+        
+        const config = state.storeSettings.currencyConfigs[c as 'AFN'|'USD'|'IRT'];
+        const baseAmount = c === state.storeSettings.baseCurrency ? a : (config.method === 'multiply' ? a / rate : a * rate);
+        
+        const newH = { ...holder! };
+        const factor = t === 'deposit' ? 1 : -1;
+        if (c === 'USD') newH.balanceUSD += factor * a; 
+        else if (c === 'IRT') newH.balanceIRT += factor * a; 
+        else newH.balanceAFN += factor * a;
+        
+        newH.balance = (newH.balance !== undefined ? newH.balance : 0) + (factor * baseAmount);
+
+        await api.updateDepositHolder(newH);
+        await api.addDepositTransaction(tx);
+        await fetchData(true);
+        return { success: true, message: 'تراکنش با موفقیت ثبت شد.', id: tx.id };
+    };
+
+    const updateDepositTransaction = async (updatedTx: DepositTransaction) => {
+        const oldTx = state.depositTransactions.find(t => t.id === updatedTx.id);
+        if (!oldTx) return { success: false, message: 'تراکنش یافت نشد.' };
+
+        const holder = state.depositHolders.find(h => h.id === updatedTx.holderId);
+        if (!holder) return { success: false, message: 'امانت‌دار یافت نشد.' };
+
+        // 1. Reverse old transaction effect on holder balance
+        const oldConfig = state.storeSettings.currencyConfigs[oldTx.currency as 'AFN'|'USD'|'IRT'];
+        const oldRate = oldTx.exchangeRate || 1;
+        const oldBaseAmount = oldTx.currency === state.storeSettings.baseCurrency ? oldTx.amount : (oldConfig.method === 'multiply' ? oldTx.amount / oldRate : oldTx.amount * oldRate);
+        
+        let tempH = { ...holder };
+        const oldFactor = oldTx.type === 'deposit' ? -1 : 1;
+        if (oldTx.currency === 'USD') tempH.balanceUSD += oldFactor * oldTx.amount;
+        else if (oldTx.currency === 'IRT') tempH.balanceIRT += oldFactor * oldTx.amount;
+        else tempH.balanceAFN += oldFactor * oldTx.amount;
+        tempH.balance = (tempH.balance !== undefined ? tempH.balance : 0) + (oldFactor * oldBaseAmount);
+
+        // 2. Apply new transaction effect on holder balance
+        const newConfig = state.storeSettings.currencyConfigs[updatedTx.currency as 'AFN'|'USD'|'IRT'];
+        const newRate = updatedTx.exchangeRate || 1;
+        const newBaseAmount = updatedTx.currency === state.storeSettings.baseCurrency ? updatedTx.amount : (newConfig.method === 'multiply' ? updatedTx.amount / newRate : updatedTx.amount * newRate);
+        
+        const newFactor = updatedTx.type === 'deposit' ? 1 : -1;
+        if (updatedTx.currency === 'USD') tempH.balanceUSD += newFactor * updatedTx.amount;
+        else if (updatedTx.currency === 'IRT') tempH.balanceIRT += newFactor * updatedTx.amount;
+        else tempH.balanceAFN += newFactor * updatedTx.amount;
+        tempH.balance = (tempH.balance !== undefined ? tempH.balance : 0) + (newFactor * newBaseAmount);
+
+        await api.updateDepositHolder(tempH);
+        await api.addDepositTransaction(updatedTx); // Using addDepositTransaction as it's likely a putItem (upsert)
+        await fetchData(true);
+        return { success: true, message: 'تراکنش با موفقیت بروزرسانی شد.' };
+    };
+
+    const deleteDepositTransaction = async (id: string) => {
+        const tx = state.depositTransactions.find(t => t.id === id);
+        if (!tx) return;
+        
+        const holder = state.depositHolders.find(h => h.id === tx.holderId);
+        if (!holder) return;
+        
+        const config = state.storeSettings.currencyConfigs[tx.currency as 'AFN'|'USD'|'IRT'];
+        const rate = tx.exchangeRate || 1;
+        const baseAmount = tx.currency === state.storeSettings.baseCurrency ? tx.amount : (config.method === 'multiply' ? tx.amount / rate : tx.amount * rate);
+        
+        const newH = { ...holder };
+        const factor = tx.type === 'deposit' ? -1 : 1; // Reverse the effect
+        if (tx.currency === 'USD') newH.balanceUSD += factor * tx.amount; 
+        else if (tx.currency === 'IRT') newH.balanceIRT += factor * tx.amount; 
+        else newH.balanceAFN += factor * tx.amount;
+        
+        newH.balance = (newH.balance !== undefined ? newH.balance : 0) + (factor * baseAmount);
+
+        await api.updateDepositHolder(newH);
+        await api.deleteDepositTransaction(id);
+        await fetchData(true);
+    };
+
+    const setInvoiceTransientCustomer = async (id: string, name: string) => {
+        setState(prev => ({
+            ...prev,
+            saleInvoices: prev.saleInvoices.map(inv => 
+                inv.id === id ? { ...inv, originalInvoiceId: name } : inv
+            )
+        }));
+        await api.updateSaleInvoiceTransientName(id, name);
+    };
+    const updateInTransitInvoice = (d: any) => { 
+        const total = d.items.reduce((s:number, i:any) => s + (i.quantity*i.purchasePrice), 0);
+        api.updateInTransit({ ...d, totalAmount: total, type: 'in_transit' } as any).then(() => fetchData(true)); 
+        return { success: true, message: 'بروزرسانی شد' }; 
+    };
+    const deleteInTransitInvoice = (id: string) => { api.deleteInTransit(id).then(() => fetchData(true)); };
+    const addEmployeeAdvanceToEmployee = (eid: string, a: number, d: string, cur?: any, rate?: number) => { addEmployeeAdvance(eid, a, d, cur, rate); };
+
+    // --- Managed Companies Functions ---
+    const addManagedCompany = async (companyData: Omit<ManagedCompany, 'id' | 'createdAt' | 'slotNumber'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            // Find first available slot (1-20)
+            const usedSlots = state.managedCompanies.map(c => c.slotNumber);
+            let slotNumber = 1;
+            for (let i = 1; i <= 20; i++) {
+                if (!usedSlots.includes(i)) {
+                    slotNumber = i;
+                    break;
+                }
+            }
+
+            const newCompany: ManagedCompany = {
+                ...companyData,
+                id: crypto.randomUUID(),
+                createdAt: new Date().toISOString(),
+                slotNumber
+            };
+            await api.addManagedCompany(newCompany);
+            setState(prev => ({ ...prev, managedCompanies: [...prev.managedCompanies, newCompany] }));
+            return { success: true, message: `شرکت با موفقیت ثبت شد. (شماره اختصاصی: ${slotNumber})` };
+        } catch (error: any) {
+            console.error("Error adding company:", error);
+            return { success: false, message: error.message || 'خطا در ثبت شرکت' };
+        }
+    };
+
+    const updateManagedCompany = async (company: ManagedCompany) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.updateManagedCompany(company);
+            setState(prev => ({
+                ...prev,
+                managedCompanies: prev.managedCompanies.map(c => c.id === company.id ? company : c)
+            }));
+            return { success: true, message: 'اطلاعات شرکت بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating company:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی اطلاعات شرکت' };
+        }
+    };
+
+    const deleteManagedCompany = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.deleteManagedCompany(id);
+            setState(prev => ({
+                ...prev,
+                managedCompanies: prev.managedCompanies.filter(c => c.id !== id),
+                managedCompanyLedger: prev.managedCompanyLedger.filter(e => e.companyId !== id)
+            }));
+            return { success: true, message: 'شرکت حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting company:", error);
+            return { success: false, message: error.message || 'خطا در حذف شرکت' };
+        }
+    };
+
+    const addLedgerEntry = async (entryData: Omit<CompanyLedgerEntry, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const newEntry: CompanyLedgerEntry = {
+                ...entryData,
+                id: crypto.randomUUID()
+            };
+            await api.addManagedCompanyLedgerEntry(newEntry);
+            setState(prev => ({ ...prev, managedCompanyLedger: [...prev.managedCompanyLedger, newEntry] }));
+            return { success: true, message: 'رکورد با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding ledger entry:", error);
+            return { success: false, message: error.message || 'خطا در ثبت رکورد' };
+        }
+    };
+
+    const updateLedgerEntry = async (entry: CompanyLedgerEntry) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.updateManagedCompanyLedgerEntry(entry);
+            setState(prev => ({
+                ...prev,
+                managedCompanyLedger: prev.managedCompanyLedger.map(e => e.id === entry.id ? entry : e)
+            }));
+            return { success: true, message: 'رکورد بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating ledger entry:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی رکورد' };
+        }
+    };
+
+    const deleteLedgerEntry = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.deleteManagedCompanyLedgerEntry(id);
+            setState(prev => ({
+                ...prev,
+                managedCompanyLedger: prev.managedCompanyLedger.filter(e => e.id !== id)
+            }));
+            return { success: true, message: 'رکورد حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting ledger entry:", error);
+            return { success: false, message: error.message || 'خطا در حذف رکورد' };
+        }
+    };
+
+    const addManagedCompanyCustomer = async (customerData: Omit<ManagedCompanyCustomer, 'id' | 'createdAt'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const newCustomer: ManagedCompanyCustomer = {
+                ...customerData,
+                id: crypto.randomUUID(),
+                createdAt: new Date().toISOString()
+            };
+            await api.addManagedCompanyCustomer(newCustomer);
+            setState(prev => ({ ...prev, managedCompanyCustomers: [...prev.managedCompanyCustomers, newCustomer] }));
+            return { success: true, message: 'مشتری با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding customer:", error);
+            return { success: false, message: error.message || 'خطا در ثبت مشتری' };
+        }
+    };
+
+    const updateManagedCompanyCustomer = async (customer: ManagedCompanyCustomer) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.updateManagedCompanyCustomer(customer);
+            setState(prev => ({
+                ...prev,
+                managedCompanyCustomers: prev.managedCompanyCustomers.map(c => c.id === customer.id ? customer : c)
+            }));
+            return { success: true, message: 'اطلاعات مشتری بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating customer:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی اطلاعات مشتری' };
+        }
+    };
+
+    const deleteManagedCompanyCustomer = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.deleteManagedCompanyCustomer(id);
+            setState(prev => ({
+                ...prev,
+                managedCompanyCustomers: prev.managedCompanyCustomers.filter(c => c.id !== id),
+                customerBillingRecords: prev.customerBillingRecords.filter(r => r.customerId !== id)
+            }));
+            return { success: true, message: 'مشتری حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting customer:", error);
+            return { success: false, message: error.message || 'خطا در حذف مشتری' };
+        }
+    };
+
+    const addCustomerBillingRecord = async (recordData: Omit<CustomerBillingRecord, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const username = state.currentUser?.username || 'مدیر';
+            const newRecord: CustomerBillingRecord = {
+                customerId: recordData.customerId,
+                companyId: recordData.companyId,
+                previousReading: recordData.previousReading,
+                currentReading: recordData.currentReading,
+                consumption: recordData.consumption,
+                amount: recordData.amount,
+                date: recordData.date,
+                status: recordData.status,
+                paymentDate: recordData.paymentDate,
+                previousBalance: recordData.previousBalance,
+                isMinimumFeeApplied: recordData.isMinimumFeeApplied,
+                id: crypto.randomUUID(),
+                surveyorName: username,
+                collectorName: recordData.status === 'paid' ? username : ''
+            };
+            await api.addCustomerBillingRecord(newRecord);
+            setState(prev => ({ ...prev, customerBillingRecords: [...prev.customerBillingRecords, newRecord] }));
+            return { success: true, message: 'قبض با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding billing record:", error);
+            return { success: false, message: error.message || 'خطا در ثبت قبض' };
+        }
+    };
+
+    const updateCustomerBillingRecord = async (record: CustomerBillingRecord) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const username = state.currentUser?.username || 'مدیر';
+            
+            // If status is changing to paid, set collectorName
+            const oldRecord = state.customerBillingRecords.find(r => r.id === record.id);
+            let collectorName = record.collectorName;
+            if (record.status === 'paid' && oldRecord?.status === 'unpaid') {
+                collectorName = username;
+            }
+
+            const updatedRecord: CustomerBillingRecord = {
+                id: record.id,
+                customerId: record.customerId,
+                companyId: record.companyId,
+                previousReading: record.previousReading,
+                currentReading: record.currentReading,
+                consumption: record.consumption,
+                amount: record.amount,
+                date: record.date,
+                status: record.status,
+                paymentDate: record.paymentDate,
+                surveyorName: record.surveyorName,
+                collectorName: collectorName,
+                previousBalance: record.previousBalance,
+                isMinimumFeeApplied: record.isMinimumFeeApplied
+            };
+
+            await api.updateCustomerBillingRecord(updatedRecord);
+            setState(prev => ({
+                ...prev,
+                customerBillingRecords: prev.customerBillingRecords.map(r => r.id === updatedRecord.id ? updatedRecord : r)
+            }));
+            return { success: true, message: 'قبض بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating billing record:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی قبض' };
+        }
+    };
+
+    const deleteCustomerBillingRecord = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.deleteCustomerBillingRecord(id);
+            setState(prev => ({
+                ...prev,
+                customerBillingRecords: prev.customerBillingRecords.filter(r => r.id !== id)
+            }));
+            return { success: true, message: 'قبض حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting billing record:", error);
+            return { success: false, message: error.message || 'خطا در حذف قبض' };
+        }
+    };
+    
+    const addManagedCompanyInvoice = async (invoiceData: Omit<ManagedCompanyInvoice, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const username = state.currentUser?.username || 'مدیر';
+            const newInvoice: ManagedCompanyInvoice = {
+                ...invoiceData,
+                id: crypto.randomUUID(),
+                registrarName: username,
+                collectorName: invoiceData.status === 'paid' ? username : ''
+            };
+            await api.addManagedCompanyInvoice(newInvoice);
+            setState(prev => ({ ...prev, managedCompanyInvoices: [...prev.managedCompanyInvoices, newInvoice] }));
+            return { success: true, message: 'فاکتور با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding company invoice:", error);
+            return { success: false, message: error.message || 'خطا در ثبت فاکتور' };
+        }
+    };
+
+    const updateManagedCompanyInvoice = async (invoice: ManagedCompanyInvoice) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const username = state.currentUser?.username || 'مدیر';
+            const updatedInvoice = { ...invoice };
+            
+            // If status is changing to paid, set collectorName
+            const oldInvoice = state.managedCompanyInvoices.find(i => i.id === invoice.id);
+            if (invoice.status === 'paid' && oldInvoice?.status === 'unpaid') {
+                updatedInvoice.collectorName = username;
+            }
+
+            await api.updateManagedCompanyInvoice(updatedInvoice);
+            setState(prev => ({
+                ...prev,
+                managedCompanyInvoices: prev.managedCompanyInvoices.map(i => i.id === updatedInvoice.id ? updatedInvoice : i)
+            }));
+            return { success: true, message: 'فاکتور بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating company invoice:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی فاکتور' };
+        }
+    };
+
+    const deleteManagedCompanyInvoice = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.deleteManagedCompanyInvoice(id);
+            setState(prev => ({
+                ...prev,
+                managedCompanyInvoices: prev.managedCompanyInvoices.filter(i => i.id !== id)
+            }));
+            return { success: true, message: 'فاکتور حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting company invoice:", error);
+            return { success: false, message: error.message || 'خطا در حذف فاکتور' };
+        }
+    };
+
+    const addManagedCompanyProductionLog = async (logData: Omit<ManagedCompanyProductionLog, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        const newLog: ManagedCompanyProductionLog = {
+            ...logData,
+            id: crypto.randomUUID()
+        };
+        await api.addManagedCompanyProductionLog(newLog);
+        setState(prev => ({ ...prev, managedCompanyProductionLogs: [...prev.managedCompanyProductionLogs, newLog] }));
+        return { success: true, message: 'گزارش تولید با موفقیت ثبت شد.' };
+    };
+
+    const updateManagedCompanyProductionLog = async (log: ManagedCompanyProductionLog) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        await api.updateManagedCompanyProductionLog(log);
+        setState(prev => ({
+            ...prev,
+            managedCompanyProductionLogs: prev.managedCompanyProductionLogs.map(l => l.id === log.id ? log : l)
+        }));
+        return { success: true, message: 'گزارش تولید بروزرسانی شد.' };
+    };
+
+    const deleteManagedCompanyProductionLog = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        await api.deleteManagedCompanyProductionLog(id);
+        setState(prev => ({
+            ...prev,
+            managedCompanyProductionLogs: prev.managedCompanyProductionLogs.filter(l => l.id !== id)
+        }));
+        return { success: true, message: 'گزارش تولید حذف شد.' };
+    };
+
+    const addOwnerTransaction = async (txData: Omit<OwnerTransaction, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        const newTx: OwnerTransaction = {
+            ...txData,
+            id: crypto.randomUUID()
+        };
+        await api.addOwnerTransaction(newTx);
+        setState(prev => ({ ...prev, ownerTransactions: [...prev.ownerTransactions, newTx] }));
+        return { success: true, message: 'تراکنش شخصی با موفقیت ثبت شد.' };
+    };
+
+    const updateOwnerTransaction = async (tx: OwnerTransaction) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        await api.updateOwnerTransaction(tx);
+        setState(prev => ({
+            ...prev,
+            ownerTransactions: prev.ownerTransactions.map(t => t.id === tx.id ? tx : t)
+        }));
+        return { success: true, message: 'تراکنش شخصی بروزرسانی شد.' };
+    };
+
+    const deleteOwnerTransaction = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        await api.deleteOwnerTransaction(id);
+        setState(prev => ({
+            ...prev,
+            ownerTransactions: prev.ownerTransactions.filter(t => t.id !== id)
+        }));
+        return { success: true, message: 'تراکنش شخصی حذف شد.' };
+    };
+
+    const addOwnerExpenseCategory = async (name: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const newCategory: OwnerExpenseCategory = {
+                id: crypto.randomUUID(),
+                name
+            };
+            await api.addOwnerExpenseCategory(newCategory);
+            setState(prev => ({ ...prev, ownerExpenseCategories: [...prev.ownerExpenseCategories, newCategory] }));
+            return { success: true, message: 'دسته‌بندی جدید با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding owner category:", error);
+            return { success: false, message: error.message || 'خطا در ثبت دسته‌بندی' };
+        }
+    };
+
+    const updateOwnerExpenseCategory = async (category: OwnerExpenseCategory) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.updateOwnerExpenseCategory(category);
+            setState(prev => ({
+                ...prev,
+                ownerExpenseCategories: prev.ownerExpenseCategories.map(c => c.id === category.id ? category : c)
+            }));
+            return { success: true, message: 'دسته‌بندی بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating owner category:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی دسته‌بندی' };
+        }
+    };
+
+    const deleteOwnerExpenseCategory = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.deleteOwnerExpenseCategory(id);
+            setState(prev => ({
+                ...prev,
+                ownerExpenseCategories: prev.ownerExpenseCategories.filter(c => c.id !== id)
+            }));
+            return { success: true, message: 'دسته‌بندی حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting owner category:", error);
+            return { success: false, message: error.message || 'خطا در حذف دسته‌بندی' };
+        }
+    };
+
+    const addCompanyEmployee = async (employee: Omit<CompanyEmployee, 'id' | 'isActive'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const newEmployee: CompanyEmployee = {
+                ...employee,
+                id: crypto.randomUUID(),
+                isActive: true
+            };
+            await api.addCompanyEmployee(newEmployee);
+            setState(prev => ({ ...prev, companyEmployees: [...prev.companyEmployees, newEmployee] }));
+            return { success: true, message: 'کارمند جدید با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding employee:", error);
+            return { success: false, message: error.message || 'خطا در ثبت کارمند' };
+        }
+    };
+
+    const updateCompanyEmployee = async (employee: CompanyEmployee) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.updateCompanyEmployee(employee);
+            setState(prev => ({
+                ...prev,
+                companyEmployees: prev.companyEmployees.map(e => e.id === employee.id ? employee : e)
+            }));
+            return { success: true, message: 'اطلاعات کارمند بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating employee:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی اطلاعات کارمند' };
+        }
+    };
+
+    const deleteCompanyEmployee = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            // 1. Delete associated salary payments from DB
+            await api.deleteSalaryPaymentsByEmployee(id);
+            
+            // 2. Delete associated salary records from DB
+            await api.deleteSalaryRecordsByEmployee(id);
+            
+            // 3. Delete the employee themselves from DB
+            await api.deleteCompanyEmployee(id);
+
+            // 4. Update local state for all three
+            setState(prev => ({
+                ...prev,
+                companyEmployees: prev.companyEmployees.filter(e => e.id !== id),
+                salaryRecords: prev.salaryRecords.filter(r => r.employeeId !== id),
+                salaryPayments: prev.salaryPayments.filter(p => p.employeeId !== id)
+            }));
+
+            return { success: true, message: 'کارمند و تمامی سوابق مربوطه حذف شدند.' };
+        } catch (error: any) {
+            console.error("Error deleting employee:", error);
+            return { success: false, message: error.message || 'خطا در حذف کارمند' };
+        }
+    };
+
+    const addSalaryPayment = async (payment: Omit<SalaryPayment, 'id'>) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const newPayment: SalaryPayment = {
+                ...payment,
+                id: crypto.randomUUID()
+            };
+            await api.addSalaryPayment(newPayment);
+            setState(prev => ({ ...prev, salaryPayments: [...prev.salaryPayments, newPayment] }));
+            return { success: true, message: 'پرداختی با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding salary payment:", error);
+            return { success: false, message: error.message || 'خطا در ثبت پرداختی' };
+        }
+    };
+
+    const updateSalaryPayment = async (payment: SalaryPayment) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.updateSalaryPayment(payment);
+            setState(prev => ({
+                ...prev,
+                salaryPayments: prev.salaryPayments.map(p => p.id === payment.id ? payment : p)
+            }));
+            return { success: true, message: 'پرداختی بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating salary payment:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی پرداختی' };
+        }
+    };
+
+    const deleteSalaryPayment = async (id: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            await api.deleteSalaryPayment(id);
+            setState(prev => ({
+                ...prev,
+                salaryPayments: prev.salaryPayments.filter(p => p.id !== id)
+            }));
+            return { success: true, message: 'پرداختی حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting salary payment:", error);
+            return { success: false, message: error.message || 'خطا در حذف پرداختی' };
+        }
+    };
+
+    const settleSalaryMonth = async (recordId: string) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const record = state.salaryRecords.find(r => r.id === recordId);
+            if (!record) return { success: false, message: 'رکورد یافت نشد.' };
+            
+            const updatedRecord = { ...record, status: 'settled' as const };
+            await api.updateSalaryRecord(updatedRecord);
+            setState(prev => ({
+                ...prev,
+                salaryRecords: prev.salaryRecords.map(r => r.id === recordId ? updatedRecord : r)
+            }));
+            return { success: true, message: 'وضعیت ماه به تصفیه شده تغییر یافت.' };
+        } catch (error: any) {
+            console.error("Error settling salary month:", error);
+            return { success: false, message: error.message || 'خطا در تصفیه حقوق' };
+        }
+    };
+
+    const generateMonthlySalaryRecords = async (year: number, month: number) => {
+        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        try {
+            const activeEmployees = state.companyEmployees.filter(e => e.isActive);
+            const existingRecords = state.salaryRecords.filter(r => r.year === year && r.month === month);
+            const existingEmployeeIds = new Set(existingRecords.map(r => r.employeeId));
+            
+            const newRecords: SalaryMonthRecord[] = [];
+            for (const emp of activeEmployees) {
+                if (existingEmployeeIds.has(emp.id)) continue;
+
+                // Parse employee start date to Jalali
+                const startD = new Date(emp.startDate);
+                if (isNaN(startD.getTime())) {
+                    newRecords.push({
+                        id: crypto.randomUUID(),
+                        employeeId: emp.id,
+                        year,
+                        month,
+                        baseSalary: emp.monthlySalary,
+                        currency: emp.salaryCurrency,
+                        status: 'pending',
+                        totalPaid: 0
+                    });
+                    continue;
+                }
+
+                const { jy: startYear, jm: startMonth, jd: startDay } = getJalaliDate(startD);
+
+                // 1. Don't generate records for months before employment
+                if (year < startYear || (year === startYear && month < startMonth)) {
+                    continue;
+                }
+
+                let baseSalary = emp.monthlySalary;
+                
+                // 2. Calculate proportional salary for the first month
+                if (year === startYear && month === startMonth) {
+                    // Jalali month days: 1-6 = 31, 7-11 = 30, 12 = 29/30
+                    let daysInMonth = month <= 6 ? 31 : 30;
+                    if (month === 12) {
+                        const isLeap = [1, 5, 9, 13, 17, 22, 26, 30].includes(year % 33);
+                        daysInMonth = isLeap ? 30 : 29;
+                    }
+                    
+                    const workedDays = daysInMonth - startDay + 1;
+                    if (workedDays < daysInMonth && workedDays > 0) {
+                        baseSalary = Math.round((emp.monthlySalary / daysInMonth) * workedDays);
+                    } else if (workedDays <= 0) {
+                        continue;
+                    }
+                }
+
+                newRecords.push({
+                    id: crypto.randomUUID(),
+                    employeeId: emp.id,
+                    year,
+                    month,
+                    baseSalary,
+                    currency: emp.salaryCurrency,
+                    status: 'pending',
+                    totalPaid: 0
+                });
+            }
+            
+            if (newRecords.length > 0) {
+                for (const record of newRecords) {
+                    await api.addSalaryRecord(record);
+                }
+                setState(prev => ({ ...prev, salaryRecords: [...prev.salaryRecords, ...newRecords] }));
+                return { success: true, message: `${newRecords.length} رکورد جدید ایجاد شد.` };
+            }
+            
+            return { success: true, message: 'تمامی رکوردها قبلاً ایجاد شده‌اند.' };
+        } catch (error: any) {
+            console.error("Error generating salary records:", error);
+            return { success: false, message: error.message || 'خطا در ایجاد رکوردها' };
+        }
+    };
+
+    const setSelectedCompanyId = (id: string | null) => {
+        setState(prev => ({ ...prev, selectedCompanyId: id }));
+    };
+
+    if (isLoading) return <div className="flex items-center justify-center h-screen text-xl font-bold text-blue-600">در حال دریافت اطلاعات...</div>;
+
+    return <AppContext.Provider value={{
+        ...state, showToast, isLoading, isLoggingOut, isShopActive, fetchSectionData, fetchData, login, logout, hasPermission, hasCompanyAccess, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, exportData, importData,
+        cloudBackup, cloudRestore, autoBackupEnabled, setAutoBackupEnabled,
+        addProduct, updateProduct, deleteProduct, registerWastage, addOrder, updateOrderStatus, updateOrder, deleteOrder, addOrderPayment, addToCart, updateCartItemQuantity, updateCartItemFinalPrice, removeFromCart, completeSale,
+        beginEditSale, cancelEditSale, deleteSaleInvoice, addSaleReturn, addPurchaseInvoice, beginEditPurchase, cancelEditPurchase, updatePurchaseInvoice, addPurchaseReturn,
+        addInTransitInvoice, updateInTransitInvoice, deleteInTransitInvoice, archiveInTransitInvoice, moveInTransitItems, addInTransitPayment,
+        updateSettings, addService, deleteService, addCompany, updateCompany, deleteCompany, addSupplier, updateSupplier, deleteSupplier, addSupplierPayment, updateSupplierTransaction, deleteSupplierTransaction, addCustomer, updateCustomer, deleteCustomer, addCustomerPayment, updateCustomerTransaction, deleteCustomerTransaction,
+        addEmployee, updateEmployee, deleteEmployee, toggleEmployeeActive, addEmployeeAdvance, addEmployeeAdvanceToEmployee, processAndPaySalaries, addExpense, updateExpense, deleteExpense, setInvoiceTransientCustomer,
+        addPartner, updatePartner, deletePartner, recordPartnerWithdrawal, updatePartnerWithdrawal, deletePartnerWithdrawal,
+        addManagedCompany, updateManagedCompany, deleteManagedCompany, addLedgerEntry, updateLedgerEntry, deleteLedgerEntry,
+        addManagedCompanyCustomer, updateManagedCompanyCustomer, deleteManagedCompanyCustomer,
+        addCustomerBillingRecord, updateCustomerBillingRecord, deleteCustomerBillingRecord,
+        addManagedCompanyInvoice, updateManagedCompanyInvoice, deleteManagedCompanyInvoice,
+        addManagedCompanyProductionLog, updateManagedCompanyProductionLog, deleteManagedCompanyProductionLog,
+        addOwnerTransaction, updateOwnerTransaction, deleteOwnerTransaction,
+        addOwnerExpenseCategory, updateOwnerExpenseCategory, deleteOwnerExpenseCategory,
+        addCompanyEmployee, updateCompanyEmployee, deleteCompanyEmployee,
+        addSalaryPayment, updateSalaryPayment, deleteSalaryPayment,
+        settleSalaryMonth, generateMonthlySalaryRecords,
+        addLegalRecord, updateLegalRecord, deleteLegalRecord,
+        addDepositHolder, deleteDepositHolder, processDepositTransaction, updateDepositTransaction, deleteDepositTransaction,
+        setSelectedCompanyId, logActivity
+    }}>{children}</AppContext.Provider>;
+};
+
+export const useAppContext = (): AppContextType => {
+    const context = useContext(AppContext);
+    if (context === undefined) throw new Error('useAppContext must be used within AppProvider');
+    return context;
+};
