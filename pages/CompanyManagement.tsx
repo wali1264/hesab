@@ -393,6 +393,30 @@ const CompanyManagement: React.FC = () => {
         }).filter(Boolean) as (ManagedCompanyCustomer & { unpaidCount: number, totalDebt: number })[];
     }, [managedCompanyCustomers, customerBillingRecords, managedCompanyInvoices, selectedCompanyId]);
 
+    const debtorsDetail = useMemo(() => {
+        if (!selectedCompanyId) return [];
+        const companyCustomers = managedCompanyCustomers.filter(c => c.companyId === selectedCompanyId);
+        const companyBilling = customerBillingRecords.filter(r => r.companyId === selectedCompanyId && r.status === 'unpaid');
+        const companyInvoices = managedCompanyInvoices.filter(i => i.companyId === selectedCompanyId && i.status === 'unpaid');
+        
+        return companyCustomers.map(customer => {
+            const unpaidBilling = companyBilling.filter(r => r.customerId === customer.id);
+            const unpaidInvoices = companyInvoices.filter(i => i.customerId === customer.id);
+            
+            const totalUnpaidCount = unpaidBilling.length + unpaidInvoices.length;
+            if (totalUnpaidCount === 0) return null;
+            
+            const totalDebt = unpaidBilling.reduce((sum, r) => sum + r.amount, 0) + 
+                              unpaidInvoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+            
+            return {
+                ...customer,
+                unpaidCount: totalUnpaidCount,
+                totalDebt
+            };
+        }).filter(Boolean).sort((a, b) => b!.totalDebt - a!.totalDebt) as (ManagedCompanyCustomer & { unpaidCount: number, totalDebt: number })[];
+    }, [managedCompanyCustomers, customerBillingRecords, managedCompanyInvoices, selectedCompanyId]);
+
     const [customerSearchQuery, setCustomerSearchQuery] = useState('');
     const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
     const [historySearchQuery, setHistorySearchQuery] = useState('');
@@ -500,6 +524,7 @@ const CompanyManagement: React.FC = () => {
 
     const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
     const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
+    const [isReceivablesModalOpen, setIsReceivablesModalOpen] = useState(false);
     const [selectedCustomerForLocation, setSelectedCustomerForLocation] = useState<ManagedCompanyCustomer | null>(null);
     const [productionDate, setProductionDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -1746,8 +1771,12 @@ const CompanyManagement: React.FC = () => {
                                         {formatCurrency(selectedCompany?.establishmentCost || 0, storeSettings, 'AFN')}
                                     </span>
                                 </div>
-                                <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
-                                    <span className="text-[10px] text-slate-400 uppercase font-bold">مجموع طلبات</span>
+                                <button 
+                                    onClick={() => setIsReceivablesModalOpen(true)}
+                                    className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px] transition-all hover:bg-white hover:border-red-300 hover:shadow-md cursor-pointer active:scale-95 group text-center"
+                                    title="مشاهده جزئیات طلبات"
+                                >
+                                    <span className="text-[10px] text-slate-400 uppercase font-bold group-hover:text-red-500 transition-colors">مجموع طلبات</span>
                                     <span className="text-lg font-black text-red-600">
                                         {formatCurrency(
                                             selectedCompany?.type === CompanyType.WATER 
@@ -1756,7 +1785,7 @@ const CompanyManagement: React.FC = () => {
                                             storeSettings, 'AFN'
                                         )}
                                     </span>
-                                </div>
+                                </button>
                                 <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-gray-200 shadow-sm flex flex-col items-center min-w-[120px]">
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">سود/ضرر نهایی</span>
                                     <span className={`text-lg font-black ${(totalWater + totalEquipment + totalGeneralRevenue - totalExpenses) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -4693,6 +4722,78 @@ const CompanyManagement: React.FC = () => {
                     onClose={() => { setIsLocationModalOpen(false); setSelectedCustomerForLocation(null); }}
                     onSave={handleSaveLocation}
                 />
+            )}
+
+            {isReceivablesModalOpen && (
+                <Modal title="لیست جزئیات طلبات" onClose={() => setIsReceivablesModalOpen(false)}>
+                    <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+                        {debtorsDetail.length === 0 ? (
+                            <div className="text-center py-12 text-slate-400">
+                                <ExclamationCircleIcon className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                                <p className="font-bold whitespace-pre-line">هیچ طلب معوقی\nیافت نشد.</p>
+                            </div>
+                        ) : (
+                            debtorsDetail.map(debtor => (
+                                <div 
+                                    key={debtor.id}
+                                    onClick={() => {
+                                        setCompanyDetailTab('customers');
+                                        setCustomerSearchQuery(debtor.name);
+                                        setIsReceivablesModalOpen(false);
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="bg-white border border-slate-100 p-4 rounded-2xl flex items-center justify-between hover:border-blue-500 hover:shadow-lg hover:shadow-blue-600/5 transition-all group cursor-pointer relative overflow-hidden"
+                                >
+                                    <div className="absolute top-0 right-0 w-1 h-full bg-red-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h3 className="font-black text-slate-800 text-sm truncate">{debtor.name}</h3>
+                                            {debtor.latitude && debtor.longitude && (
+                                                <div className="p-1 bg-emerald-100 text-emerald-600 rounded-lg animate-pulse">
+                                                    <MapPinIcon className="w-3 h-3" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 truncate mb-3 leading-relaxed">
+                                            <BuildingIcon className="w-3 h-3 inline ml-1 opacity-50" />
+                                            آدرس: {debtor.address || "نامشخص"}
+                                        </p>
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-red-50 text-red-600 px-2 py-0.5 rounded-lg text-[9px] font-black border border-red-100">
+                                                {debtor.unpaidCount.toLocaleString('en-US')} فاکتور پرداخت نشده
+                                            </div>
+                                            <div className="text-sm font-black text-slate-800 dir-ltr">
+                                                {Math.floor(debtor.totalDebt).toLocaleString('en-US')} <span className="text-[10px] font-bold text-slate-400">AFN</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        {debtor.latitude && debtor.longitude && (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedCustomerForLocation(debtor);
+                                                    setIsTrackModalOpen(true);
+                                                }}
+                                                className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all transform active:scale-95"
+                                                title="هدایت به مقصد (GPS)"
+                                            >
+                                                <LocateIcon className="w-5 h-5" />
+                                            </button>
+                                        )}
+                                        <div className="flex items-center justify-center p-2.5 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all transform group-active:scale-90">
+                                            <ArrowLeftIcon className="w-5 h-5" />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                    <div className="mt-6 pt-4 border-t border-slate-50 flex justify-between items-center text-[10px] font-bold text-slate-400">
+                        <span>تعداد بدهکاران: {debtorsDetail.length.toLocaleString('en-US')} نفر</span>
+                        <span>مجموع طلبات: {formatCurrency(debtorsDetail.reduce((sum, d) => sum + d.totalDebt, 0), storeSettings, 'AFN')}</span>
+                    </div>
+                </Modal>
             )}
 
             {isTrackModalOpen && selectedCustomerForLocation && (
