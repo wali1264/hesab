@@ -1,9 +1,12 @@
 {
-  "name": "eblis310 activiti nimRemix: 400Remix: 240Remix: 50Remix: Vendura",
-  "description": "سیستم جامع و هوشمند مدیریت کسب و کار، انبارداری و حسابداری Vendura.",
+  "name": "سامانه مدیریت مکاتب (Appointment Management System)",
+  "description": "سیستم جامع مدیریت مکاتب، حضور و غیاب، و امور مالی.",
   "requestFramePermissions": [
-    "microphone",
-    "camera",
-    "geolocation"
+    "camera"
+  ],
+  "majorCapabilities": [
+    "PWA",
+    "RTL support",
+    "Supabase Integration"
   ]
 }

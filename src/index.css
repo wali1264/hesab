@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100;300;400;500;700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Vazirmatn", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer utilities {
+  @media print {
+    @page {
+      margin: 0;
+      size: auto;
+    }
+
+    .no-print {
+      display: none !important;
+    }
+    
+    body {
+      background: white !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    /* Use visibility hidden on body and visibility visible on the target to ensure ancestors stay visible but their other children hide */
+    body * {
+      visibility: hidden;
+    }
+
+    .print-only, .print-only * {
+      visibility: visible !important;
+    }
+
+    .print-only {
+      display: block !important;
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 40px !important;
+      background: white !important;
+    }
+  }
+}
+
+@layer base {
+  html {
+    direction: rtl;
+    font-family: var(--font-sans);
+  }
+  
+  body {
+    @apply bg-slate-50 text-slate-800;
+  }
+}
+
+@layer components {
+  .navy-gradient {
+    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+  }
+
+  .emerald-gradient {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  }
+
+  .bento-card {
+    @apply bg-white border border-slate-200 rounded-2xl p-5 shadow-sm transition-all duration-300;
+  }
+  
+  .status-chip {
+    @apply px-3 py-1 rounded-full text-[10px] font-bold;
+  }
+  
+  .status-approved {
+    @apply bg-emerald-50 text-emerald-700;
+  }
+  
+  .status-pending {
+    @apply bg-amber-50 text-amber-700;
+  }
+}
