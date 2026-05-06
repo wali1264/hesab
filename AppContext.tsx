@@ -17,6 +17,10 @@ import { offlineService, QueuedOperation } from './services/offlineService';
 import { supabase } from './utils/supabaseClient';
 import { getJalaliDate } from './utils/jalali';
 
+export interface SyncOperation extends QueuedOperation {
+    status: 'pending' | 'syncing' | 'success' | 'error';
+}
+
 interface AppContextType extends AppState {
     showToast: (message: string) => void;
     isLoading: boolean;
@@ -195,6 +199,9 @@ interface AppContextType extends AppState {
     logActivity: (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType'], companyId?: string) => Promise<void>;
     isOnline: boolean;
     syncQueueSize: number;
+    isSyncing: boolean;
+    syncQueueItems: SyncOperation[];
+    refreshSyncQueue: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -268,15 +275,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [isLoading, setIsLoading] = useState(true);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [syncQueueSize, setSyncQueueSize] = useState(0);
-
-    // Initialize sync queue size
-    useEffect(() => {
-        const initQueue = async () => {
-            const queue = await offlineService.getQueue();
-            setSyncQueueSize(queue.length);
-        };
-        initQueue();
-    }, []);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncQueueItems, setSyncQueueItems] = useState<SyncOperation[]>([]);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [isShopActive, setIsShopActive] = useState(() => localStorage.getItem('kasebyar_shop_active') === 'true');
     const [autoBackupEnabled, setAutoBackupEnabled] = useState(() => localStorage.getItem('kasebyar_auto_backup') === 'true');
@@ -286,104 +286,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.log("Toast:", message);
     }, []);
 
-    const syncOfflineData = useCallback(async () => {
+    const refreshSyncQueue = useCallback(async () => {
         const queue = await offlineService.getQueue();
-        if (queue.length === 0) return;
-
-        console.log(`Starting sync for ${queue.length} items...`);
-        let processedCount = 0;
-
-        for (const op of queue) {
-            try {
-                if (op.type === 'addCustomer') {
-                    await api.addCustomer(op.payload);
-                } else if (op.type === 'updateCustomer') {
-                    await api.updateCustomer(op.payload);
-                } else if (op.type === 'deleteCustomer') {
-                    await api.deleteCustomer(op.payload);
-                } else if (op.type === 'addManagedCompany') {
-                    await api.addManagedCompany(op.payload);
-                } else if (op.type === 'updateManagedCompany') {
-                    await api.updateManagedCompany(op.payload);
-                } else if (op.type === 'deleteManagedCompany') {
-                    await api.deleteManagedCompany(op.payload);
-                } else if (op.type === 'addManagedCompanyLedgerEntry') {
-                    await api.addManagedCompanyLedgerEntry(op.payload);
-                } else if (op.type === 'updateManagedCompanyLedgerEntry') {
-                    await api.updateManagedCompanyLedgerEntry(op.payload);
-                } else if (op.type === 'deleteManagedCompanyLedgerEntry') {
-                    await api.deleteManagedCompanyLedgerEntry(op.payload);
-                } else if (op.type === 'addManagedCompanyCustomer') {
-                    await api.addManagedCompanyCustomer(op.payload);
-                } else if (op.type === 'updateManagedCompanyCustomer') {
-                    await api.updateManagedCompanyCustomer(op.payload);
-                } else if (op.type === 'deleteManagedCompanyCustomer') {
-                    await api.deleteManagedCompanyCustomer(op.payload);
-                } else if (op.type === 'addCustomerBillingRecord') {
-                    await api.addCustomerBillingRecord(op.payload);
-                } else if (op.type === 'updateCustomerBillingRecord') {
-                    await api.updateCustomerBillingRecord(op.payload);
-                } else if (op.type === 'deleteCustomerBillingRecord') {
-                    await api.deleteCustomerBillingRecord(op.payload);
-                } else if (op.type === 'addManagedCompanyInvoice') {
-                    await api.addManagedCompanyInvoice(op.payload);
-                } else if (op.type === 'updateManagedCompanyInvoice') {
-                    await api.updateManagedCompanyInvoice(op.payload);
-                } else if (op.type === 'deleteManagedCompanyInvoice') {
-                    await api.deleteManagedCompanyInvoice(op.payload);
-                } else if (op.type === 'addManagedCompanyProductionLog') {
-                    await api.addManagedCompanyProductionLog(op.payload);
-                } else if (op.type === 'updateManagedCompanyProductionLog') {
-                    await api.updateManagedCompanyProductionLog(op.payload);
-                } else if (op.type === 'deleteManagedCompanyProductionLog') {
-                    await api.deleteManagedCompanyProductionLog(op.payload);
-                } else if (op.type === 'addActivity' || op.type === 'logActivity') {
-                    await api.addActivity(op.payload);
-                }
-                
-                await offlineService.removeFromQueue(op.id);
-                processedCount++;
-            } catch (error) {
-                console.error(`Failed to sync item ${op.id}:`, error);
-                break;
-            }
-        }
-
-        const remainingQueue = await offlineService.getQueue();
-        setSyncQueueSize(remainingQueue.length);
-        
-        if (processedCount > 0) {
-            showToast(`✅ ${processedCount} مورد همگام‌سازی شد.`);
-            // Refresh data to get official server state
-            fetchData(true);
-        }
-    }, [showToast]);
-
-    const checkOnline = useCallback(() => {
-        const online = navigator.onLine;
-        setIsOnline(online);
-        return online;
+        setSyncQueueItems(queue.map(op => ({ ...op, status: 'pending' })));
+        setSyncQueueSize(queue.length);
     }, []);
 
+    // Initialize sync queue
     useEffect(() => {
-        const handleOnline = () => {
-            setIsOnline(true);
-            showToast("🌐 شما آنلاین شدید. در حال همگام‌سازی...");
-            syncOfflineData();
-        };
-        const handleOffline = () => {
-            setIsOnline(false);
-            showToast("📡 شما آفلاین شدید. اطلاعات در صف انتظار ذخیره می‌شوند.");
-        };
-
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-
-        return () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
-    }, [showToast, syncOfflineData]);
+        refreshSyncQueue();
+    }, [refreshSyncQueue]);
 
     const fetchSectionData = useCallback(async (sections: string[]) => {
         if (!navigator.onLine) return;
@@ -514,7 +426,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         logoRight: localLogoRight || prev.storeSettings.logoRight
                     };
                 
-                // Patch products if needed
                 const patchedProducts = (products || []).map((p: any) => ({
                     ...p,
                     minStock: p.minStock ?? 0,
@@ -523,14 +434,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     salePrice: p.salePrice ?? 0
                 }));
 
-                // Patch employees
                 const patchedEmployees = (entities.employees || []).map((e: any) => ({
                     ...e,
                     isActive: e.isActive ?? true,
                     salaryCurrency: e.salaryCurrency || mergedSettings.baseCurrency || 'AFN'
                 }));
 
-                // Patch customers/suppliers
                 const patchedCustomers = (entities.customers || []).map((c: any) => ({
                     ...c,
                     balance: c.balance ?? 0,
@@ -574,11 +483,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     salaryPayments: salaryPays || []
                 };
 
-                // Cache state for offline use
                 offlineService.saveState(newState);
 
                 return newState;
             });
+
+            fetchSectionData(['transactions', 'invoices', 'activities', 'wastageRecords', 'orders', 'managedLedger', 'managedCustomers']);
         } catch (error) {
             console.error("Critical Error fetching data:", error);
             const cached = await offlineService.loadCachedState();
@@ -591,7 +501,124 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } finally {
             if (!isSilent) setIsLoading(false);
         }
-    }, [showToast]);
+    }, [fetchSectionData, showToast, state]);
+
+    const syncOfflineData = useCallback(async () => {
+        const queue = await offlineService.getQueue();
+        if (queue.length === 0) return;
+
+        setIsSyncing(true);
+        setSyncQueueItems(queue.map(op => ({ ...op, status: 'pending' })));
+        console.log(`Starting sync for ${queue.length} items...`);
+        let processedCount = 0;
+
+        for (const op of queue) {
+            // Update status to syncing
+            setSyncQueueItems(prev => prev.map(item => item.id === op.id ? { ...item, status: 'syncing' } : item));
+            
+            try {
+                if (op.type === 'addCustomer') {
+                    await api.addCustomer(op.payload);
+                } else if (op.type === 'updateCustomer') {
+                    await api.updateCustomer(op.payload);
+                } else if (op.type === 'deleteCustomer') {
+                    await api.deleteCustomer(op.payload);
+                } else if (op.type === 'addManagedCompany') {
+                    await api.addManagedCompany(op.payload);
+                } else if (op.type === 'updateManagedCompany') {
+                    await api.updateManagedCompany(op.payload);
+                } else if (op.type === 'deleteManagedCompany') {
+                    await api.deleteManagedCompany(op.payload);
+                } else if (op.type === 'addManagedCompanyLedgerEntry') {
+                    await api.addManagedCompanyLedgerEntry(op.payload);
+                } else if (op.type === 'updateManagedCompanyLedgerEntry') {
+                    await api.updateManagedCompanyLedgerEntry(op.payload);
+                } else if (op.type === 'deleteManagedCompanyLedgerEntry') {
+                    await api.deleteManagedCompanyLedgerEntry(op.payload);
+                } else if (op.type === 'addManagedCompanyCustomer') {
+                    await api.addManagedCompanyCustomer(op.payload);
+                } else if (op.type === 'updateManagedCompanyCustomer') {
+                    await api.updateManagedCompanyCustomer(op.payload);
+                } else if (op.type === 'deleteManagedCompanyCustomer') {
+                    await api.deleteManagedCompanyCustomer(op.payload);
+                } else if (op.type === 'addCustomerBillingRecord') {
+                    await api.addCustomerBillingRecord(op.payload);
+                } else if (op.type === 'updateCustomerBillingRecord') {
+                    await api.updateCustomerBillingRecord(op.payload);
+                } else if (op.type === 'deleteCustomerBillingRecord') {
+                    await api.deleteCustomerBillingRecord(op.payload);
+                } else if (op.type === 'addManagedCompanyInvoice') {
+                    await api.addManagedCompanyInvoice(op.payload);
+                } else if (op.type === 'updateManagedCompanyInvoice') {
+                    await api.updateManagedCompanyInvoice(op.payload);
+                } else if (op.type === 'deleteManagedCompanyInvoice') {
+                    await api.deleteManagedCompanyInvoice(op.payload);
+                } else if (op.type === 'addManagedCompanyProductionLog') {
+                    await api.addManagedCompanyProductionLog(op.payload);
+                } else if (op.type === 'updateManagedCompanyProductionLog') {
+                    await api.updateManagedCompanyProductionLog(op.payload);
+                } else if (op.type === 'deleteManagedCompanyProductionLog') {
+                    await api.deleteManagedCompanyProductionLog(op.payload);
+                } else if (op.type === 'addActivity' || op.type === 'logActivity') {
+                    await api.addActivity(op.payload);
+                }
+                
+                // Update status to success
+                setSyncQueueItems(prev => prev.map(item => item.id === op.id ? { ...item, status: 'success' } : item));
+                
+                // Wait for visual feedback
+                await new Promise(resolve => setTimeout(resolve, 800));
+                
+                await offlineService.removeFromQueue(op.id);
+                processedCount++;
+                
+                // Remove from local state to trigger exit animation
+                setSyncQueueItems(prev => prev.filter(item => item.id !== op.id));
+                setSyncQueueSize(prev => prev - 1);
+                
+            } catch (error) {
+                console.error(`Failed to sync item ${op.id}:`, error);
+                setSyncQueueItems(prev => prev.map(item => item.id === op.id ? { ...item, status: 'error' } : item));
+                break;
+            }
+        }
+
+        setIsSyncing(false);
+        const remainingQueue = await offlineService.getQueue();
+        setSyncQueueSize(remainingQueue.length);
+        setSyncQueueItems(remainingQueue.map(op => ({ ...op, status: 'pending' })));
+        
+        if (processedCount > 0) {
+            showToast(`✅ ${processedCount} مورد همگام‌سازی شد.`);
+            fetchData(true);
+        }
+    }, [showToast, fetchData]);
+
+    const checkOnline = useCallback(() => {
+        const online = navigator.onLine;
+        setIsOnline(online);
+        return online;
+    }, []);
+
+    useEffect(() => {
+        const handleOnline = () => {
+            setIsOnline(true);
+            showToast("🌐 شما آنلاین شدید. در حال همگام‌سازی...");
+            syncOfflineData();
+        };
+        const handleOffline = () => {
+            setIsOnline(false);
+            showToast("📡 شما آفلاین شدید. اطلاعات در صف انتظار ذخیره می‌شوند.");
+        };
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, [showToast, syncOfflineData]);
 
     useEffect(() => {
         const checkSession = async () => {
@@ -3554,7 +3581,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         settleSalaryMonth, generateMonthlySalaryRecords,
         addLegalRecord, updateLegalRecord, deleteLegalRecord,
         addDepositHolder, deleteDepositHolder, processDepositTransaction, updateDepositTransaction, deleteDepositTransaction,
-        setSelectedCompanyId, logActivity, isOnline, syncQueueSize
+        setSelectedCompanyId, logActivity, isOnline, syncQueueSize, isSyncing, syncQueueItems, refreshSyncQueue
     }}>{children}</AppContext.Provider>;
 }
 

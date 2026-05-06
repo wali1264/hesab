@@ -114,18 +114,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, storeName,
         </nav>
         
         <div className="mt-auto pt-4 border-t border-gray-200/60 relative" ref={logoutMenuRef}>
-          {/* Status Display */}
-          {!isCollapsed && (
-              <div className="p-2 mb-2 text-center bg-slate-100/70 rounded-lg flex flex-col items-center">
-                  <p className="font-bold text-slate-800 truncate w-full">{currentUser?.username}</p>
-                  <div className="flex gap-1 mt-1">
-                      <span className={`text-[9px] px-2 py-0.5 rounded-full ${isOnline ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {isOnline ? 'آنلاین' : 'آفلاین'}
-                      </span>
-                  </div>
-              </div>
-          )}
-
           {/* Logout Button */}
           <button
               onClick={handleLogoutAction}
