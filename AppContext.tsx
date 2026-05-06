@@ -13,6 +13,7 @@ import type {
     CompanyEmployee, SalaryMonthRecord, SalaryPayment, LegalRecord
 } from './types';
 import { api } from './services/supabaseService';
+import { offlineService, QueuedOperation } from './services/offlineService';
 import { supabase } from './utils/supabaseClient';
 import { getJalaliDate } from './utils/jalali';
 
@@ -192,6 +193,8 @@ interface AppContextType extends AppState {
     deleteLegalRecord: (id: string) => Promise<{ success: boolean; message: string }>;
 
     logActivity: (type: ActivityLog['type'], description: string, refId?: string, refType?: ActivityLog['refType'], companyId?: string) => Promise<void>;
+    isOnline: boolean;
+    syncQueueSize: number;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -263,6 +266,8 @@ const generateNextId = (prefix: string, ids: string[]): string => {
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [state, setState] = useState<AppState>(getDefaultState());
     const [isLoading, setIsLoading] = useState(true);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [syncQueueSize, setSyncQueueSize] = useState(() => offlineService.getQueue().length);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [isShopActive, setIsShopActive] = useState(() => localStorage.getItem('kasebyar_shop_active') === 'true');
     const [autoBackupEnabled, setAutoBackupEnabled] = useState(() => localStorage.getItem('kasebyar_auto_backup') === 'true');
@@ -272,13 +277,82 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.log("Toast:", message);
     }, []);
 
-    const checkOnline = useCallback(() => {
-        if (!navigator.onLine) {
-            showToast("خطا: اتصال اینترنت برقرار نیست. برای ذخیره تغییرات و همگام‌سازی با پایگاه داده، به اینترنت نیاز دارید.");
-            return false;
+    const syncOfflineData = useCallback(async () => {
+        const queue = offlineService.getQueue();
+        if (queue.length === 0) return;
+
+        console.log(`Starting sync for ${queue.length} items...`);
+        let processedCount = 0;
+
+        for (const op of queue) {
+            try {
+                if (op.type === 'addCustomerBillingRecord') {
+                    await api.addCustomerBillingRecord(op.payload);
+                } else if (op.type === 'updateCustomerBillingRecord') {
+                    await api.updateCustomerBillingRecord(op.payload);
+                } else if (op.type === 'deleteCustomerBillingRecord') {
+                    await api.deleteCustomerBillingRecord(op.payload);
+                } else if (op.type === 'addManagedCompanyInvoice') {
+                    await api.addManagedCompanyInvoice(op.payload);
+                } else if (op.type === 'updateManagedCompanyInvoice') {
+                    await api.updateManagedCompanyInvoice(op.payload);
+                } else if (op.type === 'deleteManagedCompanyInvoice') {
+                    await api.deleteManagedCompanyInvoice(op.payload);
+                } else if (op.type === 'addManagedCompanyProductionLog') {
+                    await api.addManagedCompanyProductionLog(op.payload);
+                } else if (op.type === 'updateManagedCompanyProductionLog') {
+                    await api.updateManagedCompanyProductionLog(op.payload);
+                } else if (op.type === 'deleteManagedCompanyProductionLog') {
+                    await api.deleteManagedCompanyProductionLog(op.payload);
+                } else if (op.type === 'addActivity' || op.type === 'logActivity') {
+                    await api.addActivity(op.payload);
+                }
+                
+                offlineService.removeFromQueue(op.id);
+                processedCount++;
+            } catch (error) {
+                console.error(`Failed to sync item ${op.id}:`, error);
+                // If it's a permanent error (like validation), we might want to skip it, 
+                // but for now we stop to avoid out-of-order execution if they depend on each other.
+                break;
+            }
         }
-        return true;
+
+        const remainingQueue = offlineService.getQueue();
+        setSyncQueueSize(remainingQueue.length);
+        
+        if (processedCount > 0) {
+            showToast(`✅ ${processedCount} مورد همگام‌سازی شد.`);
+            // Refresh data to get official server state
+            fetchData(true);
+        }
     }, [showToast]);
+
+    const checkOnline = useCallback(() => {
+        const online = navigator.onLine;
+        setIsOnline(online);
+        return online;
+    }, []);
+
+    useEffect(() => {
+        const handleOnline = () => {
+            setIsOnline(true);
+            showToast("🌐 شما آنلاین شدید. در حال همگام‌سازی...");
+            syncOfflineData();
+        };
+        const handleOffline = () => {
+            setIsOnline(false);
+            showToast("📡 شما آفلاین شدید. اطلاعات در صف انتظار ذخیره می‌شوند.");
+        };
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, [showToast, syncOfflineData]);
 
     const fetchSectionData = useCallback(async (sections: string[]) => {
         try {
@@ -362,6 +436,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const fetchData = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
+            if (!navigator.onLine) {
+                const cached = offlineService.loadCachedState();
+                if (cached) {
+                    setState(prev => ({ ...prev, ...cached, isDataLoaded: true }));
+                    if (!isSilent) setIsLoading(false);
+                    return;
+                }
+            }
+
             // Only fetch essential data initially for speed
             const [settings, users, roles, products, services, entities] = await Promise.all([
                 api.getSettings().catch(() => ({})),
@@ -422,7 +505,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     balanceIRT: s.balanceIRT ?? 0
                 }));
 
-                return {
+                const newState = {
                     ...prev,
                     isDataLoaded: true,
                     storeSettings: mergedSettings,
@@ -438,10 +521,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     companies: entities.companies || [],
                     partners: entities.partners || []
                 };
+
+                // Cache state for offline use
+                offlineService.saveState(newState);
+
+                return newState;
             });
         } catch (error) {
             console.error("Critical Error fetching data:", error);
-            showToast("⚠️ خطا در بارگذاری برنامه. لطفاً صفحه را رفرش کنید.");
+            const cached = offlineService.loadCachedState();
+            if (cached) {
+                setState(prev => ({ ...prev, ...cached, isDataLoaded: true }));
+                showToast("📡 شما در وضعیت آفلاین هستید. نمایش اطلاعات ذخیره شده.");
+            } else {
+                showToast("⚠️ خطا در بارگذاری برنامه. لطفاً صفحه را رفرش کنید.");
+            }
         } finally {
             if (!isSilent) setIsLoading(false);
         }
@@ -594,6 +688,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const displayName = state.currentUser.roleId === SYSTEM_SUPER_OWNER_ID ? 'صاحب فروشگاه' : state.currentUser.username;
         const newActivity: ActivityLog = { id: crypto.randomUUID(), type, description, timestamp: new Date().toISOString(), user: displayName, refId, refType, companyId };
         setState(prev => ({ ...prev, activities: [newActivity, ...prev.activities] }));
+        
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'logActivity', payload: newActivity });
+            setSyncQueueSize(prev => prev + 1);
+            return;
+        }
+
         try { await api.addActivity(newActivity); } catch (e) {}
     }, [state.currentUser]);
 
@@ -2692,25 +2793,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addCustomerBillingRecord = async (recordData: Omit<CustomerBillingRecord, 'id'>) => {
-        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        const username = state.currentUser?.username || 'مدیر';
+        const newRecord: CustomerBillingRecord = {
+            customerId: recordData.customerId,
+            companyId: recordData.companyId,
+            previousReading: recordData.previousReading,
+            currentReading: recordData.currentReading,
+            consumption: recordData.consumption,
+            amount: recordData.amount,
+            date: recordData.date,
+            status: recordData.status,
+            paymentDate: recordData.paymentDate,
+            previousBalance: recordData.previousBalance,
+            isMinimumFeeApplied: recordData.isMinimumFeeApplied,
+            id: crypto.randomUUID(),
+            surveyorName: username,
+            collectorName: recordData.status === 'paid' ? username : ''
+        };
+
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'addCustomerBillingRecord', payload: newRecord });
+            setSyncQueueSize(prev => prev + 1);
+            setState(prev => ({ ...prev, customerBillingRecords: [...prev.customerBillingRecords, newRecord] }));
+            showToast("📡 آفلاین: قبض در صف انتظار ذخیره شد.");
+            return { success: true, message: 'قبض در صف انتظار ذخیره شد (وضعیت آفلاین).' };
+        }
+
         try {
-            const username = state.currentUser?.username || 'مدیر';
-            const newRecord: CustomerBillingRecord = {
-                customerId: recordData.customerId,
-                companyId: recordData.companyId,
-                previousReading: recordData.previousReading,
-                currentReading: recordData.currentReading,
-                consumption: recordData.consumption,
-                amount: recordData.amount,
-                date: recordData.date,
-                status: recordData.status,
-                paymentDate: recordData.paymentDate,
-                previousBalance: recordData.previousBalance,
-                isMinimumFeeApplied: recordData.isMinimumFeeApplied,
-                id: crypto.randomUUID(),
-                surveyorName: username,
-                collectorName: recordData.status === 'paid' ? username : ''
-            };
             await api.addCustomerBillingRecord(newRecord);
             setState(prev => ({ ...prev, customerBillingRecords: [...prev.customerBillingRecords, newRecord] }));
             return { success: true, message: 'قبض با موفقیت ثبت شد.' };
@@ -2721,34 +2830,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateCustomerBillingRecord = async (record: CustomerBillingRecord) => {
-        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        const username = state.currentUser?.username || 'مدیر';
+        const oldRecord = state.customerBillingRecords.find(r => r.id === record.id);
+        let collectorName = record.collectorName;
+        if (record.status === 'paid' && oldRecord?.status === 'unpaid') {
+            collectorName = username;
+        }
+
+        const updatedRecord: CustomerBillingRecord = { ...record, collectorName };
+
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'updateCustomerBillingRecord', payload: updatedRecord });
+            setSyncQueueSize(prev => prev + 1);
+            setState(prev => ({
+                ...prev,
+                customerBillingRecords: prev.customerBillingRecords.map(r => r.id === updatedRecord.id ? updatedRecord : r)
+            }));
+            showToast("📡 آفلاین: تغییرات در صف انتظار ذخیره شد.");
+            return { success: true, message: 'تغییرات در صف انتظار ذخیره شد (وضعیت آفلاین).' };
+        }
+
         try {
-            const username = state.currentUser?.username || 'مدیر';
-            
-            // If status is changing to paid, set collectorName
-            const oldRecord = state.customerBillingRecords.find(r => r.id === record.id);
-            let collectorName = record.collectorName;
-            if (record.status === 'paid' && oldRecord?.status === 'unpaid') {
-                collectorName = username;
-            }
-
-            const updatedRecord: CustomerBillingRecord = {
-                id: record.id,
-                customerId: record.customerId,
-                companyId: record.companyId,
-                previousReading: record.previousReading,
-                currentReading: record.currentReading,
-                consumption: record.consumption,
-                amount: record.amount,
-                date: record.date,
-                status: record.status,
-                paymentDate: record.paymentDate,
-                surveyorName: record.surveyorName,
-                collectorName: collectorName,
-                previousBalance: record.previousBalance,
-                isMinimumFeeApplied: record.isMinimumFeeApplied
-            };
-
             await api.updateCustomerBillingRecord(updatedRecord);
             setState(prev => ({
                 ...prev,
@@ -2762,7 +2864,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteCustomerBillingRecord = async (id: string) => {
-        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'deleteCustomerBillingRecord', payload: id });
+            setSyncQueueSize(prev => prev + 1);
+            setState(prev => ({
+                ...prev,
+                customerBillingRecords: prev.customerBillingRecords.filter(r => r.id !== id)
+            }));
+            showToast("📡 آفلاین: دستور حذف در صف انتظار ذخیره شد.");
+            return { success: true, message: 'دستور حذف در صف انتظار ذخیره شد (وضعیت آفلاین).' };
+        }
+
         try {
             await api.deleteCustomerBillingRecord(id);
             setState(prev => ({
@@ -2777,15 +2889,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     const addManagedCompanyInvoice = async (invoiceData: Omit<ManagedCompanyInvoice, 'id'>) => {
-        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        const username = state.currentUser?.username || 'مدیر';
+        const newInvoice: ManagedCompanyInvoice = {
+            ...invoiceData,
+            id: crypto.randomUUID(),
+            registrarName: username,
+            collectorName: invoiceData.status === 'paid' ? username : ''
+        };
+
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'addManagedCompanyInvoice', payload: newInvoice });
+            setSyncQueueSize(prev => prev + 1);
+            setState(prev => ({ ...prev, managedCompanyInvoices: [...prev.managedCompanyInvoices, newInvoice] }));
+            showToast("📡 آفلاین: فاکتور در صف انتظار ذخیره شد.");
+            return { success: true, message: 'فاکتور در صف انتظار ذخیره شد (وضعیت آفلاین).' };
+        }
+
         try {
-            const username = state.currentUser?.username || 'مدیر';
-            const newInvoice: ManagedCompanyInvoice = {
-                ...invoiceData,
-                id: crypto.randomUUID(),
-                registrarName: username,
-                collectorName: invoiceData.status === 'paid' ? username : ''
-            };
             await api.addManagedCompanyInvoice(newInvoice);
             setState(prev => ({ ...prev, managedCompanyInvoices: [...prev.managedCompanyInvoices, newInvoice] }));
             return { success: true, message: 'فاکتور با موفقیت ثبت شد.' };
@@ -2796,17 +2916,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const updateManagedCompanyInvoice = async (invoice: ManagedCompanyInvoice) => {
-        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
-        try {
-            const username = state.currentUser?.username || 'مدیر';
-            const updatedInvoice = { ...invoice };
-            
-            // If status is changing to paid, set collectorName
-            const oldInvoice = state.managedCompanyInvoices.find(i => i.id === invoice.id);
-            if (invoice.status === 'paid' && oldInvoice?.status === 'unpaid') {
-                updatedInvoice.collectorName = username;
-            }
+        const username = state.currentUser?.username || 'مدیر';
+        const updatedInvoice = { ...invoice };
+        
+        const oldInvoice = state.managedCompanyInvoices.find(i => i.id === invoice.id);
+        if (invoice.status === 'paid' && oldInvoice?.status === 'unpaid') {
+            updatedInvoice.collectorName = username;
+        }
 
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'updateManagedCompanyInvoice', payload: updatedInvoice });
+            setSyncQueueSize(prev => prev + 1);
+            setState(prev => ({
+                ...prev,
+                managedCompanyInvoices: prev.managedCompanyInvoices.map(i => i.id === updatedInvoice.id ? updatedInvoice : i)
+            }));
+            showToast("📡 آفلاین: تغییرات فاکتور در صف انتظار ذخیره شد.");
+            return { success: true, message: 'تغییرات فاکتور در صف انتظار ذخیره شد (وضعیت آفلاین).' };
+        }
+
+        try {
             await api.updateManagedCompanyInvoice(updatedInvoice);
             setState(prev => ({
                 ...prev,
@@ -2820,7 +2949,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const deleteManagedCompanyInvoice = async (id: string) => {
-        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'deleteManagedCompanyInvoice', payload: id });
+            setSyncQueueSize(prev => prev + 1);
+            setState(prev => ({
+                ...prev,
+                managedCompanyInvoices: prev.managedCompanyInvoices.filter(i => i.id !== id)
+            }));
+            showToast("📡 آفلاین: دستور حذف فاکتور در صف انتظار ذخیره شد.");
+            return { success: true, message: 'دستور حذف فاکتور در صف انتظار ذخیره شد (وضعیت آفلاین).' };
+        }
+
         try {
             await api.deleteManagedCompanyInvoice(id);
             setState(prev => ({
@@ -2835,34 +2974,77 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addManagedCompanyProductionLog = async (logData: Omit<ManagedCompanyProductionLog, 'id'>) => {
-        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
         const newLog: ManagedCompanyProductionLog = {
             ...logData,
             id: crypto.randomUUID()
         };
-        await api.addManagedCompanyProductionLog(newLog);
-        setState(prev => ({ ...prev, managedCompanyProductionLogs: [...prev.managedCompanyProductionLogs, newLog] }));
-        return { success: true, message: 'گزارش تولید با موفقیت ثبت شد.' };
+
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'addManagedCompanyProductionLog', payload: newLog });
+            setSyncQueueSize(prev => prev + 1);
+            setState(prev => ({ ...prev, managedCompanyProductionLogs: [...prev.managedCompanyProductionLogs, newLog] }));
+            showToast("📡 آفلاین: گزارش تولید در صف انتظار ذخیره شد.");
+            return { success: true, message: 'گزارش تولید در صف انتظار ذخیره شد (وضعیت آفلاین).' };
+        }
+
+        try {
+            await api.addManagedCompanyProductionLog(newLog);
+            setState(prev => ({ ...prev, managedCompanyProductionLogs: [...prev.managedCompanyProductionLogs, newLog] }));
+            return { success: true, message: 'گزارش تولید با موفقیت ثبت شد.' };
+        } catch (error: any) {
+            console.error("Error adding production log:", error);
+            return { success: false, message: error.message || 'خطا در ثبت گزارش تولید' };
+        }
     };
 
     const updateManagedCompanyProductionLog = async (log: ManagedCompanyProductionLog) => {
-        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
-        await api.updateManagedCompanyProductionLog(log);
-        setState(prev => ({
-            ...prev,
-            managedCompanyProductionLogs: prev.managedCompanyProductionLogs.map(l => l.id === log.id ? log : l)
-        }));
-        return { success: true, message: 'گزارش تولید بروزرسانی شد.' };
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'updateManagedCompanyProductionLog', payload: log });
+            setSyncQueueSize(prev => prev + 1);
+            setState(prev => ({
+                ...prev,
+                managedCompanyProductionLogs: prev.managedCompanyProductionLogs.map(l => l.id === log.id ? log : l)
+            }));
+            showToast("📡 آفلاین: تغییرات گزارش تولید در صف انتظار ذخیره شد.");
+            return { success: true, message: 'تغییرات گزارش تولید در صف انتظار ذخیره شد (وضعیت آفلاین).' };
+        }
+
+        try {
+            await api.updateManagedCompanyProductionLog(log);
+            setState(prev => ({
+                ...prev,
+                managedCompanyProductionLogs: prev.managedCompanyProductionLogs.map(l => l.id === log.id ? log : l)
+            }));
+            return { success: true, message: 'گزارش تولید بروزرسانی شد.' };
+        } catch (error: any) {
+            console.error("Error updating production log:", error);
+            return { success: false, message: error.message || 'خطا در بروزرسانی گزارش تولید' };
+        }
     };
 
     const deleteManagedCompanyProductionLog = async (id: string) => {
-        if (!checkOnline()) return { success: false, message: 'عدم اتصال به اینترنت' };
-        await api.deleteManagedCompanyProductionLog(id);
-        setState(prev => ({
-            ...prev,
-            managedCompanyProductionLogs: prev.managedCompanyProductionLogs.filter(l => l.id !== id)
-        }));
-        return { success: true, message: 'گزارش تولید حذف شد.' };
+        if (!navigator.onLine) {
+            offlineService.addToQueue({ type: 'deleteManagedCompanyProductionLog', payload: id });
+            setSyncQueueSize(prev => prev + 1);
+            setState(prev => ({
+                ...prev,
+                managedCompanyProductionLogs: prev.managedCompanyProductionLogs.filter(l => l.id !== id)
+            }));
+            showToast("📡 آفلاین: دستور حذف گزارش تولید در صف انتظار ذخیره شد.");
+            return { success: true, message: 'دستور حذف گزارش تولید در صف انتظار ذخیره شد (وضعیت آفلاین).' };
+        }
+
+        try {
+            await api.deleteManagedCompanyProductionLog(id);
+            setState(prev => ({
+                ...prev,
+                managedCompanyProductionLogs: prev.managedCompanyProductionLogs.filter(l => l.id !== id)
+            }));
+            return { success: true, message: 'گزارش تولید حذف شد.' };
+        } catch (error: any) {
+            console.error("Error deleting production log:", error);
+            return { success: false, message: error.message || 'خطا در حذف گزارش تولید' };
+        }
     };
 
     const addOwnerTransaction = async (txData: Omit<OwnerTransaction, 'id'>) => {
@@ -3173,9 +3355,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         settleSalaryMonth, generateMonthlySalaryRecords,
         addLegalRecord, updateLegalRecord, deleteLegalRecord,
         addDepositHolder, deleteDepositHolder, processDepositTransaction, updateDepositTransaction, deleteDepositTransaction,
-        setSelectedCompanyId, logActivity
+        setSelectedCompanyId, logActivity, isOnline, syncQueueSize
     }}>{children}</AppContext.Provider>;
-};
+}
 
 export const useAppContext = (): AppContextType => {
     const context = useContext(AppContext);

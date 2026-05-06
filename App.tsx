@@ -16,6 +16,7 @@ import CompanyManagement from './pages/CompanyManagement';
 import SalaryManagement from './pages/SalaryManagement';
 import UpdatePrompt from './components/UpdatePrompt';
 import { AppProvider, useAppContext } from './AppContext';
+import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import type { Permission } from './types';
 import { MenuIcon } from './components/icons';
 
@@ -105,6 +106,8 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const { isOnline, syncQueueSize } = useAppContext();
+
   return (
     <div className="flex h-screen bg-transparent">
       <Sidebar 
@@ -115,8 +118,34 @@ const AppContent: React.FC = () => {
         isMobileOpen={isMobileSidebarOpen}
         setIsMobileOpen={setIsMobileSidebarOpen}
       />
-      <main className="flex-1 flex flex-col overflow-y-auto">
+      <main className="flex-1 flex flex-col overflow-y-auto relative">
         <Header onMenuClick={() => setIsMobileSidebarOpen(true)} activeViewLabel={navLabels[activeView] || 'داشبورد'} />
+        
+        {/* Offline & Sync Status Bar */}
+        {( !isOnline || syncQueueSize > 0) && (
+            <div className={`flex items-center justify-between px-4 py-1.5 text-xs font-medium transition-colors duration-300 ${!isOnline ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'}`}>
+                <div className="flex items-center gap-2">
+                    {!isOnline ? (
+                        <>
+                            <WifiOff size={14} />
+                            <span>وضعیت آفلاین - تغییرات ذخیره می‌شوند</span>
+                        </>
+                    ) : (
+                        <>
+                            <Wifi size={14} />
+                            <span>آنلاین هستید</span>
+                        </>
+                    )}
+                </div>
+                {syncQueueSize > 0 && (
+                    <div className="flex items-center gap-2">
+                        <RefreshCw size={14} className="animate-spin" />
+                        <span>{syncQueueSize} مورد در صف همگام‌سازی</span>
+                    </div>
+                )}
+            </div>
+        )}
+
         <div className="flex-1 overflow-y-auto">
           {renderActiveView()}
         </div>
