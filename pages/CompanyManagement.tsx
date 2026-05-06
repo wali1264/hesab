@@ -817,23 +817,25 @@ const CompanyManagement: React.FC = () => {
             filtered = filtered.filter(log => log.date.includes(productionSearchQuery));
         }
 
-        const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
-        const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const today = new Date();
+        const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const yesterdayStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + String(yesterday.getDate()).padStart(2, '0');
+        const todayNoTime = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         
         if (productionDateFilter === 'today') {
             filtered = filtered.filter(log => log.date === todayStr);
         } else if (productionDateFilter === 'yesterday') {
             filtered = filtered.filter(log => log.date === yesterdayStr);
         } else if (productionDateFilter === 'week') {
-            const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            const lastWeek = new Date(todayNoTime.getTime() - 7 * 24 * 60 * 60 * 1000);
             filtered = filtered.filter(log => new Date(log.date) >= lastWeek);
         } else if (productionDateFilter === 'month') {
-            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+            const lastMonth = new Date(todayNoTime.getFullYear(), todayNoTime.getMonth() - 1, todayNoTime.getDate());
             filtered = filtered.filter(log => new Date(log.date) >= lastMonth);
         } else if (productionDateFilter === 'year') {
-            const lastYear = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+            const lastYear = new Date(todayNoTime.getFullYear() - 1, todayNoTime.getMonth(), todayNoTime.getDate());
             filtered = filtered.filter(log => new Date(log.date) >= lastYear);
         } else if (productionDateFilter === 'custom' && productionStartDate && productionEndDate) {
             filtered = filtered.filter(log => log.date >= productionStartDate && log.date <= productionEndDate);
@@ -870,23 +872,25 @@ const CompanyManagement: React.FC = () => {
             );
         }
 
-        const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
-        const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const today = new Date();
+        const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const yesterdayStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + String(yesterday.getDate()).padStart(2, '0');
+        const todayNoTime = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         
         if (salesDateFilter === 'today') {
             filtered = filtered.filter(inv => inv.date === todayStr);
         } else if (salesDateFilter === 'yesterday') {
             filtered = filtered.filter(inv => inv.date === yesterdayStr);
         } else if (salesDateFilter === 'week') {
-            const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            const lastWeek = new Date(todayNoTime.getTime() - 7 * 24 * 60 * 60 * 1000);
             filtered = filtered.filter(inv => new Date(inv.date) >= lastWeek);
         } else if (salesDateFilter === 'month') {
-            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+            const lastMonth = new Date(todayNoTime.getFullYear(), todayNoTime.getMonth() - 1, todayNoTime.getDate());
             filtered = filtered.filter(inv => new Date(inv.date) >= lastMonth);
         } else if (salesDateFilter === 'year') {
-            const lastYear = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+            const lastYear = new Date(todayNoTime.getFullYear() - 1, todayNoTime.getMonth(), todayNoTime.getDate());
             filtered = filtered.filter(inv => new Date(inv.date) >= lastYear);
         } else if (salesDateFilter === 'custom' && salesStartDate && salesEndDate) {
             filtered = filtered.filter(inv => inv.date >= salesStartDate && inv.date <= salesEndDate);
@@ -922,23 +926,25 @@ const CompanyManagement: React.FC = () => {
             );
         }
 
-        const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
-        const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const today = new Date();
+        const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const yesterdayStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + String(yesterday.getDate()).padStart(2, '0');
+        const todayNoTime = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         
         if (salesDateFilter === 'today') {
             filtered = filtered.filter(r => r.date === todayStr);
         } else if (salesDateFilter === 'yesterday') {
             filtered = filtered.filter(r => r.date === yesterdayStr);
         } else if (salesDateFilter === 'week') {
-            const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            const lastWeek = new Date(todayNoTime.getTime() - 7 * 24 * 60 * 60 * 1000);
             filtered = filtered.filter(r => new Date(r.date) >= lastWeek);
         } else if (salesDateFilter === 'month') {
-            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+            const lastMonth = new Date(todayNoTime.getFullYear(), todayNoTime.getMonth() - 1, todayNoTime.getDate());
             filtered = filtered.filter(r => new Date(r.date) >= lastMonth);
         } else if (salesDateFilter === 'year') {
-            const lastYear = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+            const lastYear = new Date(todayNoTime.getFullYear() - 1, todayNoTime.getMonth(), todayNoTime.getDate());
             filtered = filtered.filter(r => new Date(r.date) >= lastYear);
         } else if (salesDateFilter === 'custom' && salesStartDate && salesEndDate) {
             filtered = filtered.filter(r => r.date >= salesStartDate && r.date <= salesEndDate);
@@ -2293,6 +2299,59 @@ const CompanyManagement: React.FC = () => {
                             )}
                         </div>
 
+                        {/* Common Filters for Invoices */}
+                        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-end">
+                            <div className="flex-[2] min-w-[200px]">
+                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">بازه زمانی</label>
+                                <select 
+                                    value={salesDateFilter}
+                                    onChange={(e) => setSalesDateFilter(e.target.value as any)}
+                                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="today">امروز</option>
+                                    <option value="yesterday">دیروز</option>
+                                    <option value="week">هفته اخیر</option>
+                                    <option value="month">ماه اخیر</option>
+                                    <option value="year">سال اخیر</option>
+                                    <option value="all">همه زمان‌ها</option>
+                                    <option value="custom">بازه دلخواه</option>
+                                </select>
+                            </div>
+                            <div className="flex-1 min-w-[150px]">
+                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">فیلتر کارمند</label>
+                                <select 
+                                    value={salesEmployeeFilter}
+                                    onChange={(e) => setSalesEmployeeFilter(e.target.value)}
+                                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="all">همه کارمندان</option>
+                                    {employees.map(emp => (
+                                        <option key={emp} value={emp}>{emp}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {salesDateFilter === 'custom' && (
+                                <div className="flex gap-2 flex-grow">
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">از تاریخ</label>
+                                        <JalaliDateInput 
+                                            value={salesStartDate}
+                                            onChange={setSalesStartDate}
+                                            className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">تا تاریخ</label>
+                                        <JalaliDateInput 
+                                            value={salesEndDate}
+                                            onChange={setSalesEndDate}
+                                            className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         {salesSubTab === 'map' ? (
                             <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-[600px] relative">
                                 <MapContainer 
@@ -2359,59 +2418,6 @@ const CompanyManagement: React.FC = () => {
                                             <span className="text-2xl font-black text-red-600">{formatCurrency(salesStats.totalOutstanding, storeSettings, 'AFN')}</span>
                                         </div>
                                     </div>
-                                </div>
-
-                                {/* Sales Filters */}
-                                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-end">
-                                    <div className="flex-[2] min-w-[200px]">
-                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">بازه زمانی</label>
-                                        <select 
-                                            value={salesDateFilter}
-                                            onChange={(e) => setSalesDateFilter(e.target.value as any)}
-                                            className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                        >
-                                            <option value="today">امروز</option>
-                                            <option value="yesterday">دیروز</option>
-                                            <option value="week">هفته اخیر</option>
-                                            <option value="month">ماه اخیر</option>
-                                            <option value="year">سال اخیر</option>
-                                            <option value="all">همه زمان‌ها</option>
-                                            <option value="custom">بازه دلخواه</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex-1 min-w-[150px]">
-                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">فیلتر کارمند</label>
-                                        <select 
-                                            value={salesEmployeeFilter}
-                                            onChange={(e) => setSalesEmployeeFilter(e.target.value)}
-                                            className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                        >
-                                            <option value="all">همه کارمندان</option>
-                                            {employees.map(emp => (
-                                                <option key={emp} value={emp}>{emp}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    {salesDateFilter === 'custom' && (
-                                        <div className="flex gap-2 flex-grow">
-                                            <div className="flex-1">
-                                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">از تاریخ</label>
-                                                <JalaliDateInput 
-                                                    value={salesStartDate}
-                                                    onChange={setSalesStartDate}
-                                                    className="w-full p-2 rounded-xl border border-slate-200 text-sm"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">تا تاریخ</label>
-                                                <JalaliDateInput 
-                                                    value={salesEndDate}
-                                                    onChange={setSalesEndDate}
-                                                    className="w-full p-2 rounded-xl border border-slate-200 text-sm"
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
 
                                 <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -2851,6 +2857,59 @@ const CompanyManagement: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Common Filters for Collections */}
+                        <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-end">
+                            <div className="flex-[2] min-w-[200px]">
+                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">بازه زمانی</label>
+                                <select 
+                                    value={salesDateFilter}
+                                    onChange={(e) => setSalesDateFilter(e.target.value as any)}
+                                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="today">امروز</option>
+                                    <option value="yesterday">دیروز</option>
+                                    <option value="week">هفته اخیر</option>
+                                    <option value="month">ماه اخیر</option>
+                                    <option value="year">سال اخیر</option>
+                                    <option value="all">همه زمان‌ها</option>
+                                    <option value="custom">بازه دلخواه</option>
+                                </select>
+                            </div>
+                            <div className="flex-1 min-w-[150px]">
+                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">فیلتر کارمند</label>
+                                <select 
+                                    value={salesEmployeeFilter}
+                                    onChange={(e) => setSalesEmployeeFilter(e.target.value)}
+                                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="all">همه کارمندان</option>
+                                    {employees.map(emp => (
+                                        <option key={emp} value={emp}>{emp}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {salesDateFilter === 'custom' && (
+                                <div className="flex gap-2 flex-grow">
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">از تاریخ</label>
+                                        <JalaliDateInput 
+                                            value={salesStartDate}
+                                            onChange={setSalesStartDate}
+                                            className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">تا تاریخ</label>
+                                        <JalaliDateInput 
+                                            value={salesEndDate}
+                                            onChange={setSalesEndDate}
+                                            className="w-full p-2 rounded-xl border border-slate-200 text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         {collectionSubTab === 'dashboard' ? (
                             <div className="space-y-6">
                                 {/* Collection Dashboard Cards */}
@@ -2861,7 +2920,7 @@ const CompanyManagement: React.FC = () => {
                                         </div>
                                         <div>
                                             <span className="text-xs text-slate-500 block">کل فروش (بل‌ها)</span>
-                                            <span className="text-2xl font-black text-slate-800">{formatCurrency(salesStats.totalSales, storeSettings, 'AFN')}</span>
+                                            <span className="text-2xl font-black text-slate-800">{formatCurrency(billingStats.totalSales, storeSettings, 'AFN')}</span>
                                         </div>
                                     </div>
                                     <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -2870,7 +2929,7 @@ const CompanyManagement: React.FC = () => {
                                         </div>
                                         <div>
                                             <span className="text-xs text-slate-500 block">کل وصولی</span>
-                                            <span className="text-2xl font-black text-emerald-600">{formatCurrency(salesStats.totalCollected, storeSettings, 'AFN')}</span>
+                                            <span className="text-2xl font-black text-emerald-600">{formatCurrency(billingStats.totalCollected, storeSettings, 'AFN')}</span>
                                         </div>
                                     </div>
                                     <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -2879,62 +2938,9 @@ const CompanyManagement: React.FC = () => {
                                         </div>
                                         <div>
                                             <span className="text-xs text-slate-500 block">باقیمانده (طلبات)</span>
-                                            <span className="text-2xl font-black text-red-600">{formatCurrency(salesStats.totalOutstanding, storeSettings, 'AFN')}</span>
+                                            <span className="text-2xl font-black text-red-600">{formatCurrency(billingStats.totalOutstanding, storeSettings, 'AFN')}</span>
                                         </div>
                                     </div>
-                                </div>
-
-                                {/* Collection Filters */}
-                                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-end">
-                                    <div className="flex-[2] min-w-[200px]">
-                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">بازه زمانی</label>
-                                        <select 
-                                            value={salesDateFilter}
-                                            onChange={(e) => setSalesDateFilter(e.target.value as any)}
-                                            className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                        >
-                                            <option value="today">امروز</option>
-                                            <option value="yesterday">دیروز</option>
-                                            <option value="week">هفته اخیر</option>
-                                            <option value="month">ماه اخیر</option>
-                                            <option value="year">سال اخیر</option>
-                                            <option value="all">همه زمان‌ها</option>
-                                            <option value="custom">بازه دلخواه</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex-1 min-w-[150px]">
-                                        <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">فیلتر کارمند</label>
-                                        <select 
-                                            value={salesEmployeeFilter}
-                                            onChange={(e) => setSalesEmployeeFilter(e.target.value)}
-                                            className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                        >
-                                            <option value="all">همه کارمندان</option>
-                                            {employees.map(emp => (
-                                                <option key={emp} value={emp}>{emp}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    {salesDateFilter === 'custom' && (
-                                        <div className="flex gap-2 flex-grow">
-                                            <div className="flex-1">
-                                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">از تاریخ</label>
-                                                <JalaliDateInput 
-                                                    value={salesStartDate}
-                                                    onChange={setSalesStartDate}
-                                                    className="w-full p-2 rounded-xl border border-slate-200 text-sm"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">تا تاریخ</label>
-                                                <JalaliDateInput 
-                                                    value={salesEndDate}
-                                                    onChange={setSalesEndDate}
-                                                    className="w-full p-2 rounded-xl border border-slate-200 text-sm"
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
                         ) : collectionSubTab === 'map' ? (
